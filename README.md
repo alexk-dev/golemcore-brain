@@ -1,0 +1,95 @@
+# GolemCore Brain
+
+GolemCore Brain is a lightweight wiki application backed by markdown files on disk.
+It combines a modern React frontend with a Spring Boot 4 backend and keeps content portable without a database.
+
+## Features
+
+- hierarchical wiki tree with sections and pages
+- markdown viewing and editing in a split workflow
+- filesystem-backed storage using `.md` files and `.order.json`
+- create, rename, move, copy, delete, and reorder content
+- live search across page titles and bodies
+- dark mode and responsive layout
+- SPA frontend bundled into the Spring Boot application
+
+## Stack
+
+### Frontend
+- React 19
+- TypeScript
+- Vite
+- Tailwind CSS 4
+- Radix UI primitives
+- React Markdown
+
+### Backend
+- Java 25
+- Maven
+- Spring Boot 4.0.5
+- Lombok
+- plain markdown files on local storage
+
+## Running locally
+
+### Backend + frontend bundle
+
+```bash
+./mvnw package
+java -jar target/golemcore-brain-0.1.0-SNAPSHOT.jar
+```
+
+The app starts on `http://localhost:8080` by default.
+
+### Frontend dev mode
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The Vite dev server proxies `/api` to `http://localhost:8080`.
+
+## Tests and checks
+
+```bash
+./mvnw test
+cd frontend && npm run lint && npm run build
+```
+
+## Storage layout
+
+By default the application stores content in `data/wiki`.
+
+Example structure:
+
+```text
+data/wiki/
+  index.md
+  .order.json
+  guides/
+    index.md
+    writing-notes.md
+  product/
+    index.md
+    roadmap.md
+```
+
+Rules:
+- a section is a directory with `index.md`
+- a page is a standalone `.md` file
+- sibling ordering is stored in `.order.json`
+
+## API overview
+
+- `GET /api/config`
+- `GET /api/tree`
+- `GET /api/page?path=...`
+- `POST /api/pages`
+- `PUT /api/page?path=...`
+- `DELETE /api/page?path=...`
+- `POST /api/page/move?path=...`
+- `POST /api/page/copy?path=...`
+- `PUT /api/section/sort?path=...`
+- `GET /api/search?q=...`

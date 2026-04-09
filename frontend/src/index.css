@@ -1,0 +1,119 @@
+@import 'tailwindcss';
+@plugin 'tailwindcss-animate';
+@plugin '@tailwindcss/typography';
+
+:root {
+  --background: 210 20% 98%;
+  --foreground: 222 47% 11%;
+  --surface: 0 0% 100%;
+  --surface-alt: 210 33% 96%;
+  --surface-border: 214 32% 91%;
+  --sidebar: 220 27% 15%;
+  --sidebar-foreground: 210 20% 96%;
+  --accent: 155 63% 41%;
+  --accent-foreground: 0 0% 100%;
+  --muted: 215 16% 47%;
+  --danger: 0 72% 51%;
+  --warning: 41 96% 40%;
+  --shadow: 220 28% 12%;
+  --radius: 18px;
+  font-family: 'Inter', system-ui, sans-serif;
+  color: hsl(var(--foreground));
+  background: hsl(var(--background));
+}
+
+.dark {
+  --background: 222 27% 10%;
+  --foreground: 210 20% 96%;
+  --surface: 222 24% 14%;
+  --surface-alt: 222 19% 19%;
+  --surface-border: 220 14% 26%;
+  --sidebar: 222 31% 8%;
+  --sidebar-foreground: 210 20% 96%;
+  --accent: 155 55% 43%;
+  --accent-foreground: 0 0% 100%;
+  --muted: 220 10% 68%;
+  --danger: 0 78% 63%;
+  --warning: 45 93% 62%;
+  --shadow: 0 0% 0%;
+}
+
+@theme {
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-surface: hsl(var(--surface));
+  --color-surface-alt: hsl(var(--surface-alt));
+  --color-surface-border: hsl(var(--surface-border));
+  --color-sidebar: hsl(var(--sidebar));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-danger: hsl(var(--danger));
+  --color-warning: hsl(var(--warning));
+}
+
+@layer base {
+  * {
+    @apply border-surface-border;
+  }
+
+  html,
+  body,
+  #root {
+    @apply m-0 min-h-screen bg-background text-foreground font-sans;
+  }
+
+  body {
+    @apply antialiased;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+}
+
+@layer utilities {
+  .surface-card {
+    @apply rounded-[var(--radius)] border bg-surface shadow-[0_20px_60px_-32px_hsl(var(--shadow)/0.45)];
+  }
+
+  .muted-copy {
+    @apply text-sm text-muted;
+  }
+
+  .field {
+    @apply flex flex-col gap-2;
+  }
+
+  .field-input {
+    @apply rounded-xl border bg-background px-3 py-2 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/15;
+  }
+
+  .action-button-primary,
+  .action-button-secondary,
+  .action-button-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition;
+  }
+
+  .action-button-primary {
+    @apply bg-accent text-accent-foreground hover:bg-accent/90;
+  }
+
+  .action-button-secondary {
+    @apply border bg-surface hover:bg-surface-alt;
+  }
+
+  .action-button-danger {
+    @apply bg-danger text-white hover:bg-danger/90;
+  }
+}
