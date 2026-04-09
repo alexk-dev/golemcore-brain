@@ -3,8 +3,11 @@ import type {
   CreatePagePayload,
   MovePagePayload,
   UpdatePagePayload,
+  WikiAsset,
   WikiConfig,
+  WikiLinkStatus,
   WikiPage,
+  WikiPathLookupResult,
   WikiSearchHit,
   WikiTreeNode,
 } from '../types'
@@ -12,7 +15,7 @@ import type {
 async function readJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {
     headers: {
-      'Content-Type': 'application/json',
+      ...(init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
       ...(init?.headers ?? {}),
     },
     ...init,
@@ -44,6 +47,10 @@ export function getPage(path: string): Promise<WikiPage> {
   return readJson<WikiPage>(`/api/page?path=${encodeURIComponent(path)}`)
 }
 
+export function getPageByPath(path: string): Promise<WikiPage> {
+  return readJson<WikiPage>(`/api/pages/by-path?path=${encodeURIComponent(path)}`)
+}
+
 export function searchPages(query: string): Promise<WikiSearchHit[]> {
   return readJson<WikiSearchHit[]>(`/api/search?q=${encodeURIComponent(query)}`)
 }
@@ -53,6 +60,17 @@ export function createPage(payload: CreatePagePayload): Promise<WikiPage> {
     method: 'POST',
     body: JSON.stringify(payload),
   })
+}
+
+export function ensurePage(path: string, targetTitle?: string): Promise<WikiPage> {
+  return readJson<WikiPage>('/api/pages/ensure', {
+    method: 'POST',
+    body: JSON.stringify({ path, targetTitle }),
+  })
+}
+
+export function lookupPath(path: string): Promise<WikiPathLookupResult> {
+  return readJson<WikiPathLookupResult>(`/api/pages/lookup?path=${encodeURIComponent(path)}`)
 }
 
 export function updatePage(path: string, payload: UpdatePagePayload): Promise<WikiPage> {
@@ -86,5 +104,35 @@ export function sortSection(path: string, orderedSlugs: string[]): Promise<void>
   return readJson<void>(`/api/section/sort?path=${encodeURIComponent(path)}`, {
     method: 'PUT',
     body: JSON.stringify({ orderedSlugs }),
+  })
+}
+
+export function getLinkStatus(path: string): Promise<WikiLinkStatus> {
+  return readJson<WikiLinkStatus>(`/api/links?path=${encodeURIComponent(path)}`)
+}
+
+export function listAssets(path: string): Promise<WikiAsset[]> {
+  return readJson<WikiAsset[]>(`/api/pages/assets?path=${encodeURIComponent(path)}`)
+}
+
+export function uploadAsset(path: string, file: File): Promise<WikiAsset> {
+  const formData = new FormData()
+  formData.append('file', file)
+  return readJson<WikiAsset>(`/api/pages/assets?path=${encodeURIComponent(path)}`, {
+    method: 'POST',
+    body: formData,
+  })
+}
+
+export function renameAsset(path: string, oldName: string, newName: string): Promise<WikiAsset> {
+  return readJson<WikiAsset>(`/api/pages/assets/rename?path=${encodeURIComponent(path)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ oldName, newName }),
+  })
+}
+
+export function deleteAsset(path: string, name: string): Promise<void> {
+  return readJson<void>(`/api/pages/assets?path=${encodeURIComponent(path)}&name=${encodeURIComponent(name)}`, {
+    method: 'DELETE',
   })
 }

@@ -8,6 +8,7 @@ import lombok.Value;
 @Value
 @Builder
 public class WikiPage {
+    String id;
     String path;
     String parentPath;
     String title;

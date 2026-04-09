@@ -1,13 +1,20 @@
-import { Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes } from 'react-router-dom'
 
-import { WikiWorkspace } from './components/WikiWorkspace'
+import { PageEditor } from './features/editor/PageEditor'
+import { PageViewer } from './features/viewer/PageViewer'
+import { WikiShell } from './features/wiki/WikiShell'
 import './App.css'
 
 function App() {
   return (
-    <Routes>
-      <Route path="*" element={<WikiWorkspace />} />
-    </Routes>
+    <WikiShell>
+      <Routes>
+        <Route path="/" element={<PageViewer />} />
+        <Route path="/e/*" element={<PageEditor />} />
+        <Route path="*" element={<PageViewer />} />
+        <Route path="" element={<Navigate to="/" replace />} />
+      </Routes>
+    </WikiShell>
   )
 }
 

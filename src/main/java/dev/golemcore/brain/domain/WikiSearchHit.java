@@ -6,6 +6,7 @@ import lombok.Value;
 @Value
 @Builder
 public class WikiSearchHit {
+    String id;
     String path;
     String title;
     String excerpt;

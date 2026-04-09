@@ -18,6 +18,7 @@ function flattenTree(node: WikiTreeNode | null): WikiSearchHit[] {
   }
 
   const currentNode: WikiSearchHit = {
+    id: node.id,
     path: node.path,
     title: node.title,
     excerpt:
@@ -98,7 +99,7 @@ export function SearchDialog({
           results.map((result) => (
             <button
               type="button"
-              key={result.path || result.title}
+              key={result.id}
               onClick={() => handleSelect(result.path)}
               className="block w-full rounded-2xl border border-surface-border bg-surface-alt/60 px-4 py-3 text-left transition hover:-translate-y-0.5 hover:border-accent/40 hover:bg-surface-alt"
             >
