@@ -6,8 +6,13 @@ import org.springframework.web.bind.annotation.GetMapping;
 @Controller
 public class SpaForwardController {
 
-    @GetMapping({"/", "/{path:^(?!api|assets|index\\.html|favicon\\.ico).*$}", "/**/{path:^(?!api|assets|index\\.html|favicon\\.ico).*$}"})
-    public String forwardToIndex() {
+    @GetMapping("/")
+    public String forwardRoot() {
+        return "forward:/index.html";
+    }
+
+    @GetMapping({"/{path:[^\\.]*}", "/**/{path:[^\\.]*}"})
+    public String forwardSpaPaths() {
         return "forward:/index.html";
     }
 }
