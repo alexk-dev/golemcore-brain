@@ -72,6 +72,7 @@ vi.mock('./lib/api', () => ({
   deletePage: vi.fn(),
   movePage: vi.fn(),
   copyPage: vi.fn(),
+  convertPage: vi.fn(),
   sortSection: vi.fn(),
   ensurePage: vi.fn(),
   lookupPath: vi.fn(),
@@ -153,6 +154,21 @@ describe('App', () => {
     })
 
     fireEvent.keyDown(window, { key: 'e', ctrlKey: true })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Close editor' })).toBeInTheDocument()
+    })
+  })
+
+  it('surfaces a global edit action for the current page', async () => {
+    render(
+      <MemoryRouter initialEntries={['/guides']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    const editButton = await screen.findByRole('button', { name: 'Edit page' })
+    fireEvent.click(editButton)
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Close editor' })).toBeInTheDocument()

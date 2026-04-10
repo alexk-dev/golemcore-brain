@@ -1,6 +1,7 @@
 package dev.golemcore.brain.adapter.in.web;
 
 import dev.golemcore.brain.adapter.in.web.auth.AuthCookieHelper;
+import dev.golemcore.brain.adapter.in.web.dto.ConvertPagePayload;
 import dev.golemcore.brain.adapter.in.web.dto.CopyPagePayload;
 import dev.golemcore.brain.adapter.in.web.dto.CreatePagePayload;
 import dev.golemcore.brain.adapter.in.web.dto.EnsurePagePayload;
@@ -151,6 +152,15 @@ public class WikiController {
                 .targetParentPath(payload.getTargetParentPath())
                 .targetSlug(payload.getTargetSlug())
                 .beforeSlug(payload.getBeforeSlug())
+                .build());
+    }
+
+    @PostMapping("/page/convert")
+    public WikiPage convertPage(@RequestParam(name = "path") String path, @Valid @RequestBody ConvertPagePayload payload, HttpServletRequest request) {
+        authService.requireEditAccess(authCookieHelper.readSessionToken(request));
+        return wikiApplicationService.convertPage(WikiApplicationService.ConvertPageCommand.builder()
+                .path(path)
+                .targetKind(payload.getTargetKind())
                 .build());
     }
 

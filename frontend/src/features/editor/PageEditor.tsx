@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ClipboardEvent as ReactClipboardEvent } from 'react'
 import type { EditorView } from '@codemirror/view'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -13,6 +13,7 @@ import { useEditorStore } from '../../stores/editor'
 import { useTreeStore } from '../../stores/tree'
 import { MarkdownCodeEditor } from './MarkdownCodeEditor'
 import { MarkdownToolbar } from './MarkdownToolbar'
+import type { WikiAsset } from '../../types'
 
 function insertMarkdownAtCursor(view: EditorView | null, markdown: string, onChange: (value: string) => void) {
   if (!view) {
@@ -59,6 +60,12 @@ function formatTimestamp(timestamp?: string) {
   return new Date(timestamp).toLocaleString()
 }
 
+function replaceAssetReferences(content: string, oldAsset: WikiAsset, newAsset: WikiAsset) {
+  return content
+    .replaceAll(oldAsset.path, newAsset.path)
+    .replaceAll(`[${oldAsset.name}](`, `[${newAsset.name}](`)
+}
+
 export function PageEditor() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -70,6 +77,9 @@ export function PageEditor() {
   const [showMetadataPanel, setShowMetadataPanel] = useState(false)
   const [showConflictDialog, setShowConflictDialog] = useState(false)
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'))
+  const [activeMobilePane, setActiveMobilePane] = useState<'editor' | 'preview'>('editor')
+  const [assetPreviewVersion, setAssetPreviewVersion] = useState(0)
+  const previewScrollRef = useRef<HTMLDivElement | null>(null)
 
   const loadPageData = useEditorStore((state) => state.loadPageData)
   const savePage = useEditorStore((state) => state.savePage)
@@ -165,6 +175,9 @@ export function PageEditor() {
   })
 
   const handleSave = async () => {
+    if (!hasUnsavedChanges) {
+      return
+    }
     try {
       const updatedPage = await savePage()
       if (!updatedPage) {
@@ -211,6 +224,29 @@ export function PageEditor() {
     toast.success('Latest version loaded as the new base. Your draft was preserved for manual merge.')
   }
 
+  const bumpAssetPreviewVersion = useCallback(() => setAssetPreviewVersion(Date.now()), [])
+
+  const handleAssetRenamed = (oldAsset: WikiAsset, newAsset: WikiAsset) => {
+    const nextContent = replaceAssetReferences(content, oldAsset, newAsset)
+    if (nextContent !== content) {
+      setContent(nextContent)
+      toast.success(`Updated references to ${newAsset.name}`)
+    }
+  }
+
+  const handleCursorLineChange = useCallback((line: number, lineCount: number) => {
+    const preview = previewScrollRef.current
+    if (!preview || lineCount <= 1) {
+      return
+    }
+    const maxScroll = preview.scrollHeight - preview.clientHeight
+    if (maxScroll <= 0) {
+      return
+    }
+    const ratio = Math.min(Math.max((line - 1) / (lineCount - 1), 0), 1)
+    preview.scrollTo({ top: maxScroll * ratio, behavior: 'smooth' })
+  }, [])
+
   const handlePaste = async (event: ReactClipboardEvent<HTMLDivElement>) => {
     if (!page) {
       return
@@ -223,6 +259,7 @@ export function PageEditor() {
     try {
       const asset = await uploadAsset(page.path, file)
       insertMarkdownAtCursor(editorViewRef.current, buildDefaultMarkdownForAsset(asset), setContent)
+      bumpAssetPreviewVersion()
       toast.success(`Uploaded ${asset.name}`)
     } catch (pasteError) {
       toast.error((pasteError as Error).message)
@@ -248,6 +285,9 @@ export function PageEditor() {
               onClick={() => void handleCloseEditor()}
             >
               <span className="editor-title-bar__title">{title}</span>
+              {hasUnsavedChanges ? (
+                <span className="editor-title-bar__dirty-indicator">Unsaved changes</span>
+              ) : null}
             </button>
             <span className="editor-title-bar__slug">/{page.path}</span>
           </div>
@@ -266,8 +306,14 @@ export function PageEditor() {
             >
               Close editor
             </button>
-            <button type="button" className="action-button-primary" onClick={() => void handleSave()}>
-              Save
+            <button
+              type="button"
+              className="action-button-primary disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => void handleSave()}
+              disabled={!hasUnsavedChanges}
+              title="Save page (Ctrl+S)"
+            >
+              {hasUnsavedChanges ? 'Save changes' : 'Saved'}
             </button>
           </div>
         </div>
@@ -313,6 +359,22 @@ export function PageEditor() {
               </div>
             ) : null}
             <div className="markdown-editor">
+              <div className="markdown-editor__mobile-tabs" role="tablist" aria-label="Editor panes">
+                <button
+                  type="button"
+                  className={activeMobilePane === 'editor' ? 'markdown-editor__mobile-tab markdown-editor__mobile-tab--active' : 'markdown-editor__mobile-tab'}
+                  onClick={() => setActiveMobilePane('editor')}
+                >
+                  Editor
+                </button>
+                <button
+                  type="button"
+                  className={activeMobilePane === 'preview' ? 'markdown-editor__mobile-tab markdown-editor__mobile-tab--active' : 'markdown-editor__mobile-tab'}
+                  onClick={() => setActiveMobilePane('preview')}
+                >
+                  Preview
+                </button>
+              </div>
               <MarkdownToolbar
                 editorViewRef={editorViewRef}
                 previewVisible={previewVisible}
@@ -320,20 +382,22 @@ export function PageEditor() {
                 onOpenAssetManager={() => setAssetManagerOpen(true)}
               />
               <div className="flex flex-1 overflow-hidden">
-                <div className={previewVisible ? 'markdown-editor__editor-pane markdown-editor__editor-pane--half' : 'markdown-editor__editor-pane markdown-editor__editor-pane--full'}>
+                <div className={`${previewVisible ? 'markdown-editor__editor-pane markdown-editor__editor-pane--half' : 'markdown-editor__editor-pane markdown-editor__editor-pane--full'} ${activeMobilePane === 'preview' ? 'markdown-editor__pane--mobile-hidden' : ''}`}>
                   <MarkdownCodeEditor
+                    key={page.id}
                     value={content}
                     darkMode={isDark}
                     onChange={setContent}
                     editorViewRef={editorViewRef}
                     onPaste={handlePaste}
+                    onCursorLineChange={handleCursorLineChange}
                   />
                 </div>
                 {previewVisible ? (
-                  <div className="markdown-editor__preview-container">
-                    <div className="markdown-editor__preview">
+                  <div className={`markdown-editor__preview-container ${activeMobilePane === 'editor' ? 'markdown-editor__pane--mobile-hidden' : ''}`}>
+                    <div className="markdown-editor__preview" ref={previewScrollRef}>
                       <div className="markdown-editor__preview-inner">
-                        <MarkdownPreview content={content} path={page.path} darkMode={isDark} />
+                        <MarkdownPreview content={content} path={page.path} darkMode={isDark} assetVersion={assetPreviewVersion} />
                       </div>
                     </div>
                   </div>
@@ -349,6 +413,8 @@ export function PageEditor() {
         pagePath={page.path}
         onOpenChange={setAssetManagerOpen}
         onInsertMarkdown={(markdown) => insertMarkdownAtCursor(editorViewRef.current, markdown, setContent)}
+        onAssetRenamed={handleAssetRenamed}
+        onAssetsChanged={bumpAssetPreviewVersion}
       />
 
       {showUnsavedDialog ? (

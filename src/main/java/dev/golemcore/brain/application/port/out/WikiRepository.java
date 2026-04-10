@@ -31,6 +31,8 @@ public interface WikiRepository {
 
     WikiPageDocument copyPage(String path, String targetParentPath, String targetSlug, String beforeSlug);
 
+    WikiPageDocument convertPage(String path, dev.golemcore.brain.domain.WikiNodeKind targetKind);
+
     void sortChildren(String path, List<String> orderedSlugs);
 
     List<WikiNodeReference> flatten();

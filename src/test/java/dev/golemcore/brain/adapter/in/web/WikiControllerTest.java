@@ -176,6 +176,30 @@ class WikiControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)));
 
+        mockMvc.perform(post("/api/pages")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "parentPath": "",
+                                  "title": "Empty Section",
+                                  "slug": "empty-section",
+                                  "content": "Empty",
+                                  "kind": "SECTION"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/page/convert")
+                        .param("path", "empty-section")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "targetKind": "PAGE"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.kind", is("PAGE")));
+
         mockMvc.perform(delete("/api/page").param("path", "operations/generated-page"))
                 .andExpect(status().isOk());
     }

@@ -16,6 +16,8 @@ interface TreeState {
   toggleNode: (id: string) => void
   openNode: (id: string) => void
   closeNode: (id: string) => void
+  expandAll: () => void
+  collapseAll: () => void
   setActiveNodeId: (id: string | null) => void
   getPageByPath: (path: string) => WikiTreeNode | null
   getPageById: (id: string) => WikiTreeNode | null
@@ -94,6 +96,21 @@ function buildRouteOpenState(byPath: Record<string, WikiTreeNode>, path: string)
   return { mustOpenNodeIdSet, suggestedOpenNodeIdSet }
 }
 
+function collectContainerNodeIds(node: WikiTreeNode | null) {
+  const ids: string[] = []
+  const walk = (currentNode: WikiTreeNode) => {
+    if (currentNode.kind === 'PAGE') {
+      return
+    }
+    ids.push(currentNode.id)
+    currentNode.children.forEach(walk)
+  }
+  if (node) {
+    walk(node)
+  }
+  return ids
+}
+
 export const useTreeStore = create<TreeState>((set, get) => ({
   tree: null,
   loading: false,
@@ -149,6 +166,28 @@ export const useTreeStore = create<TreeState>((set, get) => ({
   closeNode: (id) => {
     const state = get()
     const manualNodeStateById = { ...state.manualNodeStateById, [id]: false }
+    set({
+      manualNodeStateById,
+      openNodeIdSet: computeOpenNodeIdSet(manualNodeStateById, state.mustOpenNodeIdSet, state.suggestedOpenNodeIdSet),
+    })
+  },
+  expandAll: () => {
+    const state = get()
+    const manualNodeStateById = { ...state.manualNodeStateById }
+    collectContainerNodeIds(state.tree).forEach((id) => {
+      manualNodeStateById[id] = true
+    })
+    set({
+      manualNodeStateById,
+      openNodeIdSet: computeOpenNodeIdSet(manualNodeStateById, state.mustOpenNodeIdSet, state.suggestedOpenNodeIdSet),
+    })
+  },
+  collapseAll: () => {
+    const state = get()
+    const manualNodeStateById = { ...state.manualNodeStateById }
+    collectContainerNodeIds(state.tree).forEach((id) => {
+      manualNodeStateById[id] = false
+    })
     set({
       manualNodeStateById,
       openNodeIdSet: computeOpenNodeIdSet(manualNodeStateById, state.mustOpenNodeIdSet, state.suggestedOpenNodeIdSet),

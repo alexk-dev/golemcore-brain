@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { FileAudio, FileImage, FileVideo, ImagePlus, Link2, Pencil, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { FileAudio, FileImage, FileVideo, ImagePlus, Link2, Pencil, Trash2, UploadCloud } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { ModalCard } from '../../components/ModalCard'
@@ -12,6 +12,8 @@ interface AssetManagerDialogProps {
   pagePath: string
   onOpenChange: (open: boolean) => void
   onInsertMarkdown: (markdown: string) => void
+  onAssetRenamed?: (oldAsset: WikiAsset, newAsset: WikiAsset) => void
+  onAssetsChanged?: () => void
 }
 
 export function AssetManagerDialog({
@@ -19,11 +21,16 @@ export function AssetManagerDialog({
   pagePath,
   onOpenChange,
   onInsertMarkdown,
+  onAssetRenamed,
+  onAssetsChanged,
 }: AssetManagerDialogProps) {
   const [assets, setAssets] = useState<WikiAsset[]>([])
   const [loading, setLoading] = useState(false)
   const [renameTarget, setRenameTarget] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const [isDragging, setIsDragging] = useState(false)
+  const [uploadingFiles, setUploadingFiles] = useState<Record<string, 'uploading' | 'done' | 'error'>>({})
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const reloadAssets = useCallback(async () => {
     if (!pagePath) {
@@ -48,17 +55,41 @@ export function AssetManagerDialog({
     void reloadAssets()
   }, [open, reloadAssets])
 
-  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file || !pagePath) {
+  const uploadFiles = async (files: File[]) => {
+    if (files.length === 0 || !pagePath) {
       return
     }
-    try {
-      await uploadAsset(pagePath, file)
-      toast.success(`Uploaded ${file.name}`)
+
+    setUploadingFiles((currentFiles) => {
+      const nextFiles = { ...currentFiles }
+      files.forEach((file) => {
+        nextFiles[file.name] = 'uploading'
+      })
+      return nextFiles
+    })
+
+    let uploadedCount = 0
+    await Promise.all(files.map(async (file) => {
+      try {
+        await uploadAsset(pagePath, file)
+        uploadedCount += 1
+        setUploadingFiles((currentFiles) => ({ ...currentFiles, [file.name]: 'done' }))
+      } catch (error) {
+        setUploadingFiles((currentFiles) => ({ ...currentFiles, [file.name]: 'error' }))
+        toast.error(`${file.name}: ${(error as Error).message}`)
+      }
+    }))
+
+    if (uploadedCount > 0) {
+      toast.success(`Uploaded ${uploadedCount} asset${uploadedCount === 1 ? '' : 's'}`)
+      onAssetsChanged?.()
       await reloadAssets()
-    } catch (error) {
-      toast.error((error as Error).message)
+    }
+  }
+
+  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      await uploadFiles(Array.from(event.target.files ?? []))
     } finally {
       event.target.value = ''
     }
@@ -66,8 +97,10 @@ export function AssetManagerDialog({
 
   const handleRename = async (asset: WikiAsset) => {
     try {
-      await renameAsset(pagePath, asset.name, renameValue)
+      const renamedAsset = await renameAsset(pagePath, asset.name, renameValue)
       toast.success('Asset renamed')
+      onAssetRenamed?.(asset, renamedAsset)
+      onAssetsChanged?.()
       setRenameTarget(null)
       setRenameValue('')
       await reloadAssets()
@@ -80,6 +113,7 @@ export function AssetManagerDialog({
     try {
       await deleteAsset(pagePath, asset.name)
       toast.success('Asset deleted')
+      onAssetsChanged?.()
       await reloadAssets()
     } catch (error) {
       toast.error((error as Error).message)
@@ -160,11 +194,55 @@ export function AssetManagerDialog({
         </button>
       }
     >
-      <label className="action-button-primary cursor-pointer">
+      <div
+        className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed px-4 py-5 text-center transition ${isDragging ? 'border-accent bg-accent/10 text-accent' : 'border-surface-border bg-surface-alt/60 text-muted'}`}
+        role="button"
+        tabIndex={0}
+        onClick={() => fileInputRef.current?.click()}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            fileInputRef.current?.click()
+          }
+        }}
+        onDragOver={(event) => {
+          event.preventDefault()
+          setIsDragging(true)
+        }}
+        onDragEnter={(event) => {
+          event.preventDefault()
+          setIsDragging(true)
+        }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={(event) => {
+          event.preventDefault()
+          setIsDragging(false)
+          void uploadFiles(Array.from(event.dataTransfer.files ?? []))
+        }}
+      >
+        <UploadCloud size={20} />
+        <div className="text-sm font-medium text-foreground">Drop files here or click to upload</div>
+        <div className="text-xs text-muted">Images, audio, video, and files can be uploaded together.</div>
+        <input ref={fileInputRef} type="file" className="hidden" multiple onChange={handleUpload} />
+      </div>
+
+      <button type="button" className="action-button-primary" onClick={() => fileInputRef.current?.click()}>
         <ImagePlus size={16} />
-        Upload asset
-        <input type="file" className="hidden" onChange={handleUpload} />
-      </label>
+        Upload assets
+      </button>
+
+      {Object.keys(uploadingFiles).length > 0 ? (
+        <div className="space-y-1 rounded-lg border border-surface-border bg-surface-alt/60 px-3 py-2 text-xs">
+          {Object.entries(uploadingFiles).map(([fileName, status]) => (
+            <div key={fileName} className="flex items-center justify-between gap-3">
+              <span className="truncate">{fileName}</span>
+              <span className={status === 'error' ? 'text-danger' : status === 'done' ? 'text-accent' : 'text-muted'}>
+                {status === 'uploading' ? 'Uploading...' : status === 'done' ? 'Done' : 'Failed'}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       <div className="space-y-3">
         {loading ? <div className="text-sm text-muted">Loading assets...</div> : null}
