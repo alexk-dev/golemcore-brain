@@ -11,5 +11,7 @@ public class WikiImportApplyResponse {
     int createdCount;
     int updatedCount;
     int skippedCount;
+    String importedRootPath;
+    List<String> warnings;
     List<WikiImportItem> items;
 }

@@ -57,30 +57,69 @@ class WikiControllerImportTest {
                 "docs.zip",
                 "application/zip",
                 buildImportZip());
+        MockMultipartFile previewOptions = new MockMultipartFile(
+                "options",
+                "",
+                "application/json",
+                """
+                        {
+                          "targetRootPath": "knowledge"
+                        }
+                        """.getBytes(StandardCharsets.UTF_8));
+        MockMultipartFile applyOptions = new MockMultipartFile(
+                "options",
+                "",
+                "application/json",
+                """
+                        {
+                          "targetRootPath": "knowledge",
+                          "items": [
+                            {
+                              "sourcePath": "guides/index.md",
+                              "selected": true,
+                              "policy": "OVERWRITE"
+                            },
+                            {
+                              "sourcePath": "guides/setup.md",
+                              "selected": true,
+                              "policy": "KEEP_EXISTING"
+                            }
+                          ]
+                        }
+                        """.getBytes(StandardCharsets.UTF_8));
 
-        mockMvc.perform(multipart("/api/import/markdown/plan").file(archive))
+        mockMvc.perform(multipart("/api/import/markdown/plan")
+                        .file(archive)
+                        .file(previewOptions))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items", hasSize(2)))
-                .andExpect(jsonPath("$.items[0].path", is("guides")))
+                .andExpect(jsonPath("$.targetRootPath", is("knowledge")))
+                .andExpect(jsonPath("$.items[0].path", is("knowledge/guides")))
                 .andExpect(jsonPath("$.items[0].kind", is("SECTION")))
-                .andExpect(jsonPath("$.items[1].path", is("guides/setup")))
+                .andExpect(jsonPath("$.items[1].path", is("knowledge/guides/setup")))
                 .andExpect(jsonPath("$.items[1].kind", is("PAGE")));
 
-        mockMvc.perform(multipart("/api/import/markdown/apply").file(archive))
+        mockMvc.perform(multipart("/api/import/markdown/apply")
+                        .file(archive)
+                        .file(previewOptions))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.importedCount", is(2)))
                 .andExpect(jsonPath("$.createdCount", is(2)))
-                .andExpect(jsonPath("$.updatedCount", is(0)));
+                .andExpect(jsonPath("$.updatedCount", is(0)))
+                .andExpect(jsonPath("$.importedRootPath", is("knowledge/guides")));
 
-        mockMvc.perform(get("/api/pages/by-path").param("path", "guides/setup"))
+        mockMvc.perform(get("/api/pages/by-path").param("path", "knowledge/guides/setup"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title", is("Setup")));
 
-        mockMvc.perform(multipart("/api/import/markdown/apply").file(archive))
+        mockMvc.perform(multipart("/api/import/markdown/apply")
+                        .file(archive)
+                        .file(applyOptions))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.importedCount", is(2)))
+                .andExpect(jsonPath("$.importedCount", is(1)))
                 .andExpect(jsonPath("$.createdCount", is(0)))
-                .andExpect(jsonPath("$.updatedCount", is(2)));
+                .andExpect(jsonPath("$.updatedCount", is(1)))
+                .andExpect(jsonPath("$.skippedCount", is(1)));
     }
 
     private byte[] buildImportZip() throws Exception {

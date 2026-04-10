@@ -10,6 +10,8 @@ const navigateMock = vi.fn()
 const uploadAssetMock = vi.fn()
 const setContentMock = vi.fn()
 const savePageMock = vi.fn()
+const reloadFromConflictMock = vi.fn()
+const mergeConflictWithLocalDraftMock = vi.fn()
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
@@ -38,6 +40,8 @@ describe('PageEditor', () => {
     uploadAssetMock.mockReset()
     setContentMock.mockReset()
     savePageMock.mockReset()
+    reloadFromConflictMock.mockReset()
+    mergeConflictWithLocalDraftMock.mockReset()
     const treeNode = {
       id: 'guides/runbook',
       path: 'guides/runbook',
@@ -99,8 +103,11 @@ describe('PageEditor', () => {
       content: 'Initial content',
       loading: false,
       error: null,
+      conflict: null,
       loadPageData: async () => undefined,
       savePage: savePageMock,
+      reloadFromConflict: reloadFromConflictMock,
+      mergeConflictWithLocalDraft: mergeConflictWithLocalDraftMock,
       setTitle: () => undefined,
       setSlug: () => undefined,
       setContent: setContentMock,
@@ -173,5 +180,35 @@ describe('PageEditor', () => {
     await waitFor(() => {
       expect(setContentMock).toHaveBeenCalled()
     })
+  })
+
+  it('shows conflict recovery actions when another session updated the page', () => {
+    useEditorStore.setState({
+      conflict: {
+        id: 'guides/runbook',
+        path: 'guides/runbook',
+        parentPath: 'guides',
+        title: 'Runbook from server',
+        slug: 'runbook',
+        kind: 'PAGE',
+        content: 'Server content',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-02T12:00:00Z',
+        revision: 'server-revision',
+        children: [],
+      },
+    })
+
+    render(
+      <MemoryRouter>
+        <PageEditor />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Page changed in another session')).toBeInTheDocument()
+    expect(screen.getByText('Latest saved version')).toBeInTheDocument()
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Merge with latest' })[0])
+    expect(mergeConflictWithLocalDraftMock).toHaveBeenCalledTimes(1)
   })
 })

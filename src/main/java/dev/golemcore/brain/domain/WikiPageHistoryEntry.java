@@ -10,4 +10,7 @@ public class WikiPageHistoryEntry {
     String title;
     String slug;
     String recordedAt;
+    String author;
+    String reason;
+    String summary;
 }

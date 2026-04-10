@@ -150,6 +150,7 @@ vi.mock('../../lib/api', () => ({
     outgoings: [],
     brokenOutgoings: [],
   })),
+  getPageHistoryVersion: vi.fn(),
   getSearchStatus: vi.fn(async () => ({
     mode: 'live-scan',
     ready: true,
@@ -194,7 +195,7 @@ describe('Sidebar tree interaction parity', () => {
       mustOpenNodeIdSet: {},
       suggestedOpenNodeIdSet: {},
     })
-    useViewerStore.setState({ page: null, linkStatus: null, loading: false, error: null })
+    useViewerStore.setState({ page: null, linkStatus: null, history: [], loading: false, error: null })
     useEditorStore.setState({
       page: null,
       initialPage: null,

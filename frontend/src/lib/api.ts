@@ -4,6 +4,7 @@ import type {
   CreatePagePayload,
   MovePagePayload,
   PublicUserView,
+  MarkdownImportOptions,
   UpdatePagePayload,
   UpdateUserPayload,
   UserRole,
@@ -11,6 +12,7 @@ import type {
   WikiConfig,
   WikiImportApplyResponse,
   WikiImportPlanResponse,
+  WikiPageHistoryVersion,
   WikiLinkStatus,
   WikiPage,
   WikiPageHistoryEntry,
@@ -19,6 +21,40 @@ import type {
   WikiSearchStatus,
   WikiTreeNode,
 } from '../types'
+
+type ErrorBody = {
+  error?: string
+  code?: string
+  expectedRevision?: string
+  currentRevision?: string
+  currentPage?: WikiPage
+}
+
+export class ApiError extends Error {
+  status: number
+  code?: string
+
+  constructor(message: string, status: number, code?: string) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.code = code
+  }
+}
+
+export class PageConflictError extends ApiError {
+  expectedRevision?: string
+  currentRevision?: string
+  currentPage: WikiPage
+
+  constructor(message: string, body: ErrorBody) {
+    super(message, 409, body.code)
+    this.name = 'PageConflictError'
+    this.expectedRevision = body.expectedRevision
+    this.currentRevision = body.currentRevision
+    this.currentPage = body.currentPage as WikiPage
+  }
+}
 
 async function readJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {
@@ -31,10 +67,12 @@ async function readJson<T>(input: RequestInfo | URL, init?: RequestInit): Promis
   })
 
   if (!response.ok) {
-    const body = (await response.json().catch(() => ({ error: 'Request failed' }))) as {
-      error?: string
+    const body = (await response.json().catch(() => ({ error: 'Request failed' }))) as ErrorBody
+    const message = body.error ?? 'Request failed'
+    if (response.status === 409 && body.code === 'PAGE_EDIT_CONFLICT' && body.currentPage) {
+      throw new PageConflictError(message, body)
     }
-    throw new Error(body.error ?? 'Request failed')
+    throw new ApiError(message, response.status, body.code)
   }
 
   if (response.status === 204) {
@@ -112,6 +150,10 @@ export function getPageHistory(path: string): Promise<WikiPageHistoryEntry[]> {
   return readJson<WikiPageHistoryEntry[]>(`/api/page/history?path=${encodeURIComponent(path)}`)
 }
 
+export function getPageHistoryVersion(path: string, versionId: string): Promise<WikiPageHistoryVersion> {
+  return readJson<WikiPageHistoryVersion>(`/api/page/history/version?path=${encodeURIComponent(path)}&versionId=${encodeURIComponent(versionId)}`)
+}
+
 export function restorePageHistory(path: string, versionId: string): Promise<WikiPage> {
   return readJson<WikiPage>(`/api/page/history/restore?path=${encodeURIComponent(path)}&versionId=${encodeURIComponent(versionId)}`, {
     method: 'POST',
@@ -126,18 +168,30 @@ export function getSearchStatus(): Promise<WikiSearchStatus> {
   return readJson<WikiSearchStatus>('/api/search/status')
 }
 
-export function planMarkdownImport(file: File): Promise<WikiImportPlanResponse> {
+function appendImportOptions(formData: FormData, options?: MarkdownImportOptions) {
+  if (!options) {
+    return
+  }
+  formData.append(
+    'options',
+    new Blob([JSON.stringify(options)], { type: 'application/json' }),
+  )
+}
+
+export function planMarkdownImport(file: File, options?: MarkdownImportOptions): Promise<WikiImportPlanResponse> {
   const formData = new FormData()
   formData.append('file', file)
+  appendImportOptions(formData, options)
   return readJson<WikiImportPlanResponse>('/api/import/markdown/plan', {
     method: 'POST',
     body: formData,
   })
 }
 
-export function applyMarkdownImport(file: File): Promise<WikiImportApplyResponse> {
+export function applyMarkdownImport(file: File, options?: MarkdownImportOptions): Promise<WikiImportApplyResponse> {
   const formData = new FormData()
   formData.append('file', file)
+  appendImportOptions(formData, options)
   return readJson<WikiImportApplyResponse>('/api/import/markdown/apply', {
     method: 'POST',
     body: formData,

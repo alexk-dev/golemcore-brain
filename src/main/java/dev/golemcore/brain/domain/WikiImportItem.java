@@ -10,6 +10,10 @@ public class WikiImportItem {
     String title;
     WikiNodeKind kind;
     WikiImportAction action;
+    WikiImportPolicy policy;
     boolean implicitSection;
+    boolean existing;
+    boolean selected;
     String sourcePath;
+    String note;
 }

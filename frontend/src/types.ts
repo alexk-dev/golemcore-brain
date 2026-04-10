@@ -1,6 +1,7 @@
 export type WikiNodeKind = 'ROOT' | 'SECTION' | 'PAGE'
 export type UserRole = 'ADMIN' | 'EDITOR' | 'VIEWER'
-export type WikiImportAction = 'CREATE' | 'UPDATE'
+export type WikiImportAction = 'CREATE' | 'UPDATE' | 'SKIP'
+export type WikiImportPolicy = 'OVERWRITE' | 'KEEP_EXISTING'
 
 export interface PublicUserView {
   id: string
@@ -43,6 +44,7 @@ export interface WikiPage {
   content: string
   createdAt: string
   updatedAt: string
+  revision?: string
   children: WikiTreeNode[]
 }
 
@@ -51,6 +53,20 @@ export interface WikiPageHistoryEntry {
   title: string
   slug: string
   recordedAt: string
+  author?: string
+  reason?: string
+  summary?: string
+}
+
+export interface WikiPageHistoryVersion {
+  id: string
+  title: string
+  slug: string
+  content: string
+  recordedAt: string
+  author?: string
+  reason?: string
+  summary?: string
 }
 
 export interface WikiSearchHit {
@@ -74,11 +90,20 @@ export interface WikiImportItem {
   title: string
   kind: WikiNodeKind
   action: WikiImportAction
+  policy: WikiImportPolicy
   implicitSection: boolean
+  existing: boolean
+  selected: boolean
   sourcePath: string
+  note?: string
 }
 
 export interface WikiImportPlanResponse {
+  targetRootPath: string
+  createCount: number
+  updateCount: number
+  skipCount: number
+  warnings: string[]
   items: WikiImportItem[]
 }
 
@@ -87,7 +112,18 @@ export interface WikiImportApplyResponse {
   createdCount: number
   updatedCount: number
   skippedCount: number
+  importedRootPath: string
+  warnings: string[]
   items: WikiImportItem[]
+}
+
+export interface MarkdownImportOptions {
+  targetRootPath?: string
+  items?: Array<{
+    sourcePath: string
+    selected: boolean
+    policy: WikiImportPolicy
+  }>
 }
 
 export interface WikiConfig {
@@ -147,6 +183,7 @@ export interface UpdatePagePayload {
   title: string
   slug?: string
   content: string
+  revision?: string
 }
 
 export interface MovePagePayload {

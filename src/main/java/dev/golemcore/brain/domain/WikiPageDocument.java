@@ -17,4 +17,5 @@ public class WikiPageDocument {
     WikiNodeKind kind;
     Instant createdAt;
     Instant updatedAt;
+    String revision;
 }

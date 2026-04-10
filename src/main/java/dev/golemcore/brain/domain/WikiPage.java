@@ -17,5 +17,6 @@ public class WikiPage {
     String content;
     String createdAt;
     String updatedAt;
+    String revision;
     List<WikiTreeNode> children;
 }

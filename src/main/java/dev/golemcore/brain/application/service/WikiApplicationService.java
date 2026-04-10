@@ -9,6 +9,7 @@ import dev.golemcore.brain.domain.WikiConfigResponse;
 import dev.golemcore.brain.domain.WikiImportAction;
 import dev.golemcore.brain.domain.WikiImportApplyResponse;
 import dev.golemcore.brain.domain.WikiImportItem;
+import dev.golemcore.brain.domain.WikiImportPolicy;
 import dev.golemcore.brain.domain.WikiImportPlanResponse;
 import dev.golemcore.brain.domain.WikiLinkStatus;
 import dev.golemcore.brain.domain.WikiLinkStatusItem;
@@ -17,6 +18,7 @@ import dev.golemcore.brain.domain.WikiNodeReference;
 import dev.golemcore.brain.domain.WikiPage;
 import dev.golemcore.brain.domain.WikiPageDocument;
 import dev.golemcore.brain.domain.WikiPageHistoryEntry;
+import dev.golemcore.brain.domain.WikiPageHistoryVersion;
 import dev.golemcore.brain.domain.WikiPathLookupResult;
 import dev.golemcore.brain.domain.WikiPathLookupSegment;
 import dev.golemcore.brain.domain.WikiSearchDocument;
@@ -87,8 +89,18 @@ public class WikiApplicationService {
         return wikiRepository.listPageHistory(path);
     }
 
-    public WikiPage restorePageHistory(String path, String versionId) {
-        return toPageDocument(wikiRepository.restorePageVersion(path, versionId));
+    public WikiPageHistoryVersion getPageHistoryVersion(String path, String versionId) {
+        return wikiRepository.readPageHistoryVersion(path, versionId);
+    }
+
+    public WikiPage restorePageHistory(String path, String versionId, String actor) {
+        WikiPageHistoryVersion version = wikiRepository.readPageHistoryVersion(path, versionId);
+        return toPageDocument(wikiRepository.restorePageVersion(
+                path,
+                versionId,
+                actor,
+                "Version restored",
+                "Rolled back to \"" + version.getTitle() + "\"."));
     }
 
     public WikiPage createPage(CreatePageCommand command) {
@@ -120,11 +132,18 @@ public class WikiApplicationService {
     }
 
     public WikiPage updatePage(UpdatePageCommand command) {
+        WikiNodeReference nodeReference = wikiRepository.findReference(command.getPath())
+                .orElseThrow(() -> new WikiNotFoundException("Page not found: " + normalizePath(command.getPath())));
+        WikiPageDocument currentDocument = wikiRepository.readDocument(nodeReference);
         WikiPageDocument document = wikiRepository.updatePage(
                 command.getPath(),
                 command.getTitle(),
                 command.getSlug(),
-                command.getContent());
+                command.getContent(),
+                command.getExpectedRevision(),
+                command.getActor(),
+                Optional.ofNullable(command.getHistoryReason()).orElse("Manual save"),
+                Optional.ofNullable(command.getHistorySummary()).orElse(summarizeManualSave(currentDocument, nodeReference, command)));
         return getPage(document.getPath());
     }
 
@@ -191,20 +210,51 @@ public class WikiApplicationService {
     }
 
     public WikiImportPlanResponse planMarkdownImport(InputStream inputStream) {
-        List<ImportEntry> entries = readImportEntries(inputStream);
+        return planMarkdownImport(inputStream, ImportPlanCommand.builder().build());
+    }
+
+    public WikiImportPlanResponse planMarkdownImport(InputStream inputStream, ImportPlanCommand command) {
+        validateImportTargetRoot(command.getTargetRootPath());
+        List<ImportEntry> entries = readImportEntries(inputStream, command.getTargetRootPath());
+        List<String> warnings = new ArrayList<>();
+        List<WikiImportItem> items = entries.stream()
+                .map(entry -> toImportItem(entry, null, true, warnings))
+                .toList();
         return WikiImportPlanResponse.builder()
-                .items(entries.stream().map(this::toImportItem).toList())
+                .targetRootPath(normalizePath(Optional.ofNullable(command.getTargetRootPath()).orElse("")))
+                .createCount((int) items.stream().filter(item -> item.getAction() == WikiImportAction.CREATE).count())
+                .updateCount((int) items.stream().filter(item -> item.getAction() == WikiImportAction.UPDATE).count())
+                .skipCount((int) items.stream().filter(item -> item.getAction() == WikiImportAction.SKIP).count())
+                .warnings(warnings)
+                .items(items)
                 .build();
     }
 
     public WikiImportApplyResponse applyMarkdownImport(InputStream inputStream) {
-        List<ImportEntry> entries = readImportEntries(inputStream);
+        return applyMarkdownImport(inputStream, ImportApplyCommand.builder().build());
+    }
+
+    public WikiImportApplyResponse applyMarkdownImport(InputStream inputStream, ImportApplyCommand command) {
+        validateImportTargetRoot(command.getTargetRootPath());
+        List<ImportEntry> entries = readImportEntries(inputStream, command.getTargetRootPath());
+        ensureSectionHierarchy(normalizePath(Optional.ofNullable(command.getTargetRootPath()).orElse("")));
+        Map<String, ImportSelectionCommand> selectionBySourcePath = Optional.ofNullable(command.getItems()).orElse(List.of()).stream()
+                .filter(selection -> selection.getSourcePath() != null && !selection.getSourcePath().isBlank())
+                .collect(Collectors.toMap(ImportSelectionCommand::getSourcePath, selection -> selection, (left, right) -> right, LinkedHashMap::new));
         List<WikiImportItem> items = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
         int createdCount = 0;
         int updatedCount = 0;
+        int skippedCount = 0;
         for (ImportEntry entry : entries) {
-            WikiImportItem item = toImportItem(entry);
-            items.add(item);
+            ImportSelectionCommand selection = selectionBySourcePath.get(entry.getSourcePath());
+            boolean selected = isEntrySelected(entry, selection, entries, selectionBySourcePath);
+            WikiImportItem item = toImportItem(entry, selection, selected, warnings);
+            if (item.getAction() == WikiImportAction.SKIP) {
+                items.add(item);
+                skippedCount++;
+                continue;
+            }
             if (item.getAction() == WikiImportAction.CREATE) {
                 createPage(CreatePageCommand.builder()
                         .parentPath(entry.getParentPath())
@@ -220,15 +270,21 @@ public class WikiApplicationService {
                         .title(entry.getTitle())
                         .slug(entry.getSlug())
                         .content(entry.getBody())
+                        .actor(Optional.ofNullable(command.getActor()).filter(value -> !value.isBlank()).orElse("Import"))
+                        .historyReason("Markdown import")
+                        .historySummary("Updated from the imported archive.")
                         .build());
                 updatedCount++;
             }
+            items.add(item);
         }
         return WikiImportApplyResponse.builder()
-                .importedCount(items.size())
+                .importedCount(createdCount + updatedCount)
                 .createdCount(createdCount)
                 .updatedCount(updatedCount)
-                .skippedCount(0)
+                .skippedCount(skippedCount)
+                .importedRootPath(commonImportedRootPath(items))
+                .warnings(warnings)
                 .items(items)
                 .build();
     }
@@ -346,10 +402,11 @@ public class WikiApplicationService {
         return wikiRepository.openAsset(path, assetName);
     }
 
-    private List<ImportEntry> readImportEntries(InputStream inputStream) {
+    private List<ImportEntry> readImportEntries(InputStream inputStream, String targetRootPath) {
         try {
             Map<String, ImportEntry> entryByPath = new LinkedHashMap<>();
             Set<String> sectionPaths = new LinkedHashSet<>();
+            String normalizedTargetRootPath = normalizePath(Optional.ofNullable(targetRootPath).orElse(""));
             ZipInputStream zipInputStream = new ZipInputStream(inputStream, StandardCharsets.UTF_8);
             ZipEntry zipEntry;
             while ((zipEntry = zipInputStream.getNextEntry()) != null) {
@@ -361,13 +418,16 @@ public class WikiApplicationService {
                     continue;
                 }
                 String markdown = new String(zipInputStream.readAllBytes(), StandardCharsets.UTF_8);
-                ImportEntry entry = toImportEntry(normalizedEntryPath, markdown);
+                ImportEntry entry = toImportEntry(normalizedEntryPath, markdown, normalizedTargetRootPath);
                 entryByPath.put(entry.getPath(), entry);
                 if (entry.getKind() == WikiNodeKind.SECTION) {
                     sectionPaths.add(entry.getPath());
                 }
                 String parentPath = entry.getParentPath();
                 while (parentPath != null && !parentPath.isBlank()) {
+                    if (!normalizedTargetRootPath.isBlank() && parentPath.equals(normalizedTargetRootPath)) {
+                        break;
+                    }
                     sectionPaths.add(parentPath);
                     parentPath = parentPath.contains("/") ? parentPath.substring(0, parentPath.lastIndexOf('/')) : "";
                 }
@@ -404,11 +464,12 @@ public class WikiApplicationService {
         }
     }
 
-    private ImportEntry toImportEntry(String archivePath, String markdown) {
+    private ImportEntry toImportEntry(String archivePath, String markdown, String targetRootPath) {
         boolean isSection = archivePath.endsWith("/index.md");
-        String normalizedPath = isSection
+        String importedPath = isSection
                 ? archivePath.substring(0, archivePath.length() - "/index.md".length())
                 : archivePath.substring(0, archivePath.length() - ".md".length());
+        String normalizedPath = joinPath(targetRootPath, importedPath);
         String parentPath = normalizedPath.contains("/") ? normalizedPath.substring(0, normalizedPath.lastIndexOf('/')) : "";
         String slug = normalizedPath.contains("/") ? normalizedPath.substring(normalizedPath.lastIndexOf('/') + 1) : normalizedPath;
         String title = extractTitle(markdown, humanizePath(slug));
@@ -425,18 +486,118 @@ public class WikiApplicationService {
                 .build();
     }
 
-    private WikiImportItem toImportItem(ImportEntry entry) {
-        WikiImportAction action = wikiRepository.findReference(entry.getPath()).isPresent()
-                ? WikiImportAction.UPDATE
-                : WikiImportAction.CREATE;
+    private WikiImportItem toImportItem(
+            ImportEntry entry,
+            ImportSelectionCommand selection,
+            boolean selected,
+            List<String> warnings) {
+        boolean existing = wikiRepository.findReference(entry.getPath()).isPresent();
+        WikiImportPolicy policy = resolveImportPolicy(entry, existing, selection);
+        WikiImportAction action;
+        String note;
+        if (!selected) {
+            action = WikiImportAction.SKIP;
+            note = "Skipped by selection.";
+        } else if (existing && policy == WikiImportPolicy.KEEP_EXISTING) {
+            action = WikiImportAction.SKIP;
+            note = entry.isImplicitSection()
+                    ? "Existing parent section will be kept."
+                    : "Existing page will be kept.";
+            warnings.add("Kept existing content at " + entry.getPath());
+        } else {
+            action = existing ? WikiImportAction.UPDATE : WikiImportAction.CREATE;
+            note = buildImportNote(entry, action, existing, selection);
+        }
         return WikiImportItem.builder()
                 .path(entry.getPath())
                 .title(entry.getTitle())
                 .kind(entry.getKind())
                 .action(action)
+                .policy(policy)
                 .implicitSection(entry.isImplicitSection())
+                .existing(existing)
+                .selected(selected)
                 .sourcePath(entry.getSourcePath())
+                .note(note)
                 .build();
+    }
+
+    private WikiImportPolicy resolveImportPolicy(ImportEntry entry, boolean existing, ImportSelectionCommand selection) {
+        if (!existing) {
+            return WikiImportPolicy.OVERWRITE;
+        }
+        if (selection != null && selection.getPolicy() != null) {
+            return selection.getPolicy();
+        }
+        if (entry.isImplicitSection()) {
+            return WikiImportPolicy.KEEP_EXISTING;
+        }
+        return WikiImportPolicy.OVERWRITE;
+    }
+
+    private boolean isEntrySelected(
+            ImportEntry entry,
+            ImportSelectionCommand selection,
+            List<ImportEntry> allEntries,
+            Map<String, ImportSelectionCommand> selectionBySourcePath) {
+        boolean explicitlySelected = selection == null || selection.isSelected();
+        if (entry.getKind() == WikiNodeKind.PAGE) {
+            return explicitlySelected;
+        }
+        boolean hasSelectedDescendant = allEntries.stream()
+                .filter(candidate -> !candidate.getSourcePath().equals(entry.getSourcePath()))
+                .filter(candidate -> candidate.getPath().startsWith(entry.getPath() + "/"))
+                .anyMatch(candidate -> {
+                    ImportSelectionCommand candidateSelection = selectionBySourcePath.get(candidate.getSourcePath());
+                    return candidateSelection == null || candidateSelection.isSelected();
+                });
+        return explicitlySelected || hasSelectedDescendant;
+    }
+
+    private String buildImportNote(ImportEntry entry, WikiImportAction action, boolean existing, ImportSelectionCommand selection) {
+        if (entry.getKind().isContainer() && selection != null && !selection.isSelected()) {
+            return existing
+                    ? "Required ancestor section will be kept for selected descendants."
+                    : "Required ancestor section will be created for selected descendants.";
+        }
+        if (entry.isImplicitSection()) {
+            return existing ? "Parent section will be updated from the archive." : "Parent section will be created automatically.";
+        }
+        if (action == WikiImportAction.CREATE) {
+            return "New content will be created.";
+        }
+        return "Existing content will be overwritten.";
+    }
+
+    private String commonImportedRootPath(List<WikiImportItem> items) {
+        List<String> importedPaths = items.stream()
+                .filter(item -> item.getAction() != WikiImportAction.SKIP)
+                .map(WikiImportItem::getPath)
+                .toList();
+        if (importedPaths.isEmpty()) {
+            return "";
+        }
+        String common = importedPaths.getFirst();
+        for (String path : importedPaths.stream().skip(1).toList()) {
+            common = sharedPathPrefix(common, path);
+            if (common.isBlank()) {
+                break;
+            }
+        }
+        return common;
+    }
+
+    private String sharedPathPrefix(String left, String right) {
+        List<String> leftSegments = left.isBlank() ? List.of() : Arrays.asList(left.split("/"));
+        List<String> rightSegments = right.isBlank() ? List.of() : Arrays.asList(right.split("/"));
+        List<String> sharedSegments = new ArrayList<>();
+        for (int index = 0; index < Math.min(leftSegments.size(), rightSegments.size()); index++) {
+            if (!leftSegments.get(index).equals(rightSegments.get(index))) {
+                break;
+            }
+            sharedSegments.add(leftSegments.get(index));
+        }
+        return String.join("/", sharedSegments);
     }
 
     private String normalizeArchiveEntryPath(String archivePath) {
@@ -448,6 +609,58 @@ public class WikiApplicationService {
             throw new IllegalArgumentException("Invalid archive entry path");
         }
         return normalized;
+    }
+
+    private void validateImportTargetRoot(String targetRootPath) {
+        String normalizedTargetRoot = normalizePath(Optional.ofNullable(targetRootPath).orElse(""));
+        if (normalizedTargetRoot.isBlank()) {
+            return;
+        }
+        wikiRepository.findReference(normalizedTargetRoot).ifPresent(reference -> {
+            if (!reference.getKind().isContainer()) {
+                throw new IllegalArgumentException("Import target must be a section or the wiki root");
+            }
+        });
+    }
+
+    private String joinPath(String parentPath, String slug) {
+        String normalizedParentPath = normalizePath(parentPath);
+        String normalizedSlug = normalizePath(slug);
+        if (normalizedParentPath.isBlank()) {
+            return normalizedSlug;
+        }
+        if (normalizedSlug.isBlank()) {
+            return normalizedParentPath;
+        }
+        return normalizedParentPath + "/" + normalizedSlug;
+    }
+
+    private void ensureSectionHierarchy(String path) {
+        String normalizedPath = normalizePath(path);
+        if (normalizedPath.isBlank()) {
+            return;
+        }
+        String[] segments = normalizedPath.split("/");
+        String currentPath = "";
+        for (String segment : segments) {
+            String nextPath = joinPath(currentPath, segment);
+            Optional<WikiNodeReference> existingReference = wikiRepository.findReference(nextPath);
+            if (existingReference.isPresent()) {
+                if (!existingReference.get().getKind().isContainer()) {
+                    throw new IllegalArgumentException("Import target must be a section or the wiki root");
+                }
+                currentPath = nextPath;
+                continue;
+            }
+            createPage(CreatePageCommand.builder()
+                    .parentPath(currentPath)
+                    .title(humanizePath(segment))
+                    .slug(segment)
+                    .content("")
+                    .kind(WikiNodeKind.SECTION)
+                    .build());
+            currentPath = nextPath;
+        }
     }
 
     private String extractTitle(String markdown, String fallbackTitle) {
@@ -507,6 +720,7 @@ public class WikiApplicationService {
                 .content(document.getBody())
                 .createdAt(DATE_TIME_FORMATTER.format(document.getCreatedAt()))
                 .updatedAt(DATE_TIME_FORMATTER.format(document.getUpdatedAt()))
+                .revision(document.getRevision())
                 .children(children)
                 .build();
     }
@@ -576,6 +790,41 @@ public class WikiApplicationService {
                 .collect(Collectors.joining(" "));
     }
 
+    private String summarizeManualSave(WikiPageDocument currentDocument, WikiNodeReference nodeReference, UpdatePageCommand command) {
+        List<String> changes = new ArrayList<>();
+        String nextTitle = Optional.ofNullable(command.getTitle()).orElse("").trim();
+        if (!nextTitle.equals(currentDocument.getTitle())) {
+            changes.add("title");
+        }
+        String nextContent = Optional.ofNullable(command.getContent()).orElse("").strip();
+        if (!nextContent.equals(currentDocument.getBody())) {
+            changes.add("content");
+        }
+        String nextSlug = nodeReference.getKind() == WikiNodeKind.ROOT
+                ? nodeReference.getSlug()
+                : slugify(Optional.ofNullable(command.getSlug()).filter(value -> !value.isBlank()).orElse(nextTitle));
+        if (!nextSlug.equals(currentDocument.getSlug())) {
+            changes.add("path");
+        }
+        if (changes.isEmpty()) {
+            return "Saved without visible changes.";
+        }
+        return "Updated " + String.join(", ", changes) + ".";
+    }
+
+    private String slugify(String input) {
+        String slug = Optional.ofNullable(input).orElse("")
+                .trim()
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9]+", "-")
+                .replaceAll("^-+", "")
+                .replaceAll("-+$", "");
+        if (slug.isBlank()) {
+            throw new IllegalArgumentException("Slug cannot be empty");
+        }
+        return slug;
+    }
+
     @Value
     @Builder
     private static class ResolvedLink {
@@ -612,6 +861,10 @@ public class WikiApplicationService {
         String title;
         String slug;
         String content;
+        String expectedRevision;
+        String actor;
+        String historyReason;
+        String historySummary;
     }
 
     @Value
@@ -637,5 +890,32 @@ public class WikiApplicationService {
     public static class SortChildrenCommand {
         String path;
         List<String> orderedSlugs;
+    }
+
+    @Value
+    @Builder
+    public static class ImportPlanCommand {
+        @Builder.Default
+        String targetRootPath = "";
+    }
+
+    @Value
+    @Builder
+    public static class ImportApplyCommand {
+        @Builder.Default
+        String targetRootPath = "";
+        @Builder.Default
+        List<ImportSelectionCommand> items = List.of();
+        String actor;
+    }
+
+    @Value
+    @Builder
+    public static class ImportSelectionCommand {
+        String sourcePath;
+        @Builder.Default
+        boolean selected = true;
+        @Builder.Default
+        WikiImportPolicy policy = WikiImportPolicy.OVERWRITE;
     }
 }

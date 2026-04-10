@@ -12,4 +12,6 @@ public class UpdatePagePayload {
     private String slug;
 
     private String content = "";
+
+    private String revision;
 }

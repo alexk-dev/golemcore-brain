@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { ClipboardEventHandler, RefObject } from 'react'
 
 import { useTreeStore } from '../../stores/tree'
+import { applyHeadingToSelection, wrapSelectionText } from './markdownShortcuts'
 
 type InternalLinkCompletion = Completion & {
   path: string
@@ -92,6 +93,17 @@ export function MarkdownCodeEditor({
   const onChangeRef = useRef(onChange)
   const [themeCompartment] = useState(() => new Compartment())
 
+  const runTextTransform = (transform: (text: string, selectionStart: number, selectionEnd: number) => { text: string; selectionStart: number; selectionEnd: number }) =>
+    (view: EditorView) => {
+      const selection = view.state.selection.main
+      const result = transform(view.state.doc.toString(), selection.from, selection.to)
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: result.text },
+        selection: { anchor: result.selectionStart, head: result.selectionEnd },
+      })
+      return true
+    }
+
   useEffect(() => {
     onChangeRef.current = onChange
   }, [onChange])
@@ -123,6 +135,31 @@ export function MarkdownCodeEditor({
           return closeCompletion(view)
         },
         stopPropagation: true,
+      },
+      {
+        key: 'Mod-b',
+        run: runTextTransform((text, selectionStart, selectionEnd) =>
+          wrapSelectionText(text, selectionStart, selectionEnd, '**')),
+      },
+      {
+        key: 'Mod-i',
+        run: runTextTransform((text, selectionStart, selectionEnd) =>
+          wrapSelectionText(text, selectionStart, selectionEnd, '_')),
+      },
+      {
+        key: 'Mod-Alt-1',
+        run: runTextTransform((text, selectionStart, selectionEnd) =>
+          applyHeadingToSelection(text, selectionStart, selectionEnd, 1)),
+      },
+      {
+        key: 'Mod-Alt-2',
+        run: runTextTransform((text, selectionStart, selectionEnd) =>
+          applyHeadingToSelection(text, selectionStart, selectionEnd, 2)),
+      },
+      {
+        key: 'Mod-Alt-3',
+        run: runTextTransform((text, selectionStart, selectionEnd) =>
+          applyHeadingToSelection(text, selectionStart, selectionEnd, 3)),
       },
     ]
 

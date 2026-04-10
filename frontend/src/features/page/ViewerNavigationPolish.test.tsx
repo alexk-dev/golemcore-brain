@@ -94,6 +94,7 @@ vi.mock('../../lib/api', () => ({
     }
   }),
   getPageHistory: vi.fn(async () => []),
+  getPageHistoryVersion: vi.fn(),
   restorePageHistory: vi.fn(async () => ({
     id: 'guides',
     path: 'guides',

@@ -8,7 +8,7 @@ import { MoveCopyDialog } from '../../components/MoveCopyDialog'
 import { SearchDialog } from '../../components/SearchDialog'
 import { SortChildrenDialog } from '../../components/SortChildrenDialog'
 import { copyPage, createPage, deletePage, getAuthConfig, getConfig, logout, movePage, sortSection } from '../../lib/api'
-import { normalizeWikiPath, parentPath, pathToRoute } from '../../lib/paths'
+import { editorPathToRoute, normalizeWikiPath, parentPath, pathToRoute } from '../../lib/paths'
 import { useEditorStore } from '../../stores/editor'
 import { useTreeStore } from '../../stores/tree'
 import { useUiStore } from '../../stores/ui'
@@ -98,6 +98,35 @@ export function WikiShell({ children }: WikiShellProps) {
   const rawRoutePath = useMemo(() => normalizeWikiPath(location.pathname), [location.pathname])
   const isEditorRoute = rawRoutePath.startsWith('e/')
   const currentPath = isEditorRoute ? rawRoutePath.slice(2) : rawRoutePath
+  const currentPage: WikiPage | null = isEditorRoute ? editorPage : viewerPage
+  const createTargetParentPath =
+    currentPage?.kind === 'SECTION' ? currentPage.path : currentPage?.parentPath ?? ''
+  const canEdit = authDisabled || currentUser?.role === 'ADMIN' || currentUser?.role === 'EDITOR'
+  const canManageUsers = authDisabled || currentUser?.role === 'ADMIN'
+  const canAccessAccount = authDisabled || currentUser !== null
+  const isAnonymousPublicReader = !authDisabled && publicAccess && currentUser === null
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const modifierPressed = event.metaKey || event.ctrlKey
+      const normalizedKey = event.key.toLowerCase()
+      if (!modifierPressed) {
+        return
+      }
+      if (event.shiftKey && normalizedKey === 'e') {
+        event.preventDefault()
+        toggleSidebar()
+        return
+      }
+      if (normalizedKey !== 'e' || isEditorRoute || !canEdit) {
+        return
+      }
+      event.preventDefault()
+      navigate(editorPathToRoute(currentPath))
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [canEdit, currentPath, isEditorRoute, navigate, toggleSidebar])
 
   useEffect(() => {
     if (!tree) {
@@ -116,14 +145,6 @@ export function WikiShell({ children }: WikiShellProps) {
         .filter((value) => value !== ''),
     [getPageById, openNodeIdSet],
   )
-
-  const currentPage: WikiPage | null = isEditorRoute ? editorPage : viewerPage
-  const createTargetParentPath =
-    currentPage?.kind === 'SECTION' ? currentPage.path : currentPage?.parentPath ?? ''
-  const canEdit = authDisabled || currentUser?.role === 'ADMIN' || currentUser?.role === 'EDITOR'
-  const canManageUsers = authDisabled || currentUser?.role === 'ADMIN'
-  const canAccessAccount = authDisabled || currentUser !== null
-  const isAnonymousPublicReader = !authDisabled && publicAccess && currentUser === null
 
   const handleNavigate = (path: string) => {
     openAncestorsForPath(path)

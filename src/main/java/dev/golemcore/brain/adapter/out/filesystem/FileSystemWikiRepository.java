@@ -1,6 +1,7 @@
 package dev.golemcore.brain.adapter.out.filesystem;
 
 import dev.golemcore.brain.application.exception.WikiNotFoundException;
+import dev.golemcore.brain.application.exception.WikiEditConflictException;
 import dev.golemcore.brain.application.port.out.WikiRepository;
 import dev.golemcore.brain.config.WikiProperties;
 import dev.golemcore.brain.domain.WikiAsset;
@@ -9,9 +10,12 @@ import dev.golemcore.brain.domain.WikiNodeKind;
 import dev.golemcore.brain.domain.WikiNodeReference;
 import dev.golemcore.brain.domain.WikiPageDocument;
 import dev.golemcore.brain.domain.WikiPageHistoryEntry;
+import dev.golemcore.brain.domain.WikiPageHistoryVersion;
 import jakarta.annotation.PostConstruct;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.Reader;
+import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
@@ -24,14 +28,18 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HexFormat;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -44,6 +52,7 @@ public class FileSystemWikiRepository implements WikiRepository {
     private static final String INDEX_FILE_NAME = "index.md";
     private static final String ORDER_FILE_NAME = ".order.json";
     private static final String MARKDOWN_EXTENSION = ".md";
+    private static final String HISTORY_METADATA_EXTENSION = ".meta";
     private static final String HISTORY_DIRECTORY_NAME = ".history";
     private static final DateTimeFormatter HISTORY_TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS");
 
@@ -174,9 +183,15 @@ public class FileSystemWikiRepository implements WikiRepository {
     }
 
     @Override
-    public WikiPageDocument updatePage(String path, String title, String slug, String content) {
+    public WikiPageDocument updatePage(String path, String title, String slug, String content, String expectedRevision, String actor, String reason, String summary) {
         WikiNodeReference nodeReference = findReference(path)
                 .orElseThrow(() -> new WikiNotFoundException("Page not found: " + normalizePath(path)));
+        WikiPageDocument currentDocument = readDocument(nodeReference);
+        if (expectedRevision != null
+                && !expectedRevision.isBlank()
+                && !expectedRevision.equals(currentDocument.getRevision())) {
+            throw new WikiEditConflictException(expectedRevision, currentDocument);
+        }
         String normalizedTitle = requireTitle(title);
         String requestedSlug = Optional.ofNullable(slug).orElse("");
         String nextSlug = nodeReference.getKind() == WikiNodeKind.ROOT
@@ -185,7 +200,7 @@ public class FileSystemWikiRepository implements WikiRepository {
         String nextPath = nodeReference.getPath();
 
         try {
-            snapshotHistory(nodeReference);
+            snapshotHistory(nodeReference, actor, reason, summary);
             if (nodeReference.getKind() != WikiNodeKind.ROOT && !nodeReference.getSlug().equals(nextSlug)) {
                 nextPath = renameNode(nodeReference, nextSlug);
                 nodeReference = findReference(nextPath)
@@ -321,7 +336,7 @@ public class FileSystemWikiRepository implements WikiRepository {
     }
 
     @Override
-    public WikiPageDocument restorePageVersion(String path, String versionId) {
+    public WikiPageDocument restorePageVersion(String path, String versionId, String actor, String reason, String summary) {
         WikiNodeReference nodeReference = findReference(path)
                 .orElseThrow(() -> new WikiNotFoundException("Page not found: " + normalizePath(path)));
         Path historyPath = getHistoryDirectory(nodeReference).resolve(versionId + ".md");
@@ -329,12 +344,39 @@ public class FileSystemWikiRepository implements WikiRepository {
             throw new WikiNotFoundException("History version not found: " + versionId);
         }
         try {
-            snapshotHistory(nodeReference);
+            snapshotHistory(nodeReference, actor, reason, summary);
             String rawContent = Files.readString(historyPath, StandardCharsets.UTF_8);
             writeMarkdown(nodeReference.getMarkdownPath(), rawContent);
             return readDocument(nodeReference);
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to restore page history", exception);
+        }
+    }
+
+    @Override
+    public WikiPageHistoryVersion readPageHistoryVersion(String path, String versionId) {
+        WikiNodeReference nodeReference = findReference(path)
+                .orElseThrow(() -> new WikiNotFoundException("Page not found: " + normalizePath(path)));
+        Path historyPath = getHistoryDirectory(nodeReference).resolve(versionId + ".md");
+        if (!Files.exists(historyPath)) {
+            throw new WikiNotFoundException("History version not found: " + versionId);
+        }
+        try {
+            String rawContent = Files.readString(historyPath, StandardCharsets.UTF_8);
+            List<String> lines = Arrays.asList(rawContent.split("\\R", -1));
+            HistoryMetadata metadata = readHistoryMetadata(historyPath);
+            return WikiPageHistoryVersion.builder()
+                    .id(versionId)
+                    .title(deriveTitleFromLines(historyPath, lines))
+                    .slug(nodeReference.getSlug())
+                    .content(deriveBody(lines))
+                    .recordedAt(metadata.recordedAt())
+                    .author(metadata.author())
+                    .reason(metadata.reason())
+                    .summary(metadata.summary())
+                    .build();
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to read page history version", exception);
         }
     }
 
@@ -429,14 +471,20 @@ public class FileSystemWikiRepository implements WikiRepository {
         }
     }
 
-    private void snapshotHistory(WikiNodeReference nodeReference) throws IOException {
+    private void snapshotHistory(WikiNodeReference nodeReference, String actor, String reason, String summary) throws IOException {
         if (!nodeReference.getKind().keepsHistory()) {
             return;
         }
         Path historyDirectory = getHistoryDirectory(nodeReference);
         Files.createDirectories(historyDirectory);
         String versionId = Instant.now().toEpochMilli() + "-" + UUID.randomUUID().toString().substring(0, 8);
-        Files.copy(nodeReference.getMarkdownPath(), historyDirectory.resolve(versionId + ".md"), StandardCopyOption.REPLACE_EXISTING);
+        Path historyPath = historyDirectory.resolve(versionId + ".md");
+        Files.copy(nodeReference.getMarkdownPath(), historyPath, StandardCopyOption.REPLACE_EXISTING);
+        writeHistoryMetadata(historyPath, new HistoryMetadata(
+                Instant.now().toString(),
+                Optional.ofNullable(actor).filter(value -> !value.isBlank()).orElse("Local editor"),
+                Optional.ofNullable(reason).filter(value -> !value.isBlank()).orElse("Page updated"),
+                Optional.ofNullable(summary).orElse("")));
     }
 
     private WikiPageHistoryEntry readHistoryEntry(Path historyPath) throws IOException {
@@ -445,11 +493,15 @@ public class FileSystemWikiRepository implements WikiRepository {
         List<String> lines = Files.readAllLines(historyPath, StandardCharsets.UTF_8);
         String title = deriveTitleFromLines(historyPath, lines);
         String slug = historyPath.getParent().getParent().getFileName().toString();
+        HistoryMetadata metadata = readHistoryMetadata(historyPath);
         return WikiPageHistoryEntry.builder()
                 .id(versionId)
                 .title(title)
                 .slug(slug)
-                .recordedAt(Files.getLastModifiedTime(historyPath).toInstant().toString())
+                .recordedAt(metadata.recordedAt())
+                .author(metadata.author())
+                .reason(metadata.reason())
+                .summary(metadata.summary())
                 .build();
     }
 
@@ -527,10 +579,57 @@ public class FileSystemWikiRepository implements WikiRepository {
                     .kind(nodeReference.getKind())
                     .createdAt(readCreatedInstant(markdownPath))
                     .updatedAt(readUpdatedInstant(markdownPath))
+                    .revision(calculateRevision(rawContent))
                     .build();
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to read markdown file " + markdownPath, exception);
         }
+    }
+
+    private String calculateRevision(String rawContent) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(digest.digest(rawContent.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is not available", exception);
+        }
+    }
+
+    private void writeHistoryMetadata(Path historyPath, HistoryMetadata metadata) throws IOException {
+        Properties properties = new Properties();
+        properties.setProperty("recordedAt", metadata.recordedAt());
+        properties.setProperty("author", metadata.author());
+        properties.setProperty("reason", metadata.reason());
+        properties.setProperty("summary", metadata.summary());
+        try (Writer writer = Files.newBufferedWriter(getHistoryMetadataPath(historyPath), StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
+            properties.store(writer, null);
+        }
+    }
+
+    private HistoryMetadata readHistoryMetadata(Path historyPath) throws IOException {
+        Path metadataPath = getHistoryMetadataPath(historyPath);
+        if (!Files.exists(metadataPath)) {
+            return new HistoryMetadata(
+                    Files.getLastModifiedTime(historyPath).toInstant().toString(),
+                    "Local editor",
+                    "Page updated",
+                    "");
+        }
+        Properties properties = new Properties();
+        try (Reader reader = Files.newBufferedReader(metadataPath, StandardCharsets.UTF_8)) {
+            properties.load(reader);
+        }
+        return new HistoryMetadata(
+                properties.getProperty("recordedAt", Files.getLastModifiedTime(historyPath).toInstant().toString()),
+                properties.getProperty("author", "Local editor"),
+                properties.getProperty("reason", "Page updated"),
+                properties.getProperty("summary", ""));
+    }
+
+    private Path getHistoryMetadataPath(Path historyPath) {
+        String fileName = historyPath.getFileName().toString();
+        String versionId = fileName.substring(0, fileName.length() - MARKDOWN_EXTENSION.length());
+        return historyPath.getParent().resolve(versionId + HISTORY_METADATA_EXTENSION);
     }
 
     private String deriveTitleFromLines(Path markdownPath, List<String> lines) {
@@ -554,6 +653,10 @@ public class FileSystemWikiRepository implements WikiRepository {
         Path targetPath = buildNodePath(nodeReference.getParentDirectory(), nextSlug, nodeReference.getKind());
         requireAvailable(targetPath, nextSlug);
         Files.move(nodeReference.getNodePath(), targetPath, StandardCopyOption.REPLACE_EXISTING);
+        if (nodeReference.getKind() == WikiNodeKind.PAGE) {
+            moveIfExists(getAssetsDirectory(nodeReference), nodeReference.getParentDirectory().resolve(".assets-" + nextSlug));
+            moveIfExists(getHistoryDirectory(nodeReference), nodeReference.getParentDirectory().resolve(HISTORY_DIRECTORY_NAME).resolve(".history-" + nextSlug));
+        }
         List<String> updatedOrder = new ArrayList<>(readOrderedSlugs(nodeReference.getParentDirectory()));
         int index = updatedOrder.indexOf(nodeReference.getSlug());
         if (index >= 0) {
@@ -561,6 +664,14 @@ public class FileSystemWikiRepository implements WikiRepository {
         }
         saveOrderedSlugs(nodeReference.getParentDirectory(), updatedOrder);
         return joinPath(nodeReference.getParentPath(), nextSlug);
+    }
+
+    private void moveIfExists(Path source, Path target) throws IOException {
+        if (!Files.exists(source)) {
+            return;
+        }
+        Files.createDirectories(target.getParent());
+        Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
     }
 
     private void requireAvailable(Path targetPath, String slug) {
@@ -880,5 +991,8 @@ public class FileSystemWikiRepository implements WikiRepository {
             candidate = baseName + "-" + UUID.randomUUID().toString().substring(0, 8) + extension;
         }
         return candidate;
+    }
+
+    private record HistoryMetadata(String recordedAt, String author, String reason, String summary) {
     }
 }
