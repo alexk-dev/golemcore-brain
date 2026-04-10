@@ -8,6 +8,7 @@ import dev.golemcore.brain.domain.WikiAssetContent;
 import dev.golemcore.brain.domain.WikiNodeKind;
 import dev.golemcore.brain.domain.WikiNodeReference;
 import dev.golemcore.brain.domain.WikiPageDocument;
+import dev.golemcore.brain.domain.WikiPageHistoryEntry;
 import jakarta.annotation.PostConstruct;
 import java.io.IOException;
 import java.io.InputStream;
@@ -19,6 +20,7 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -42,6 +44,8 @@ public class FileSystemWikiRepository implements WikiRepository {
     private static final String INDEX_FILE_NAME = "index.md";
     private static final String ORDER_FILE_NAME = ".order.json";
     private static final String MARKDOWN_EXTENSION = ".md";
+    private static final String HISTORY_DIRECTORY_NAME = ".history";
+    private static final DateTimeFormatter HISTORY_TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS");
 
     private final WikiProperties wikiProperties;
 
@@ -181,6 +185,7 @@ public class FileSystemWikiRepository implements WikiRepository {
         String nextPath = nodeReference.getPath();
 
         try {
+            snapshotHistory(nodeReference);
             if (nodeReference.getKind() != WikiNodeKind.ROOT && !nodeReference.getSlug().equals(nextSlug)) {
                 nextPath = renameNode(nodeReference, nextSlug);
                 nodeReference = findReference(nextPath)
@@ -294,6 +299,46 @@ public class FileSystemWikiRepository implements WikiRepository {
     }
 
     @Override
+    public List<WikiPageHistoryEntry> listPageHistory(String path) {
+        WikiNodeReference nodeReference = findReference(path)
+                .orElseThrow(() -> new WikiNotFoundException("Page not found: " + normalizePath(path)));
+        Path historyDirectory = getHistoryDirectory(nodeReference);
+        if (!Files.exists(historyDirectory)) {
+            return List.of();
+        }
+        try {
+            List<WikiPageHistoryEntry> entries = new ArrayList<>();
+            try (DirectoryStream<Path> stream = Files.newDirectoryStream(historyDirectory, "*.md")) {
+                for (Path historyPath : stream) {
+                    entries.add(readHistoryEntry(historyPath));
+                }
+            }
+            entries.sort(Comparator.comparing(WikiPageHistoryEntry::getRecordedAt).reversed());
+            return entries;
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to list page history", exception);
+        }
+    }
+
+    @Override
+    public WikiPageDocument restorePageVersion(String path, String versionId) {
+        WikiNodeReference nodeReference = findReference(path)
+                .orElseThrow(() -> new WikiNotFoundException("Page not found: " + normalizePath(path)));
+        Path historyPath = getHistoryDirectory(nodeReference).resolve(versionId + ".md");
+        if (!Files.exists(historyPath)) {
+            throw new WikiNotFoundException("History version not found: " + versionId);
+        }
+        try {
+            snapshotHistory(nodeReference);
+            String rawContent = Files.readString(historyPath, StandardCharsets.UTF_8);
+            writeMarkdown(nodeReference.getMarkdownPath(), rawContent);
+            return readDocument(nodeReference);
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to restore page history", exception);
+        }
+    }
+
+    @Override
     public List<WikiAsset> listAssets(String path) {
         WikiNodeReference nodeReference = findReference(path)
                 .orElseThrow(() -> new WikiNotFoundException("Page not found: " + normalizePath(path)));
@@ -382,6 +427,36 @@ public class FileSystemWikiRepository implements WikiRepository {
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to delete asset", exception);
         }
+    }
+
+    private void snapshotHistory(WikiNodeReference nodeReference) throws IOException {
+        if (!nodeReference.getKind().keepsHistory()) {
+            return;
+        }
+        Path historyDirectory = getHistoryDirectory(nodeReference);
+        Files.createDirectories(historyDirectory);
+        String versionId = Instant.now().toEpochMilli() + "-" + UUID.randomUUID().toString().substring(0, 8);
+        Files.copy(nodeReference.getMarkdownPath(), historyDirectory.resolve(versionId + ".md"), StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    private WikiPageHistoryEntry readHistoryEntry(Path historyPath) throws IOException {
+        String fileName = historyPath.getFileName().toString();
+        String versionId = fileName.substring(0, fileName.length() - MARKDOWN_EXTENSION.length());
+        List<String> lines = Files.readAllLines(historyPath, StandardCharsets.UTF_8);
+        String title = deriveTitleFromLines(historyPath, lines);
+        String slug = historyPath.getParent().getParent().getFileName().toString();
+        return WikiPageHistoryEntry.builder()
+                .id(versionId)
+                .title(title)
+                .slug(slug)
+                .recordedAt(Files.getLastModifiedTime(historyPath).toInstant().toString())
+                .build();
+    }
+
+    private Path getHistoryDirectory(WikiNodeReference nodeReference) {
+        Path containerDirectory = nodeReference.getKind().isContainer() ? nodeReference.getNodePath() : nodeReference.getParentDirectory();
+        String slug = nodeReference.getKind().isContainer() ? ".section-history-" + nodeReference.getSlug() : ".history-" + nodeReference.getSlug();
+        return containerDirectory.resolve(HISTORY_DIRECTORY_NAME).resolve(slug);
     }
 
     private void flattenRecursively(WikiNodeReference nodeReference, List<WikiNodeReference> references) {

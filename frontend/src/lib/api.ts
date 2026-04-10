@@ -5,13 +5,18 @@ import type {
   MovePagePayload,
   PublicUserView,
   UpdatePagePayload,
+  UpdateUserPayload,
   UserRole,
   WikiAsset,
   WikiConfig,
+  WikiImportApplyResponse,
+  WikiImportPlanResponse,
   WikiLinkStatus,
   WikiPage,
+  WikiPageHistoryEntry,
   WikiPathLookupResult,
   WikiSearchHit,
+  WikiSearchStatus,
   WikiTreeNode,
 } from '../types'
 
@@ -56,6 +61,13 @@ export function logout(): Promise<{ message: string; user: null }> {
   })
 }
 
+export function changePassword(currentPassword: string, newPassword: string): Promise<{ message: string; user: null }> {
+  return readJson('/api/auth/password', {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  })
+}
+
 export function listUsers(): Promise<PublicUserView[]> {
   return readJson('/api/auth/users')
 }
@@ -64,6 +76,19 @@ export function createUser(username: string, email: string, password: string, ro
   return readJson('/api/auth/users', {
     method: 'POST',
     body: JSON.stringify({ username, email, password, role }),
+  })
+}
+
+export function updateUser(userId: string, payload: UpdateUserPayload): Promise<PublicUserView> {
+  return readJson(`/api/auth/users/${encodeURIComponent(userId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function deleteUserAccount(userId: string): Promise<void> {
+  return readJson(`/api/auth/users/${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
   })
 }
 
@@ -83,8 +108,40 @@ export function getPageByPath(path: string): Promise<WikiPage> {
   return readJson<WikiPage>(`/api/pages/by-path?path=${encodeURIComponent(path)}`)
 }
 
+export function getPageHistory(path: string): Promise<WikiPageHistoryEntry[]> {
+  return readJson<WikiPageHistoryEntry[]>(`/api/page/history?path=${encodeURIComponent(path)}`)
+}
+
+export function restorePageHistory(path: string, versionId: string): Promise<WikiPage> {
+  return readJson<WikiPage>(`/api/page/history/restore?path=${encodeURIComponent(path)}&versionId=${encodeURIComponent(versionId)}`, {
+    method: 'POST',
+  })
+}
+
 export function searchPages(query: string): Promise<WikiSearchHit[]> {
   return readJson<WikiSearchHit[]>(`/api/search?q=${encodeURIComponent(query)}`)
+}
+
+export function getSearchStatus(): Promise<WikiSearchStatus> {
+  return readJson<WikiSearchStatus>('/api/search/status')
+}
+
+export function planMarkdownImport(file: File): Promise<WikiImportPlanResponse> {
+  const formData = new FormData()
+  formData.append('file', file)
+  return readJson<WikiImportPlanResponse>('/api/import/markdown/plan', {
+    method: 'POST',
+    body: formData,
+  })
+}
+
+export function applyMarkdownImport(file: File): Promise<WikiImportApplyResponse> {
+  const formData = new FormData()
+  formData.append('file', file)
+  return readJson<WikiImportApplyResponse>('/api/import/markdown/apply', {
+    method: 'POST',
+    body: formData,
+  })
 }
 
 export function createPage(payload: CreatePagePayload): Promise<WikiPage> {

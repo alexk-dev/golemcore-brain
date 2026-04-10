@@ -23,6 +23,8 @@ interface AppLayoutProps {
   onOpenQuickSwitcher: () => void
   currentUsername?: string | null
   canManageUsers: boolean
+  canAccessAccount: boolean
+  canCreate: boolean
   onLogout: () => void
 }
 
@@ -43,6 +45,8 @@ export function AppLayout({
   onOpenQuickSwitcher,
   currentUsername,
   canManageUsers,
+  canAccessAccount,
+  canCreate,
   onLogout,
 }: AppLayoutProps) {
   return (
@@ -73,17 +77,25 @@ export function AppLayout({
             </button>
             {currentUsername ? (
               <>
+                <span className="action-button-secondary">
+                  <UserRound size={16} />
+                  {currentUsername}
+                </span>
+                {canCreate ? (
+                  <Link to="/import" className="action-button-secondary">
+                    Import
+                  </Link>
+                ) : null}
+                {canAccessAccount ? (
+                  <Link to="/account" className="action-button-secondary">
+                    Account
+                  </Link>
+                ) : null}
                 {canManageUsers ? (
                   <Link to="/users" className="action-button-secondary">
-                    <UserRound size={16} />
-                    {currentUsername}
+                    Users
                   </Link>
-                ) : (
-                  <span className="action-button-secondary">
-                    <UserRound size={16} />
-                    {currentUsername}
-                  </span>
-                )}
+                ) : null}
                 <button type="button" className="action-button-secondary" onClick={onLogout}>
                   Logout
                 </button>
@@ -104,6 +116,7 @@ export function AppLayout({
               tree={tree}
               activePath={activePath}
               openPaths={openPaths}
+              canCreate={canCreate}
               onNavigate={onNavigate}
               onToggle={onToggleNode}
               onCreate={onCreate}

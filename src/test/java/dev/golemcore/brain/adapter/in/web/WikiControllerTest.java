@@ -12,6 +12,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -142,6 +143,13 @@ class WikiControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.path", is("operations/generated-page")));
+
+        mockMvc.perform(get("/api/search/status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mode", is("live-scan")))
+                .andExpect(jsonPath("$.ready", is(true)))
+                .andExpect(jsonPath("$.indexedDocuments", greaterThan(0)))
+                .andExpect(jsonPath("$.lastUpdatedAt").exists());
 
         mockMvc.perform(get("/api/search").param("q", "updated"))
                 .andExpect(status().isOk())

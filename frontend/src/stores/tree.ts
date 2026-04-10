@@ -20,6 +20,9 @@ interface TreeState {
   getPageByPath: (path: string) => WikiTreeNode | null
   getPageById: (id: string) => WikiTreeNode | null
   openAncestorsForPath: (path: string) => void
+  manualNodeStateById: Record<string, boolean>
+  mustOpenNodeIdSet: Record<string, true>
+  suggestedOpenNodeIdSet: Record<string, true>
 }
 
 function buildIndexes(root: WikiTreeNode) {
@@ -38,6 +41,59 @@ function buildIndexes(root: WikiTreeNode) {
   return { byPath, byId, flatPages }
 }
 
+function computeOpenNodeIdSet(
+  manualNodeStateById: Record<string, boolean>,
+  mustOpenNodeIdSet: Record<string, true>,
+  suggestedOpenNodeIdSet: Record<string, true>,
+): Record<string, true> {
+  const openNodeIdSet: Record<string, true> = {}
+  const keys = new Set([
+    ...Object.keys(manualNodeStateById),
+    ...Object.keys(mustOpenNodeIdSet),
+    ...Object.keys(suggestedOpenNodeIdSet),
+  ])
+
+  for (const key of keys) {
+    if (mustOpenNodeIdSet[key]) {
+      openNodeIdSet[key] = true
+      continue
+    }
+    if (manualNodeStateById[key] === false) {
+      continue
+    }
+    if (manualNodeStateById[key] === true || suggestedOpenNodeIdSet[key]) {
+      openNodeIdSet[key] = true
+    }
+  }
+
+  return openNodeIdSet
+}
+
+function buildRouteOpenState(byPath: Record<string, WikiTreeNode>, path: string) {
+  const node = byPath[path]
+  const mustOpenNodeIdSet: Record<string, true> = {}
+  const suggestedOpenNodeIdSet: Record<string, true> = {}
+  if (!node) {
+    return { mustOpenNodeIdSet, suggestedOpenNodeIdSet }
+  }
+
+  if (node.kind !== 'PAGE') {
+    suggestedOpenNodeIdSet[node.id] = true
+  }
+
+  let currentPath = node.parentPath
+  while (currentPath !== null) {
+    const currentNode = byPath[currentPath]
+    if (!currentNode) {
+      break
+    }
+    mustOpenNodeIdSet[currentNode.id] = true
+    currentPath = currentNode.parentPath
+  }
+
+  return { mustOpenNodeIdSet, suggestedOpenNodeIdSet }
+}
+
 export const useTreeStore = create<TreeState>((set, get) => ({
   tree: null,
   loading: false,
@@ -47,16 +103,24 @@ export const useTreeStore = create<TreeState>((set, get) => ({
   byPath: {},
   byId: {},
   flatPages: [],
+  manualNodeStateById: {},
+  mustOpenNodeIdSet: {},
+  suggestedOpenNodeIdSet: {},
   reloadTree: async () => {
     set({ loading: true, error: null })
     try {
       const tree = await getTree()
       const indexes = buildIndexes(tree)
+      const currentPath = get().activeNodeId ? indexes.byId[get().activeNodeId]?.path ?? '' : ''
+      const routeState = buildRouteOpenState(indexes.byPath, currentPath)
       set({
         tree,
         byPath: indexes.byPath,
         byId: indexes.byId,
         flatPages: indexes.flatPages,
+        mustOpenNodeIdSet: routeState.mustOpenNodeIdSet,
+        suggestedOpenNodeIdSet: routeState.suggestedOpenNodeIdSet,
+        openNodeIdSet: computeOpenNodeIdSet(get().manualNodeStateById, routeState.mustOpenNodeIdSet, routeState.suggestedOpenNodeIdSet),
       })
     } catch (error) {
       set({ error: (error as Error).message })
@@ -65,40 +129,41 @@ export const useTreeStore = create<TreeState>((set, get) => ({
     }
   },
   toggleNode: (id) => {
-    const openNodeIdSet = { ...get().openNodeIdSet }
-    if (openNodeIdSet[id]) {
-      delete openNodeIdSet[id]
-    } else {
-      openNodeIdSet[id] = true
-    }
-    set({ openNodeIdSet })
+    const state = get()
+    const manualNodeStateById = { ...state.manualNodeStateById }
+    const nextValue = !state.openNodeIdSet[id]
+    manualNodeStateById[id] = nextValue
+    set({
+      manualNodeStateById,
+      openNodeIdSet: computeOpenNodeIdSet(manualNodeStateById, state.mustOpenNodeIdSet, state.suggestedOpenNodeIdSet),
+    })
   },
   openNode: (id) => {
-    set((state) => ({ openNodeIdSet: { ...state.openNodeIdSet, [id]: true } }))
+    const state = get()
+    const manualNodeStateById = { ...state.manualNodeStateById, [id]: true }
+    set({
+      manualNodeStateById,
+      openNodeIdSet: computeOpenNodeIdSet(manualNodeStateById, state.mustOpenNodeIdSet, state.suggestedOpenNodeIdSet),
+    })
   },
   closeNode: (id) => {
-    const openNodeIdSet = { ...get().openNodeIdSet }
-    delete openNodeIdSet[id]
-    set({ openNodeIdSet })
+    const state = get()
+    const manualNodeStateById = { ...state.manualNodeStateById, [id]: false }
+    set({
+      manualNodeStateById,
+      openNodeIdSet: computeOpenNodeIdSet(manualNodeStateById, state.mustOpenNodeIdSet, state.suggestedOpenNodeIdSet),
+    })
   },
   setActiveNodeId: (id) => set({ activeNodeId: id }),
   getPageByPath: (path) => get().byPath[path] ?? null,
   getPageById: (id) => get().byId[id] ?? null,
   openAncestorsForPath: (path) => {
-    const node = get().byPath[path]
-    if (!node) {
-      return
-    }
-    const openNodeIdSet = { ...get().openNodeIdSet }
-    let currentPath = node.parentPath
-    while (currentPath !== null) {
-      const currentNode = get().byPath[currentPath]
-      if (!currentNode) {
-        break
-      }
-      openNodeIdSet[currentNode.id] = true
-      currentPath = currentNode.parentPath
-    }
-    set({ openNodeIdSet })
+    const state = get()
+    const routeState = buildRouteOpenState(state.byPath, path)
+    set({
+      mustOpenNodeIdSet: routeState.mustOpenNodeIdSet,
+      suggestedOpenNodeIdSet: routeState.suggestedOpenNodeIdSet,
+      openNodeIdSet: computeOpenNodeIdSet(state.manualNodeStateById, routeState.mustOpenNodeIdSet, routeState.suggestedOpenNodeIdSet),
+    })
   },
 }))

@@ -1,29 +1,17 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ImagePlus, Link2, Pencil, Trash2 } from 'lucide-react'
+import { FileAudio, FileImage, FileVideo, ImagePlus, Link2, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { ModalCard } from '../../components/ModalCard'
 import { deleteAsset, listAssets, renameAsset, uploadAsset } from '../../lib/api'
 import type { WikiAsset } from '../../types'
+import { buildDefaultMarkdownForAsset, buildImageMarkdown, buildLinkMarkdown, buildMediaMarkdown } from './assetMarkdown'
 
 interface AssetManagerDialogProps {
   open: boolean
   pagePath: string
   onOpenChange: (open: boolean) => void
   onInsertMarkdown: (markdown: string) => void
-}
-
-function buildMarkdownForAsset(asset: WikiAsset): string {
-  if (asset.contentType.startsWith('image/')) {
-    return `![${asset.name}](${asset.path})`
-  }
-  if (asset.contentType.startsWith('audio/')) {
-    return `<audio controls src="${asset.path}"></audio>`
-  }
-  if (asset.contentType.startsWith('video/')) {
-    return `<video controls src="${asset.path}"></video>`
-  }
-  return `[${asset.name}](${asset.path})`
 }
 
 export function AssetManagerDialog({
@@ -98,6 +86,68 @@ export function AssetManagerDialog({
     }
   }
 
+  const renderInsertButtons = (asset: WikiAsset) => {
+    if (asset.contentType.startsWith('image/')) {
+      return (
+        <>
+          <button
+            type="button"
+            className="action-button-secondary"
+            onClick={() => onInsertMarkdown(buildImageMarkdown(asset))}
+            aria-label={`Insert ${asset.name} as image`}
+          >
+            <FileImage size={16} />
+            Image
+          </button>
+          <button
+            type="button"
+            className="action-button-secondary"
+            onClick={() => onInsertMarkdown(buildLinkMarkdown(asset))}
+            aria-label={`Insert ${asset.name} as link`}
+          >
+            <Link2 size={16} />
+            Link
+          </button>
+        </>
+      )
+    }
+    if (asset.contentType.startsWith('audio/') || asset.contentType.startsWith('video/')) {
+      return (
+        <>
+          <button
+            type="button"
+            className="action-button-secondary"
+            onClick={() => onInsertMarkdown(buildMediaMarkdown(asset))}
+            aria-label={`Insert ${asset.name} as media`}
+          >
+            {asset.contentType.startsWith('audio/') ? <FileAudio size={16} /> : <FileVideo size={16} />}
+            Media
+          </button>
+          <button
+            type="button"
+            className="action-button-secondary"
+            onClick={() => onInsertMarkdown(buildLinkMarkdown(asset))}
+            aria-label={`Insert ${asset.name} as link`}
+          >
+            <Link2 size={16} />
+            Link
+          </button>
+        </>
+      )
+    }
+    return (
+      <button
+        type="button"
+        className="action-button-secondary"
+        onClick={() => onInsertMarkdown(buildDefaultMarkdownForAsset(asset))}
+        aria-label={`Insert ${asset.name} as link`}
+      >
+        <Link2 size={16} />
+        Insert
+      </button>
+    )
+  }
+
   return (
     <ModalCard
       open={open}
@@ -128,16 +178,20 @@ export function AssetManagerDialog({
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-medium text-foreground">{asset.name}</div>
               <div className="text-xs text-muted">{asset.contentType} · {Math.round(asset.size / 1024)} KB</div>
+              <div className="mt-2">
+                <a
+                  className="text-xs text-accent hover:underline"
+                  href={asset.path}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={`Preview ${asset.name}`}
+                >
+                  Preview
+                </a>
+              </div>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="action-button-secondary"
-                onClick={() => onInsertMarkdown(buildMarkdownForAsset(asset))}
-              >
-                <Link2 size={16} />
-                Insert
-              </button>
+              {renderInsertButtons(asset)}
               {renameTarget === asset.name ? (
                 <div className="flex items-center gap-2">
                   <input
@@ -157,11 +211,17 @@ export function AssetManagerDialog({
                     setRenameTarget(asset.name)
                     setRenameValue(asset.name)
                   }}
+                  aria-label={`Rename ${asset.name}`}
                 >
                   <Pencil size={16} />
                 </button>
               )}
-              <button type="button" className="action-button-danger" onClick={() => void handleDelete(asset)}>
+              <button
+                type="button"
+                className="action-button-danger"
+                onClick={() => void handleDelete(asset)}
+                aria-label={`Delete ${asset.name}`}
+              >
                 <Trash2 size={16} />
               </button>
             </div>

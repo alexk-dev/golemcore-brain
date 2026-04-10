@@ -1,13 +1,14 @@
 import { Search, Sparkles } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { searchPages } from '../lib/api'
-import type { WikiSearchHit, WikiTreeNode } from '../types'
+import { getSearchStatus, searchPages } from '../lib/api'
+import type { WikiSearchHit, WikiSearchStatus, WikiTreeNode } from '../types'
 import { ModalCard } from './ModalCard'
 
 interface SearchDialogProps {
   open: boolean
   tree: WikiTreeNode | null
+  embedded?: boolean
   onOpenChange: (open: boolean) => void
   onNavigate: (path: string) => void
 }
@@ -36,17 +37,18 @@ function flattenTree(node: WikiTreeNode | null): WikiSearchHit[] {
   return [currentNode, ...node.children.flatMap((childNode) => flattenTree(childNode))]
 }
 
-export function SearchDialog({
+function SearchDialogBody({
   open,
   tree,
   onOpenChange,
   onNavigate,
-}: SearchDialogProps) {
+}: Omit<SearchDialogProps, 'embedded'>) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<WikiSearchHit[]>([])
   const [loading, setLoading] = useState(false)
   const [pageIndex, setPageIndex] = useState(0)
   const [activeIndex, setActiveIndex] = useState(0)
+  const [searchStatus, setSearchStatus] = useState<WikiSearchStatus | null>(null)
   const resultRefs = useRef<(HTMLButtonElement | null)[]>([])
   const fallbackItems = useMemo(() => flattenTree(tree), [tree])
 
@@ -54,6 +56,14 @@ export function SearchDialog({
     const start = pageIndex * SEARCH_PAGE_SIZE
     return results.slice(start, start + SEARCH_PAGE_SIZE)
   }, [pageIndex, results])
+
+  useEffect(() => {
+    if (!open) {
+      setSearchStatus(null)
+      return
+    }
+    void getSearchStatus().then(setSearchStatus).catch(() => setSearchStatus(null))
+  }, [open])
 
   useEffect(() => {
     if (!open) {
@@ -129,12 +139,14 @@ export function SearchDialog({
   const canGoNext = (pageIndex + 1) * SEARCH_PAGE_SIZE < results.length
 
   return (
-    <ModalCard
-      open={open}
-      title="Search pages"
-      description="Search by page title or markdown content."
-      onOpenChange={onOpenChange}
-    >
+    <div className="space-y-3">
+      {searchStatus ? (
+        <div className="rounded-2xl border border-surface-border bg-surface-alt/60 px-4 py-3 text-sm text-muted">
+          <div>Search mode: {searchStatus.mode}</div>
+          <div>{searchStatus.indexedDocuments} documents indexed</div>
+        </div>
+      ) : null}
+
       <label className="field">
         <span className="text-sm font-medium text-foreground">Query</span>
         <div className="relative">
@@ -163,84 +175,105 @@ export function SearchDialog({
         </div>
       </label>
 
-      <div className="space-y-3">
-        {loading ? (
-          <div className="rounded-2xl border border-dashed border-surface-border bg-surface-alt/60 px-4 py-6 text-center text-sm text-muted">
-            Searching...
+      {loading ? (
+        <div className="rounded-2xl border border-dashed border-surface-border bg-surface-alt/60 px-4 py-6 text-center text-sm text-muted">
+          Searching...
+        </div>
+      ) : results.length > 0 ? (
+        <>
+          <div className="text-sm text-muted">
+            Showing {Math.min(results.length, pageIndex * SEARCH_PAGE_SIZE + 1)}-
+            {Math.min(results.length, pageIndex * SEARCH_PAGE_SIZE + visibleResults.length)} of {results.length} result(s)
           </div>
-        ) : results.length > 0 ? (
-          <>
-            <div className="text-sm text-muted">
-              Showing {Math.min(results.length, pageIndex * SEARCH_PAGE_SIZE + 1)}-
-              {Math.min(results.length, pageIndex * SEARCH_PAGE_SIZE + visibleResults.length)} of {results.length} result(s)
-            </div>
-            {visibleResults.map((result, index) => {
-              const isActive = index === activeIndex
-              return (
-                <button
-                  type="button"
-                  key={result.id}
-                  ref={(element) => {
-                    resultRefs.current[index] = element
-                  }}
-                  onMouseEnter={() => setActiveIndex(index)}
-                  onClick={() => handleSelect(result.path)}
-                  className={[
-                    'block w-full rounded-2xl border px-4 py-3 text-left transition',
-                    isActive
-                      ? 'border-accent/50 bg-surface-alt shadow-sm'
-                      : 'border-surface-border bg-surface-alt/60 hover:-translate-y-0.5 hover:border-accent/40 hover:bg-surface-alt',
-                  ].join(' ')}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="font-medium text-foreground">{result.title}</div>
-                      <div className="mt-1 text-xs uppercase tracking-[0.18em] text-muted">
-                        {result.kind}
-                      </div>
-                    </div>
-                    <div className="rounded-full bg-background px-2 py-1 text-xs text-muted">
-                      /{result.path}
+          {visibleResults.map((result, index) => {
+            const isActive = index === activeIndex
+            return (
+              <button
+                type="button"
+                key={result.id}
+                ref={(element) => {
+                  resultRefs.current[index] = element
+                }}
+                onMouseEnter={() => setActiveIndex(index)}
+                onClick={() => handleSelect(result.path)}
+                className={[
+                  'block w-full rounded-2xl border px-4 py-3 text-left transition',
+                  isActive
+                    ? 'border-accent/50 bg-surface-alt shadow-sm'
+                    : 'border-surface-border bg-surface-alt/60 hover:-translate-y-0.5 hover:border-accent/40 hover:bg-surface-alt',
+                ].join(' ')}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="font-medium text-foreground">{result.title}</div>
+                    <div className="mt-1 text-xs uppercase tracking-[0.18em] text-muted">
+                      {result.kind}
                     </div>
                   </div>
-                  <p className="mt-3 text-sm text-muted">{result.excerpt}</p>
-                </button>
-              )
-            })}
-            {results.length > SEARCH_PAGE_SIZE ? (
-              <div className="flex justify-between gap-3 pt-2">
-                <button
-                  type="button"
-                  className="action-button-secondary"
-                  disabled={!canGoPrevious}
-                  onClick={() => {
-                    setPageIndex((current) => Math.max(current - 1, 0))
-                    setActiveIndex(0)
-                  }}
-                >
-                  Previous
-                </button>
-                <button
-                  type="button"
-                  className="action-button-secondary"
-                  disabled={!canGoNext}
-                  onClick={() => {
-                    setPageIndex((current) => current + 1)
-                    setActiveIndex(0)
-                  }}
-                >
-                  Next
-                </button>
-              </div>
-            ) : null}
-          </>
-        ) : (
-          <div className="rounded-2xl border border-dashed border-surface-border bg-surface-alt/60 px-4 py-6 text-center text-sm text-muted">
-            <Sparkles className="mx-auto mb-2 text-muted" size={18} />
-            No matching page found.
-          </div>
-        )}
-      </div>
+                  <div className="rounded-full bg-background px-2 py-1 text-xs text-muted">
+                    /{result.path}
+                  </div>
+                </div>
+                <p className="mt-3 text-sm text-muted">{result.excerpt}</p>
+              </button>
+            )
+          })}
+          {results.length > SEARCH_PAGE_SIZE ? (
+            <div className="flex justify-between gap-3 pt-2">
+              <button
+                type="button"
+                className="action-button-secondary"
+                disabled={!canGoPrevious}
+                onClick={() => {
+                  setPageIndex((current) => Math.max(current - 1, 0))
+                  setActiveIndex(0)
+                }}
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                className="action-button-secondary"
+                disabled={!canGoNext}
+                onClick={() => {
+                  setPageIndex((current) => current + 1)
+                  setActiveIndex(0)
+                }}
+              >
+                Next
+              </button>
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <div className="rounded-2xl border border-dashed border-surface-border bg-surface-alt/60 px-4 py-6 text-center text-sm text-muted">
+          <Sparkles className="mx-auto mb-2 text-muted" size={18} />
+          No matching page found.
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function SearchDialog({
+  open,
+  tree,
+  embedded = false,
+  onOpenChange,
+  onNavigate,
+}: SearchDialogProps) {
+  if (embedded) {
+    return <SearchDialogBody open={open} tree={tree} onOpenChange={onOpenChange} onNavigate={onNavigate} />
+  }
+
+  return (
+    <ModalCard
+      open={open}
+      title="Search pages"
+      description="Search by page title or markdown content."
+      onOpenChange={onOpenChange}
+    >
+      <SearchDialogBody open={open} tree={tree} onOpenChange={onOpenChange} onNavigate={onNavigate} />
     </ModalCard>
   )
 }

@@ -51,6 +51,7 @@ export function WikiShell({ children }: WikiShellProps) {
   const setQuickSwitcherOpen = useUiStore((state) => state.setQuickSwitcherOpen)
   const authDisabled = useUiStore((state) => state.authDisabled)
   const currentUser = useUiStore((state) => state.currentUser)
+  const publicAccess = useUiStore((state) => state.publicAccess)
   const setAuthConfig = useUiStore((state) => state.setAuthConfig)
   const setCurrentUser = useUiStore((state) => state.setCurrentUser)
 
@@ -98,6 +99,13 @@ export function WikiShell({ children }: WikiShellProps) {
   const isEditorRoute = rawRoutePath.startsWith('e/')
   const currentPath = isEditorRoute ? rawRoutePath.slice(2) : rawRoutePath
 
+  useEffect(() => {
+    if (!tree) {
+      return
+    }
+    openAncestorsForPath(currentPath)
+  }, [currentPath, openAncestorsForPath, tree])
+
   const activeTreeNode = getPageByPath(currentPath)
   const activePath = activeTreeNode?.path ?? currentPath
   const openPaths = useMemo(
@@ -114,6 +122,8 @@ export function WikiShell({ children }: WikiShellProps) {
     currentPage?.kind === 'SECTION' ? currentPage.path : currentPage?.parentPath ?? ''
   const canEdit = authDisabled || currentUser?.role === 'ADMIN' || currentUser?.role === 'EDITOR'
   const canManageUsers = authDisabled || currentUser?.role === 'ADMIN'
+  const canAccessAccount = authDisabled || currentUser !== null
+  const isAnonymousPublicReader = !authDisabled && publicAccess && currentUser === null
 
   const handleNavigate = (path: string) => {
     openAncestorsForPath(path)
@@ -213,6 +223,8 @@ export function WikiShell({ children }: WikiShellProps) {
         onOpenQuickSwitcher={() => setQuickSwitcherOpen(true)}
         currentUsername={currentUser?.username ?? null}
         canManageUsers={canManageUsers}
+        canAccessAccount={canAccessAccount}
+        canCreate={canEdit && !isAnonymousPublicReader}
         onLogout={() => void handleLogout()}
       >
         {children}

@@ -1,11 +1,30 @@
-export function AccessDeniedPage() {
+import { Link } from 'react-router-dom'
+
+interface AccessDeniedPageProps {
+  title?: string
+  message?: string
+  ctaLabel?: string
+  ctaTo?: string
+}
+
+export function AccessDeniedPage({
+  title = 'Access denied',
+  message = 'You do not have permission to view this page.',
+  ctaLabel,
+  ctaTo,
+}: AccessDeniedPageProps) {
   return (
     <div className="page-editor__error">
       <div className="surface-card max-w-xl p-6">
-        <h2 className="mb-2 text-xl font-semibold">Access denied</h2>
-        <p className="text-sm text-muted">
-          You do not have permission to view this page.
-        </p>
+        <h2 className="mb-2 text-xl font-semibold">{title}</h2>
+        <p className="text-sm text-muted">{message}</p>
+        {ctaLabel && ctaTo ? (
+          <div className="mt-4">
+            <Link to={ctaTo} className="action-button-primary">
+              {ctaLabel}
+            </Link>
+          </div>
+        ) : null}
       </div>
     </div>
   )

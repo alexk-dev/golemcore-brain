@@ -1,11 +1,14 @@
 import { FilePlus } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 interface NotFoundPageProps {
   path: string
   onCreate: () => void
+  canCreate?: boolean
+  signInHref?: string | null
 }
 
-export function NotFoundPage({ path, onCreate }: NotFoundPageProps) {
+export function NotFoundPage({ path, onCreate, canCreate = true, signInHref = null }: NotFoundPageProps) {
   return (
     <div className="page-editor__error">
       <div className="surface-card max-w-xl p-6">
@@ -13,10 +16,18 @@ export function NotFoundPage({ path, onCreate }: NotFoundPageProps) {
         <p className="mb-4 text-sm text-muted">
           The page <span className="font-mono">/{path}</span> does not exist yet.
         </p>
-        <button type="button" className="action-button-primary" onClick={onCreate}>
-          <FilePlus size={16} />
-          Create page by path
-        </button>
+        {canCreate ? (
+          <button type="button" className="action-button-primary" onClick={onCreate}>
+            <FilePlus size={16} />
+            Create page by path
+          </button>
+        ) : signInHref ? (
+          <Link to={signInHref} className="action-button-primary">
+            Sign in to create this page
+          </Link>
+        ) : (
+          <p className="text-sm text-muted">You need edit access to create this page.</p>
+        )}
       </div>
     </div>
   )

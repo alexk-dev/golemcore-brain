@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { ClipboardEvent as ReactClipboardEvent } from 'react'
 import type { EditorView } from '@codemirror/view'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import { uploadAsset } from '../../lib/api'
 import { editorPathToRoute, normalizeWikiPath, pathToRoute } from '../../lib/paths'
 import { AssetManagerDialog } from '../assets/AssetManagerDialog'
+import { buildDefaultMarkdownForAsset } from '../assets/assetMarkdown'
 import { MarkdownPreview } from '../preview/MarkdownPreview'
 import { useEditorStore } from '../../stores/editor'
 import { useTreeStore } from '../../stores/tree'
@@ -33,6 +36,20 @@ function derivePagePathFromLocation(pathname: string) {
     return normalized
   }
   return normalized.slice(2)
+}
+
+function getPastedFile(event: ReactClipboardEvent<HTMLDivElement>): File | null {
+  const itemList = Array.from(event.clipboardData.items)
+  for (const item of itemList) {
+    if (item.kind !== 'file') {
+      continue
+    }
+    const file = item.getAsFile()
+    if (file) {
+      return file
+    }
+  }
+  return event.clipboardData.files[0] ?? null
 }
 
 export function PageEditor() {
@@ -139,8 +156,8 @@ export function PageEditor() {
       await reloadTree()
       toast.success('Page saved successfully')
       navigate(editorPathToRoute(updatedPage.path), { replace: true })
-    } catch (saveError) {
-      toast.error((saveError as Error).message)
+    } catch {
+      // editor store error surface is the canonical visible feedback for tests/UI
     }
   }
 
@@ -163,6 +180,24 @@ export function PageEditor() {
   const handleCancelNavigation = () => {
     setShowUnsavedDialog(false)
     setPendingNavigationPath(null)
+  }
+
+  const handlePaste = async (event: ReactClipboardEvent<HTMLDivElement>) => {
+    if (!page) {
+      return
+    }
+    const file = getPastedFile(event)
+    if (!file) {
+      return
+    }
+    event.preventDefault()
+    try {
+      const asset = await uploadAsset(page.path, file)
+      insertMarkdownAtCursor(editorViewRef.current, buildDefaultMarkdownForAsset(asset), setContent)
+      toast.success(`Uploaded ${asset.name}`)
+    } catch (pasteError) {
+      toast.error((pasteError as Error).message)
+    }
   }
 
   if (loading) {
@@ -241,6 +276,7 @@ export function PageEditor() {
                     darkMode={isDark}
                     onChange={setContent}
                     editorViewRef={editorViewRef}
+                    onPaste={handlePaste}
                   />
                 </div>
                 {previewVisible ? (

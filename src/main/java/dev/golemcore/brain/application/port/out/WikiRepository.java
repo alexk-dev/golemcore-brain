@@ -4,6 +4,7 @@ import dev.golemcore.brain.domain.WikiAsset;
 import dev.golemcore.brain.domain.WikiAssetContent;
 import dev.golemcore.brain.domain.WikiNodeReference;
 import dev.golemcore.brain.domain.WikiPageDocument;
+import dev.golemcore.brain.domain.WikiPageHistoryEntry;
 import java.io.InputStream;
 import java.util.List;
 import java.util.Optional;
@@ -33,6 +34,10 @@ public interface WikiRepository {
     void sortChildren(String path, List<String> orderedSlugs);
 
     List<WikiNodeReference> flatten();
+
+    List<WikiPageHistoryEntry> listPageHistory(String path);
+
+    WikiPageDocument restorePageVersion(String path, String versionId);
 
     List<WikiAsset> listAssets(String path);
 
