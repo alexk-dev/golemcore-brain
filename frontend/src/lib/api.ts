@@ -1,8 +1,11 @@
 import type {
+  AuthConfig,
   CopyPagePayload,
   CreatePagePayload,
   MovePagePayload,
+  PublicUserView,
   UpdatePagePayload,
+  UserRole,
   WikiAsset,
   WikiConfig,
   WikiLinkStatus,
@@ -14,6 +17,7 @@ import type {
 
 async function readJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {
+    credentials: 'include',
     headers: {
       ...(init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
       ...(init?.headers ?? {}),
@@ -33,6 +37,34 @@ async function readJson<T>(input: RequestInfo | URL, init?: RequestInit): Promis
   }
 
   return (await response.json()) as T
+}
+
+export function getAuthConfig(): Promise<AuthConfig> {
+  return readJson<AuthConfig>('/api/auth/config')
+}
+
+export function login(identifier: string, password: string): Promise<{ message: string; user: PublicUserView }> {
+  return readJson('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ identifier, password }),
+  })
+}
+
+export function logout(): Promise<{ message: string; user: null }> {
+  return readJson('/api/auth/logout', {
+    method: 'POST',
+  })
+}
+
+export function listUsers(): Promise<PublicUserView[]> {
+  return readJson('/api/auth/users')
+}
+
+export function createUser(username: string, email: string, password: string, role: UserRole): Promise<PublicUserView> {
+  return readJson('/api/auth/users', {
+    method: 'POST',
+    body: JSON.stringify({ username, email, password, role }),
+  })
 }
 
 export function getConfig(): Promise<WikiConfig> {

@@ -17,6 +17,7 @@ export function PageQuickSwitcherDialog({
 }: PageQuickSwitcherDialogProps) {
   const items = useTreeStore((state) => state.flatPages)
   const [query, setQuery] = useState('')
+  const [activeIndex, setActiveIndex] = useState(0)
 
   const results = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
@@ -33,6 +34,8 @@ export function PageQuickSwitcherDialog({
     onOpenChange(false)
   }
 
+  const activeResult = results[Math.min(activeIndex, Math.max(results.length - 1, 0))]
+
   return (
     <ModalCard
       open={open}
@@ -46,7 +49,24 @@ export function PageQuickSwitcherDialog({
           className="field-input"
           autoFocus
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => {
+            setQuery(event.target.value)
+            setActiveIndex(0)
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowDown') {
+              event.preventDefault()
+              setActiveIndex((current) => Math.min(current + 1, Math.max(results.length - 1, 0)))
+            }
+            if (event.key === 'ArrowUp') {
+              event.preventDefault()
+              setActiveIndex((current) => Math.max(current - 1, 0))
+            }
+            if (event.key === 'Enter' && activeResult) {
+              event.preventDefault()
+              handleSelect(activeResult.path)
+            }
+          }}
           placeholder="Type a page title…"
         />
       </label>
@@ -55,11 +75,15 @@ export function PageQuickSwitcherDialog({
         {results.length === 0 ? (
           <div className="text-sm text-muted">No matching page found.</div>
         ) : (
-          results.map((item) => (
+          results.map((item, index) => (
             <button
               type="button"
               key={item.id}
-              className="flex w-full items-start gap-3 rounded-md px-3 py-2 text-left hover:bg-surface-alt"
+              className={[
+                'flex w-full items-start gap-3 rounded-md px-3 py-2 text-left transition',
+                index === activeIndex ? 'bg-surface-alt border border-accent/30' : 'hover:bg-surface-alt',
+              ].join(' ')}
+              onMouseEnter={() => setActiveIndex(index)}
               onClick={() => handleSelect(item.path)}
             >
               {item.kind === 'SECTION' ? <FolderTree size={16} /> : <File size={16} />}

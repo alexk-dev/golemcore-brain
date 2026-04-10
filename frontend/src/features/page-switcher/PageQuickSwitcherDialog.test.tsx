@@ -34,6 +34,16 @@ beforeEach(() => {
         hasChildren: false,
         children: [],
       },
+      {
+        id: 'guides/setup',
+        path: 'guides/setup',
+        parentPath: 'guides',
+        title: 'Setup',
+        slug: 'setup',
+        kind: 'PAGE',
+        hasChildren: false,
+        children: [],
+      },
     ],
   })
 })
@@ -56,5 +66,24 @@ describe('PageQuickSwitcherDialog', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Runbook/i }))
     expect(navigated).toEqual(['guides/runbook'])
+  })
+
+  it('supports keyboard navigation and enter selection', () => {
+    const navigated: string[] = []
+
+    render(
+      <PageQuickSwitcherDialog
+        open={true}
+        onOpenChange={() => undefined}
+        onNavigate={(path) => navigated.push(path)}
+      />,
+    )
+
+    const input = screen.getByPlaceholderText('Type a page title…')
+    fireEvent.change(input, { target: { value: 'g' } })
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(navigated.length).toBe(1)
   })
 })

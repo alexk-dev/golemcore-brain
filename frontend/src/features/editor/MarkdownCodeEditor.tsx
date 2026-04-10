@@ -1,4 +1,4 @@
-import { autocompletion } from '@codemirror/autocomplete'
+import { autocompletion, closeCompletion, completionStatus, type Completion, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
 import { Compartment, EditorState } from '@codemirror/state'
@@ -7,11 +7,74 @@ import { EditorView, keymap } from '@codemirror/view'
 import { githubLight } from '@fsegurai/codemirror-theme-github-light'
 import { useEffect, useRef, useState } from 'react'
 
+import { useTreeStore } from '../../stores/tree'
+
+type InternalLinkCompletion = Completion & {
+  path: string
+}
+
 interface MarkdownCodeEditorProps {
   value: string
   darkMode: boolean
   onChange: (value: string) => void
   editorViewRef: React.RefObject<EditorView | null>
+}
+
+function getLinkTargetRange(context: CompletionContext) {
+  const { state, pos } = context
+  const line = state.doc.lineAt(pos)
+  const beforeCursor = line.text.slice(0, pos - line.from)
+  const afterCursor = line.text.slice(pos - line.from)
+  const match = beforeCursor.match(/!?\[[^\]]*\]\(([^)\s]*)$/)
+
+  if (!match) {
+    return null
+  }
+
+  const typedTarget = match[1] ?? ''
+  const suffix = afterCursor.match(/^[^)\s]*/)?.[0] ?? ''
+  return {
+    from: pos - typedTarget.length,
+    to: pos + suffix.length,
+    query: typedTarget.startsWith('/') ? typedTarget.slice(1) : typedTarget,
+  }
+}
+
+function internalLinkCompletionSource(context: CompletionContext): CompletionResult | null {
+  const range = getLinkTargetRange(context)
+  if (!range) {
+    return null
+  }
+
+  const items = useTreeStore.getState().flatPages
+  if (items.length === 0) {
+    return null
+  }
+
+  const normalizedQuery = range.query.trim().toLowerCase()
+  const matches = items
+    .filter((item) => `${item.title} ${item.path}`.toLowerCase().includes(normalizedQuery))
+    .slice(0, 20)
+
+  if (matches.length === 0) {
+    return null
+  }
+
+  const options: InternalLinkCompletion[] = matches.map((item) => ({
+    label: item.title,
+    displayLabel: item.title,
+    info: `/${item.path}`,
+    type: 'text',
+    apply: `/${item.path}`,
+    path: item.path,
+  }))
+
+  return {
+    from: range.from,
+    to: range.to,
+    options,
+    filter: false,
+  }
 }
 
 export function MarkdownCodeEditor({
@@ -47,14 +110,27 @@ export function MarkdownCodeEditor({
       }
     })
 
+    const customShortcuts = [
+      {
+        key: 'Escape',
+        run: (view: EditorView) => {
+          if (completionStatus(view.state) === null) {
+            return false
+          }
+          return closeCompletion(view)
+        },
+        stopPropagation: true,
+      },
+    ]
+
     const state = EditorState.create({
       doc: value,
       extensions: [
         themeCompartment.of(darkMode ? oneDark : githubLight),
         markdown(),
-        autocompletion(),
+        autocompletion({ override: [internalLinkCompletionSource] }),
         history(),
-        keymap.of([indentWithTab, ...historyKeymap, ...defaultKeymap]),
+        keymap.of([...customShortcuts, indentWithTab, ...historyKeymap, ...defaultKeymap]),
         EditorView.lineWrapping,
         updateListener,
         EditorView.theme({

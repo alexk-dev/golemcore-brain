@@ -7,7 +7,7 @@ import { DeleteDialog } from '../../components/DeleteDialog'
 import { MoveCopyDialog } from '../../components/MoveCopyDialog'
 import { SearchDialog } from '../../components/SearchDialog'
 import { SortChildrenDialog } from '../../components/SortChildrenDialog'
-import { copyPage, createPage, deletePage, getConfig, movePage, sortSection } from '../../lib/api'
+import { copyPage, createPage, deletePage, getAuthConfig, getConfig, logout, movePage, sortSection } from '../../lib/api'
 import { normalizeWikiPath, parentPath, pathToRoute } from '../../lib/paths'
 import { useEditorStore } from '../../stores/editor'
 import { useTreeStore } from '../../stores/tree'
@@ -49,6 +49,10 @@ export function WikiShell({ children }: WikiShellProps) {
   const setSearchOpen = useUiStore((state) => state.setSearchOpen)
   const quickSwitcherOpen = useUiStore((state) => state.quickSwitcherOpen)
   const setQuickSwitcherOpen = useUiStore((state) => state.setQuickSwitcherOpen)
+  const authDisabled = useUiStore((state) => state.authDisabled)
+  const currentUser = useUiStore((state) => state.currentUser)
+  const setAuthConfig = useUiStore((state) => state.setAuthConfig)
+  const setCurrentUser = useUiStore((state) => state.setCurrentUser)
 
   const [config, setConfig] = useState<WikiConfig | null>(null)
   const [dialogState, setDialogState] = useState<DialogState>({ type: 'none' })
@@ -62,7 +66,10 @@ export function WikiShell({ children }: WikiShellProps) {
     void getConfig()
       .then((response) => setConfig(response))
       .catch((error: Error) => toast.error(error.message))
-  }, [reloadTree])
+    void getAuthConfig()
+      .then((response) => setAuthConfig(response))
+      .catch((error: Error) => toast.error(error.message))
+  }, [reloadTree, setAuthConfig])
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
@@ -105,10 +112,20 @@ export function WikiShell({ children }: WikiShellProps) {
   const currentPage: WikiPage | null = isEditorRoute ? editorPage : viewerPage
   const createTargetParentPath =
     currentPage?.kind === 'SECTION' ? currentPage.path : currentPage?.parentPath ?? ''
+  const canEdit = authDisabled || currentUser?.role === 'ADMIN' || currentUser?.role === 'EDITOR'
+  const canManageUsers = authDisabled || currentUser?.role === 'ADMIN'
 
   const handleNavigate = (path: string) => {
     openAncestorsForPath(path)
     navigate(pathToRoute(path))
+  }
+
+  const handleLogout = async () => {
+    await logout()
+    setCurrentUser(null)
+    if (!authDisabled) {
+      navigate('/login')
+    }
   }
 
   const handleCreate = async (payload: CreatePagePayload) => {
@@ -194,6 +211,9 @@ export function WikiShell({ children }: WikiShellProps) {
         }
         onOpenSearch={() => setSearchOpen(true)}
         onOpenQuickSwitcher={() => setQuickSwitcherOpen(true)}
+        currentUsername={currentUser?.username ?? null}
+        canManageUsers={canManageUsers}
+        onLogout={() => void handleLogout()}
       >
         {children}
       </AppLayout>
@@ -211,17 +231,19 @@ export function WikiShell({ children }: WikiShellProps) {
         onNavigate={handleNavigate}
       />
 
-      <CreatePageDialog
-        open={dialogState.type === 'create'}
-        parentPath={dialogState.type === 'create' ? dialogState.parentPath : createTargetParentPath}
-        kind={dialogState.type === 'create' ? dialogState.kind : 'PAGE'}
-        onOpenChange={(open) => {
-          if (!open) {
-            setDialogState({ type: 'none' })
-          }
-        }}
-        onSubmit={handleCreate}
-      />
+      {canEdit ? (
+        <CreatePageDialog
+          open={dialogState.type === 'create'}
+          parentPath={dialogState.type === 'create' ? dialogState.parentPath : createTargetParentPath}
+          kind={dialogState.type === 'create' ? dialogState.kind : 'PAGE'}
+          onOpenChange={(open) => {
+            if (!open) {
+              setDialogState({ type: 'none' })
+            }
+          }}
+          onSubmit={handleCreate}
+        />
+      ) : null}
 
       <MoveCopyDialog
         mode="move"

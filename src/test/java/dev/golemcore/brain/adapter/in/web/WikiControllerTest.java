@@ -36,6 +36,7 @@ class WikiControllerTest {
         storageRoot = tempDir.resolve("wiki-controller-test");
         registry.add("brain.storage-root", () -> storageRoot.toString());
         registry.add("brain.seed-demo-content", () -> "false");
+        registry.add("brain.auth-disabled", () -> "true");
     }
 
     @Autowired

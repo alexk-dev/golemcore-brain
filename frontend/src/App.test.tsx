@@ -9,6 +9,11 @@ import { useUiStore } from './stores/ui'
 import { useViewerStore } from './stores/viewer'
 
 vi.mock('./lib/api', () => ({
+  getAuthConfig: vi.fn(async () => ({
+    authDisabled: true,
+    publicAccess: true,
+    user: null,
+  })),
   getConfig: vi.fn(async () => ({
     publicAccess: true,
     hideLinkMetadataSection: false,
@@ -98,6 +103,9 @@ describe('App', () => {
       sidebarVisible: true,
       searchOpen: false,
       quickSwitcherOpen: false,
+      authDisabled: true,
+      publicAccess: true,
+      currentUser: null,
     })
   })
 

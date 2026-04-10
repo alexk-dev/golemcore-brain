@@ -27,17 +27,29 @@ function insertMarkdownAtCursor(view: EditorView | null, markdown: string, onCha
   onChange(view.state.doc.toString())
 }
 
+function derivePagePathFromLocation(pathname: string) {
+  const normalized = normalizeWikiPath(pathname)
+  if (!normalized.startsWith('e/')) {
+    return normalized
+  }
+  return normalized.slice(2)
+}
+
 export function PageEditor() {
   const location = useLocation()
   const navigate = useNavigate()
   const editorViewRef = useRef<EditorView | null>(null)
   const [previewVisible, setPreviewVisible] = useState(true)
   const [assetManagerOpen, setAssetManagerOpen] = useState(false)
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)
+  const [pendingNavigationPath, setPendingNavigationPath] = useState<string | null>(null)
+  const [showMetadataPanel, setShowMetadataPanel] = useState(false)
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'))
 
   const loadPageData = useEditorStore((state) => state.loadPageData)
   const savePage = useEditorStore((state) => state.savePage)
   const page = useEditorStore((state) => state.page)
+  const initialPage = useEditorStore((state) => state.initialPage)
   const title = useEditorStore((state) => state.title)
   const slug = useEditorStore((state) => state.slug)
   const content = useEditorStore((state) => state.content)
@@ -51,13 +63,7 @@ export function PageEditor() {
   const getPageByPath = useTreeStore((state) => state.getPageByPath)
   const reloadTree = useTreeStore((state) => state.reloadTree)
 
-  const currentPath = useMemo(() => {
-    const normalized = normalizeWikiPath(location.pathname)
-    if (!normalized.startsWith('e/')) {
-      return normalized
-    }
-    return normalized.slice(2)
-  }, [location.pathname])
+  const currentPath = useMemo(() => derivePagePathFromLocation(location.pathname), [location.pathname])
 
   useEffect(() => {
     void loadPageData(currentPath)
@@ -77,6 +83,33 @@ export function PageEditor() {
     return () => observer.disconnect()
   }, [])
 
+  const hasUnsavedChanges =
+    page !== null &&
+    initialPage !== null &&
+    (title !== initialPage.title || slug !== initialPage.slug || content !== initialPage.content)
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) {
+      return
+    }
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [hasUnsavedChanges])
+
+  useEffect(() => {
+    const nextPath = derivePagePathFromLocation(location.pathname)
+    if (!hasUnsavedChanges || nextPath === currentPath) {
+      return
+    }
+    setPendingNavigationPath(nextPath)
+    setShowUnsavedDialog(true)
+    navigate(editorPathToRoute(currentPath), { replace: true })
+  }, [currentPath, hasUnsavedChanges, location.pathname, navigate])
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const modifier = event.metaKey || event.ctrlKey
@@ -86,7 +119,11 @@ export function PageEditor() {
       }
       if (modifier && event.key.toLowerCase() === 'e') {
         event.preventDefault()
-        navigate(pathToRoute(page?.path ?? currentPath))
+        void handleCloseEditor()
+      }
+      if (modifier && event.shiftKey && event.key.toLowerCase() === 'm') {
+        event.preventDefault()
+        setShowMetadataPanel((value) => !value)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -107,6 +144,27 @@ export function PageEditor() {
     }
   }
 
+  const handleCloseEditor = async () => {
+    if (hasUnsavedChanges) {
+      setPendingNavigationPath(page?.path ?? currentPath)
+      setShowUnsavedDialog(true)
+      return
+    }
+    navigate(pathToRoute(page?.path ?? currentPath))
+  }
+
+  const handleConfirmNavigation = async () => {
+    const nextPath = pendingNavigationPath
+    setShowUnsavedDialog(false)
+    setPendingNavigationPath(null)
+    navigate(pathToRoute(nextPath ?? currentPath))
+  }
+
+  const handleCancelNavigation = () => {
+    setShowUnsavedDialog(false)
+    setPendingNavigationPath(null)
+  }
+
   if (loading) {
     return <div className="page-editor__error">Loading page...</div>
   }
@@ -123,7 +181,7 @@ export function PageEditor() {
             <button
               type="button"
               className="editor-title-bar__button"
-              onClick={() => navigate(pathToRoute(page.path))}
+              onClick={() => void handleCloseEditor()}
             >
               <span className="editor-title-bar__title">{title}</span>
             </button>
@@ -133,7 +191,14 @@ export function PageEditor() {
             <button
               type="button"
               className="action-button-secondary"
-              onClick={() => navigate(pathToRoute(page.path))}
+              onClick={() => setShowMetadataPanel((value) => !value)}
+            >
+              Edit metadata
+            </button>
+            <button
+              type="button"
+              className="action-button-secondary"
+              onClick={() => void handleCloseEditor()}
             >
               Close editor
             </button>
@@ -144,18 +209,24 @@ export function PageEditor() {
         </div>
         <div className="page-editor__grid">
           <div className="page-editor__form">
-            <label className="field">
-              <span className="text-sm font-medium">Title</span>
-              <input
-                className="field-input"
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-              />
-            </label>
-            <label className="field">
-              <span className="text-sm font-medium">Slug</span>
-              <input className="field-input" value={slug} onChange={(event) => setSlug(event.target.value)} />
-            </label>
+            {showMetadataPanel ? (
+              <div className="surface-card mb-4 p-4">
+                <h2 className="mb-3 text-lg font-semibold">Metadata</h2>
+                <label className="field">
+                  <span className="text-sm font-medium">Title</span>
+                  <input
+                    className="field-input"
+                    value={title}
+                    onChange={(event) => setTitle(event.target.value)}
+                  />
+                </label>
+                <label className="field mt-4">
+                  <span className="text-sm font-medium">Slug</span>
+                  <input className="field-input" value={slug} onChange={(event) => setSlug(event.target.value)} />
+                </label>
+                <div className="mt-3 text-xs text-muted">Path: {(page.parentPath ? `${page.parentPath}/` : '') + slug}</div>
+              </div>
+            ) : null}
             <div className="markdown-editor">
               <MarkdownToolbar
                 editorViewRef={editorViewRef}
@@ -193,6 +264,25 @@ export function PageEditor() {
         onOpenChange={setAssetManagerOpen}
         onInsertMarkdown={(markdown) => insertMarkdownAtCursor(editorViewRef.current, markdown, setContent)}
       />
+
+      {showUnsavedDialog ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="surface-card max-w-md p-6">
+            <h2 className="mb-2 text-xl font-semibold">Unsaved changes</h2>
+            <p className="mb-4 text-sm text-muted">
+              You have unsaved changes. Do you want to discard them and continue?
+            </p>
+            <div className="flex justify-end gap-3">
+              <button type="button" className="action-button-secondary" onClick={handleCancelNavigation}>
+                Stay here
+              </button>
+              <button type="button" className="action-button-danger" onClick={() => void handleConfirmNavigation()}>
+                Discard changes
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </>
   )
 }
