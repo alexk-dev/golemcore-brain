@@ -169,6 +169,11 @@ public class WikiApplicationService {
         return getPage(document.getPath());
     }
 
+    public WikiPage convertPage(ConvertPageCommand command) {
+        WikiPageDocument document = wikiRepository.convertPage(command.getPath(), command.getTargetKind());
+        return getPage(document.getPath());
+    }
+
     public void sortChildren(SortChildrenCommand command) {
         wikiRepository.sortChildren(command.getPath(), command.getOrderedSlugs());
     }
@@ -883,6 +888,13 @@ public class WikiApplicationService {
         String targetParentPath;
         String targetSlug;
         String beforeSlug;
+    }
+
+    @Value
+    @Builder
+    public static class ConvertPageCommand {
+        String path;
+        WikiNodeKind targetKind;
     }
 
     @Value

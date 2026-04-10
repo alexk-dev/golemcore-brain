@@ -1,10 +1,10 @@
-import { Menu, Moon, Sun, UserRound } from 'lucide-react'
+import { Menu, UserRound } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
-import { PageQuickSwitcherTrigger } from '../page-switcher/PageQuickSwitcherTrigger'
 import { Sidebar } from '../sidebar/Sidebar'
-import type { WikiTreeNode } from '../../types'
+import { Toolbar } from '../toolbar/Toolbar'
+import type { WikiNodeKind, WikiTreeNode } from '../../types'
 
 interface AppLayoutProps {
   children: ReactNode
@@ -13,18 +13,27 @@ interface AppLayoutProps {
   activePath: string
   openPaths: string[]
   sidebarVisible: boolean
-  isDark: boolean
-  onToggleTheme: () => void
   onToggleSidebar: () => void
   onNavigate: (path: string) => void
   onToggleNode: (path: string) => void
   onCreate: (parentPath: string, kind: 'PAGE' | 'SECTION') => void
+  onEdit: (path: string) => void
+  onMove: (path: string) => void
+  onCopy: (path: string) => void
+  onDelete: (path: string) => void
+  onSort: (node: WikiTreeNode) => void
+  onConvert: (path: string, targetKind: Exclude<WikiNodeKind, 'ROOT'>) => void
+  onExpandAll: () => void
+  onCollapseAll: () => void
   onOpenSearch: () => void
-  onOpenQuickSwitcher: () => void
   currentUsername?: string | null
   canManageUsers: boolean
   canAccessAccount: boolean
   canCreate: boolean
+  canEditCurrent: boolean
+  editorTitle?: string | null
+  editorPath?: string | null
+  editorDirty?: boolean
   onLogout: () => void
 }
 
@@ -35,18 +44,27 @@ export function AppLayout({
   activePath,
   openPaths,
   sidebarVisible,
-  isDark,
-  onToggleTheme,
   onToggleSidebar,
   onNavigate,
   onToggleNode,
   onCreate,
+  onEdit,
+  onMove,
+  onCopy,
+  onDelete,
+  onSort,
+  onConvert,
+  onExpandAll,
+  onCollapseAll,
   onOpenSearch,
-  onOpenQuickSwitcher,
   currentUsername,
   canManageUsers,
   canAccessAccount,
   canCreate,
+  canEditCurrent,
+  editorTitle,
+  editorPath,
+  editorDirty = false,
   onLogout,
 }: AppLayoutProps) {
   return (
@@ -66,15 +84,17 @@ export function AppLayout({
           <div className="app-layout__logo-n-title">
             <h2>{siteTitle}</h2>
           </div>
-          <div className="app-layout__editor-title-bar-container"></div>
+          <div className="app-layout__editor-title-bar-container">
+            {editorTitle ? (
+              <div className="editor-shell-title" title={editorTitle}>
+                <span className="editor-shell-title__title">{editorTitle}</span>
+                {editorDirty ? <span className="editor-title-bar__dirty-indicator">Unsaved changes</span> : null}
+                {editorPath ? <span className="editor-shell-title__path">/{editorPath}</span> : null}
+              </div>
+            ) : null}
+          </div>
           <div className="app-layout__editor-toolbar-container">
-            <PageQuickSwitcherTrigger onOpen={onOpenQuickSwitcher} />
-            <button type="button" className="action-button-secondary" onClick={onOpenSearch}>
-              Search
-            </button>
-            <button type="button" className="action-button-secondary" onClick={onToggleTheme}>
-              {isDark ? <Sun size={16} /> : <Moon size={16} />}
-            </button>
+            <Toolbar />
             {currentUsername ? (
               <>
                 <span className="action-button-secondary">
@@ -117,9 +137,18 @@ export function AppLayout({
               activePath={activePath}
               openPaths={openPaths}
               canCreate={canCreate}
+              canEdit={canEditCurrent || canCreate}
               onNavigate={onNavigate}
               onToggle={onToggleNode}
               onCreate={onCreate}
+              onEdit={onEdit}
+              onMove={onMove}
+              onCopy={onCopy}
+              onDelete={onDelete}
+              onSort={onSort}
+              onConvert={onConvert}
+              onExpandAll={onExpandAll}
+              onCollapseAll={onCollapseAll}
               onOpenSearch={onOpenSearch}
             />
           </div>

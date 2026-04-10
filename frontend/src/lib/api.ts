@@ -1,5 +1,6 @@
 import type {
   AuthConfig,
+  ConvertPagePayload,
   CopyPagePayload,
   CreatePagePayload,
   MovePagePayload,
@@ -238,6 +239,13 @@ export function movePage(path: string, payload: MovePagePayload): Promise<WikiPa
 
 export function copyPage(path: string, payload: CopyPagePayload): Promise<WikiPage> {
   return readJson<WikiPage>(`/api/page/copy?path=${encodeURIComponent(path)}`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function convertPage(path: string, payload: ConvertPagePayload): Promise<WikiPage> {
+  return readJson<WikiPage>(`/api/page/convert?path=${encodeURIComponent(path)}`, {
     method: 'POST',
     body: JSON.stringify(payload),
   })

@@ -14,6 +14,7 @@ interface MarkdownPreviewProps {
   content: string
   path?: string
   darkMode: boolean
+  assetVersion?: number
 }
 
 const schema = {
@@ -40,27 +41,30 @@ function readTextContent(node: ReactNode): string {
   return ''
 }
 
-function normalizeAssetMediaSrc(src?: string) {
+function normalizeAssetMediaSrc(src?: string, assetVersion?: number) {
   if (!src) {
     return src
   }
-  if (src.startsWith('/api/assets')) {
+  if (!src.startsWith('/api/assets') || !assetVersion) {
     return src
   }
-  return src
+  return `${src}${src.includes('?') ? '&' : '?'}v=${assetVersion}`
 }
 
-export function MarkdownPreview({ content, path, darkMode }: MarkdownPreviewProps) {
+export function MarkdownPreview({ content, path, darkMode, assetVersion }: MarkdownPreviewProps) {
   const components = useMemo(
     () => ({
       a: (
         props: ClassAttributes<HTMLAnchorElement> & HTMLAttributes<HTMLAnchorElement>,
       ) => <MarkdownLink currentPath={path} {...props} />,
       audio: (props: React.AudioHTMLAttributes<HTMLAudioElement>) => (
-        <audio {...props} src={normalizeAssetMediaSrc(props.src)} />
+        <audio {...props} src={normalizeAssetMediaSrc(props.src, assetVersion)} />
+      ),
+      img: (props: React.ImgHTMLAttributes<HTMLImageElement>) => (
+        <img {...props} src={normalizeAssetMediaSrc(props.src, assetVersion)} />
       ),
       video: (props: React.VideoHTMLAttributes<HTMLVideoElement>) => (
-        <video {...props} src={normalizeAssetMediaSrc(props.src)} />
+        <video {...props} src={normalizeAssetMediaSrc(props.src, assetVersion)} />
       ),
       pre: (
         props: ClassAttributes<HTMLPreElement> &
@@ -91,7 +95,7 @@ export function MarkdownPreview({ content, path, darkMode }: MarkdownPreviewProp
         return <code className="inline-code">{props.children}</code>
       },
     }),
-    [darkMode, path],
+    [assetVersion, darkMode, path],
   )
 
   return (

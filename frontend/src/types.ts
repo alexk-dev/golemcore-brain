@@ -198,6 +198,10 @@ export interface CopyPagePayload {
   beforeSlug?: string
 }
 
+export interface ConvertPagePayload {
+  targetKind: Exclude<WikiNodeKind, 'ROOT'>
+}
+
 export interface AssetDialogState {
   open: boolean
   pagePath: string

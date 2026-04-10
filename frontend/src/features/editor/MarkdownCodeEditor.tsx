@@ -21,6 +21,23 @@ interface MarkdownCodeEditorProps {
   onChange: (value: string) => void
   editorViewRef: RefObject<EditorView | null>
   onPaste?: ClipboardEventHandler<HTMLDivElement>
+  onCursorLineChange?: (line: number, lineCount: number) => void
+}
+
+type TextTransform = (text: string, selectionStart: number, selectionEnd: number) => {
+  text: string
+  selectionStart: number
+  selectionEnd: number
+}
+
+const runTextTransform = (transform: TextTransform) => (view: EditorView) => {
+  const selection = view.state.selection.main
+  const result = transform(view.state.doc.toString(), selection.from, selection.to)
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: result.text },
+    selection: { anchor: result.selectionStart, head: result.selectionEnd },
+  })
+  return true
 }
 
 function getLinkTargetRange(context: CompletionContext) {
@@ -86,23 +103,15 @@ export function MarkdownCodeEditor({
   onChange,
   editorViewRef,
   onPaste,
+  onCursorLineChange,
 }: MarkdownCodeEditorProps) {
   const editorRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
+  const initialValueRef = useRef(value)
+  const initialDarkModeRef = useRef(darkMode)
   const valueRef = useRef(value)
   const onChangeRef = useRef(onChange)
   const [themeCompartment] = useState(() => new Compartment())
-
-  const runTextTransform = (transform: (text: string, selectionStart: number, selectionEnd: number) => { text: string; selectionStart: number; selectionEnd: number }) =>
-    (view: EditorView) => {
-      const selection = view.state.selection.main
-      const result = transform(view.state.doc.toString(), selection.from, selection.to)
-      view.dispatch({
-        changes: { from: 0, to: view.state.doc.length, insert: result.text },
-        selection: { anchor: result.selectionStart, head: result.selectionEnd },
-      })
-      return true
-    }
 
   useEffect(() => {
     onChangeRef.current = onChange
@@ -122,6 +131,10 @@ export function MarkdownCodeEditor({
         const nextValue = update.state.doc.toString()
         valueRef.current = nextValue
         onChangeRef.current(nextValue)
+      }
+      if (update.selectionSet && onCursorLineChange) {
+        const pos = update.state.selection.main.head
+        onCursorLineChange(update.state.doc.lineAt(pos).number, update.state.doc.lines)
       }
     })
 
@@ -164,9 +177,9 @@ export function MarkdownCodeEditor({
     ]
 
     const state = EditorState.create({
-      doc: value,
+      doc: initialValueRef.current,
       extensions: [
-        themeCompartment.of(darkMode ? oneDark : githubLight),
+        themeCompartment.of(initialDarkModeRef.current ? oneDark : githubLight),
         markdown(),
         autocompletion({ override: [internalLinkCompletionSource] }),
         history(),
@@ -195,12 +208,17 @@ export function MarkdownCodeEditor({
     viewRef.current = view
     editorViewRef.current = view
 
+    const focusFrame = requestAnimationFrame(() => {
+      view.focus()
+    })
+
     return () => {
+      cancelAnimationFrame(focusFrame)
       view.destroy()
       viewRef.current = null
       editorViewRef.current = null
     }
-  }, [darkMode, editorViewRef, themeCompartment, value])
+  }, [editorViewRef, onCursorLineChange, themeCompartment])
 
   useEffect(() => {
     const view = viewRef.current

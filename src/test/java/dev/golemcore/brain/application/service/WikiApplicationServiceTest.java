@@ -121,8 +121,32 @@ class WikiApplicationServiceTest {
         assertEquals("text/plain", uploadedAsset.getContentType());
         assertEquals(1, service.listAssets("operations/release-guide").size());
 
+        service.updatePage(WikiApplicationService.UpdatePageCommand.builder()
+                .path("operations/release-guide")
+                .title("Release guide")
+                .slug("release-guide")
+                .content("![notes.txt](" + uploadedAsset.getPath() + ")")
+                .build());
         WikiAsset renamedAsset = service.renameAsset("operations/release-guide", uploadedAsset.getName(), "renamed-notes.txt");
         assertEquals("renamed-notes.txt", renamedAsset.getName());
+        assertTrue(service.getPage("operations/release-guide").getContent().contains(renamedAsset.getPath()));
+        assertFalse(service.getPage("operations/release-guide").getContent().contains(uploadedAsset.getPath()));
+
+        WikiPage assetCopy = service.copyPage(WikiApplicationService.CopyPageCommand.builder()
+                .path("operations/release-guide")
+                .targetParentPath("")
+                .targetSlug("release-guide-assets-copy")
+                .build());
+        assertEquals(1, service.listAssets(assetCopy.getPath()).size());
+        assertTrue(service.getPage(assetCopy.getPath()).getContent().contains("/api/assets?path=release-guide-assets-copy&name=renamed-notes.txt"));
+
+        WikiPage assetMove = service.movePage(WikiApplicationService.MovePageCommand.builder()
+                .path(assetCopy.getPath())
+                .targetParentPath("operations")
+                .targetSlug("release-guide-assets-moved")
+                .build());
+        assertEquals(1, service.listAssets(assetMove.getPath()).size());
+        assertTrue(service.getPage(assetMove.getPath()).getContent().contains("/api/assets?path=operations/release-guide-assets-moved&name=renamed-notes.txt"));
 
         WikiAssetContent assetContent = service.openAsset("operations/release-guide", renamedAsset.getName());
         assertEquals("renamed-notes.txt", assetContent.getName());
@@ -133,6 +157,38 @@ class WikiApplicationServiceTest {
 
         service.deletePage("operations/release-guide-clone");
         assertThrows(WikiNotFoundException.class, () -> service.getPage("operations/release-guide-clone"));
+    }
+
+    @Test
+    void shouldConvertBetweenPageAndEmptySectionWhileKeepingAssets() throws Exception {
+        WikiApplicationService service = createService();
+        service.createPage(WikiApplicationService.CreatePageCommand.builder()
+                .parentPath("")
+                .title("Scratch")
+                .slug("scratch")
+                .content("Scratch content")
+                .kind(WikiNodeKind.PAGE)
+                .build());
+        service.uploadAsset(
+                "scratch",
+                "diagram.png",
+                "image/png",
+                new ByteArrayInputStream("png".getBytes(StandardCharsets.UTF_8)));
+
+        WikiPage section = service.convertPage(WikiApplicationService.ConvertPageCommand.builder()
+                .path("scratch")
+                .targetKind(WikiNodeKind.SECTION)
+                .build());
+        assertEquals(WikiNodeKind.SECTION, section.getKind());
+        assertEquals(1, service.listAssets("scratch").size());
+
+        WikiPage page = service.convertPage(WikiApplicationService.ConvertPageCommand.builder()
+                .path("scratch")
+                .targetKind(WikiNodeKind.PAGE)
+                .build());
+        assertEquals(WikiNodeKind.PAGE, page.getKind());
+        assertEquals(1, service.listAssets("scratch").size());
+        assertEquals("diagram.png", service.openAsset("scratch", "diagram.png").getName());
     }
 
     @Test

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { FileSearch, Moon, Pencil, Search, Sun } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -7,23 +8,24 @@ import { DeleteDialog } from '../../components/DeleteDialog'
 import { MoveCopyDialog } from '../../components/MoveCopyDialog'
 import { SearchDialog } from '../../components/SearchDialog'
 import { SortChildrenDialog } from '../../components/SortChildrenDialog'
-import { copyPage, createPage, deletePage, getAuthConfig, getConfig, logout, movePage, sortSection } from '../../lib/api'
+import { convertPage, copyPage, createPage, deletePage, getAuthConfig, getConfig, logout, movePage, sortSection } from '../../lib/api'
 import { editorPathToRoute, normalizeWikiPath, parentPath, pathToRoute } from '../../lib/paths'
 import { useEditorStore } from '../../stores/editor'
 import { useTreeStore } from '../../stores/tree'
 import { useUiStore } from '../../stores/ui'
 import { useViewerStore } from '../../stores/viewer'
-import type { CopyPagePayload, CreatePagePayload, MovePagePayload, WikiConfig, WikiPage } from '../../types'
+import type { CopyPagePayload, CreatePagePayload, MovePagePayload, WikiConfig, WikiNodeKind, WikiPage, WikiTreeNode } from '../../types'
 import { AppLayout } from '../layout/AppLayout'
 import { PageQuickSwitcherDialog } from '../page-switcher/PageQuickSwitcherDialog'
+import { useToolbarActions } from '../toolbar/toolbarStore'
 
 type DialogState =
   | { type: 'none' }
   | { type: 'create'; parentPath: string; kind: 'PAGE' | 'SECTION' }
-  | { type: 'move' }
-  | { type: 'copy' }
-  | { type: 'delete' }
-  | { type: 'sort' }
+  | { type: 'move'; path: string }
+  | { type: 'copy'; path: string }
+  | { type: 'delete'; path: string }
+  | { type: 'sort'; page: WikiTreeNode }
 
 interface WikiShellProps {
   children: React.ReactNode
@@ -38,9 +40,15 @@ export function WikiShell({ children }: WikiShellProps) {
   const getPageByPath = useTreeStore((state) => state.getPageByPath)
   const getPageById = useTreeStore((state) => state.getPageById)
   const toggleNode = useTreeStore((state) => state.toggleNode)
+  const expandAll = useTreeStore((state) => state.expandAll)
+  const collapseAll = useTreeStore((state) => state.collapseAll)
   const openAncestorsForPath = useTreeStore((state) => state.openAncestorsForPath)
   const viewerPage = useViewerStore((state) => state.page)
   const editorPage = useEditorStore((state) => state.page)
+  const editorInitialPage = useEditorStore((state) => state.initialPage)
+  const editorTitle = useEditorStore((state) => state.title)
+  const editorSlug = useEditorStore((state) => state.slug)
+  const editorContent = useEditorStore((state) => state.content)
   const isDark = useUiStore((state) => state.isDark)
   const setDarkMode = useUiStore((state) => state.setDarkMode)
   const sidebarVisible = useUiStore((state) => state.sidebarVisible)
@@ -79,25 +87,9 @@ export function WikiShell({ children }: WikiShellProps) {
     return () => mediaQuery.removeEventListener('change', handleChange)
   }, [setDarkMode])
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const modifierPressed = event.metaKey || event.ctrlKey
-      if (modifierPressed && event.shiftKey && event.key.toLowerCase() === 'f') {
-        event.preventDefault()
-        setSearchOpen(true)
-      }
-      if (modifierPressed && event.altKey && event.key.toLowerCase() === 'p') {
-        event.preventDefault()
-        setQuickSwitcherOpen(true)
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [setQuickSwitcherOpen, setSearchOpen])
-
   const rawRoutePath = useMemo(() => normalizeWikiPath(location.pathname), [location.pathname])
-  const isEditorRoute = rawRoutePath.startsWith('e/')
-  const currentPath = isEditorRoute ? rawRoutePath.slice(2) : rawRoutePath
+  const isEditorRoute = rawRoutePath === 'e' || rawRoutePath.startsWith('e/')
+  const currentPath = isEditorRoute ? rawRoutePath.replace(/^e\/?/, '') : rawRoutePath
   const currentPage: WikiPage | null = isEditorRoute ? editorPage : viewerPage
   const createTargetParentPath =
     currentPage?.kind === 'SECTION' ? currentPage.path : currentPage?.parentPath ?? ''
@@ -105,28 +97,15 @@ export function WikiShell({ children }: WikiShellProps) {
   const canManageUsers = authDisabled || currentUser?.role === 'ADMIN'
   const canAccessAccount = authDisabled || currentUser !== null
   const isAnonymousPublicReader = !authDisabled && publicAccess && currentUser === null
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const modifierPressed = event.metaKey || event.ctrlKey
-      const normalizedKey = event.key.toLowerCase()
-      if (!modifierPressed) {
-        return
-      }
-      if (event.shiftKey && normalizedKey === 'e') {
-        event.preventDefault()
-        toggleSidebar()
-        return
-      }
-      if (normalizedKey !== 'e' || isEditorRoute || !canEdit) {
-        return
-      }
-      event.preventDefault()
-      navigate(editorPathToRoute(currentPath))
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [canEdit, currentPath, isEditorRoute, navigate, toggleSidebar])
+  const isUtilityRoute = ['login', 'account', 'users', 'import'].includes(currentPath)
+  const editorHasUnsavedChanges =
+    isEditorRoute &&
+    editorPage !== null &&
+    editorInitialPage !== null &&
+    (editorTitle !== editorInitialPage.title ||
+      editorSlug !== editorInitialPage.slug ||
+      editorContent !== editorInitialPage.content)
+  const canEditCurrentPage = canEdit && !isEditorRoute && !isUtilityRoute && !isAnonymousPublicReader
 
   useEffect(() => {
     if (!tree) {
@@ -146,10 +125,15 @@ export function WikiShell({ children }: WikiShellProps) {
     [getPageById, openNodeIdSet],
   )
 
-  const handleNavigate = (path: string) => {
+  const handleNavigate = useCallback((path: string) => {
     openAncestorsForPath(path)
     navigate(pathToRoute(path))
-  }
+  }, [navigate, openAncestorsForPath])
+
+  const handleEdit = useCallback((path: string) => {
+    openAncestorsForPath(path)
+    navigate(editorPathToRoute(path))
+  }, [navigate, openAncestorsForPath])
 
   const handleLogout = async () => {
     await logout()
@@ -172,16 +156,17 @@ export function WikiShell({ children }: WikiShellProps) {
 
   const handleMoveCopy = async (
     mode: 'move' | 'copy',
+    sourcePath: string,
     payload: MovePagePayload | CopyPagePayload,
   ) => {
-    if (!currentPage) {
+    if (!sourcePath) {
       return
     }
     try {
       const nextPage =
         mode === 'move'
-          ? await movePage(currentPage.path, payload as MovePagePayload)
-          : await copyPage(currentPage.path, payload as CopyPagePayload)
+          ? await movePage(sourcePath, payload as MovePagePayload)
+          : await copyPage(sourcePath, payload as CopyPagePayload)
       await reloadTree()
       handleNavigate(nextPage.path)
     } catch (error) {
@@ -190,13 +175,13 @@ export function WikiShell({ children }: WikiShellProps) {
     }
   }
 
-  const handleDelete = async () => {
-    if (!currentPage) {
+  const handleDelete = async (sourcePath: string) => {
+    if (!sourcePath) {
       return
     }
     try {
-      const nextPath = parentPath(currentPage.path)
-      await deletePage(currentPage.path)
+      const nextPath = parentPath(sourcePath)
+      await deletePage(sourcePath)
       await reloadTree()
       handleNavigate(nextPath)
     } catch (error) {
@@ -205,19 +190,85 @@ export function WikiShell({ children }: WikiShellProps) {
     }
   }
 
-  const handleSort = async (orderedSlugs: string[]) => {
-    if (!currentPage || currentPage.kind === 'PAGE') {
+  const handleSort = async (sourcePath: string, orderedSlugs: string[]) => {
+    if (!sourcePath) {
       return
     }
     try {
-      await sortSection(currentPage.path, orderedSlugs)
+      await sortSection(sourcePath, orderedSlugs)
       await reloadTree()
-      handleNavigate(currentPage.path)
+      handleNavigate(sourcePath)
     } catch (error) {
       toast.error((error as Error).message)
       throw error
     }
   }
+
+  const handleConvert = async (sourcePath: string, targetKind: Exclude<WikiNodeKind, 'ROOT'>) => {
+    if (!sourcePath) {
+      return
+    }
+    try {
+      const nextPage = await convertPage(sourcePath, { targetKind })
+      await reloadTree()
+      toast.success(`Converted to ${targetKind.toLowerCase()}`)
+      handleNavigate(nextPage.path)
+    } catch (error) {
+      toast.error((error as Error).message)
+      throw error
+    }
+  }
+
+  const toolbarActions = useMemo(() => [
+    {
+      id: 'quick-switcher',
+      label: 'Go to page',
+      title: 'Go to page',
+      hotkey: 'Mod+Alt+P',
+      hotkeyLabel: 'Ctrl+Alt+P',
+      icon: <FileSearch size={16} />,
+      onRun: () => setQuickSwitcherOpen(true),
+    },
+    {
+      id: 'edit-page',
+      label: 'Edit page',
+      title: 'Edit page',
+      hotkey: 'Mod+E',
+      hotkeyLabel: 'Ctrl+E',
+      icon: <Pencil size={16} />,
+      variant: 'primary' as const,
+      hidden: !canEditCurrentPage,
+      disabled: !canEditCurrentPage,
+      onRun: () => handleEdit(currentPage?.path ?? currentPath),
+    },
+    {
+      id: 'search',
+      label: 'Search',
+      title: 'Search',
+      hotkey: 'Mod+Shift+F',
+      hotkeyLabel: 'Ctrl+Shift+F',
+      icon: <Search size={16} />,
+      onRun: () => setSearchOpen(true),
+    },
+    {
+      id: 'toggle-theme',
+      label: isDark ? 'Light mode' : 'Dark mode',
+      title: isDark ? 'Light mode' : 'Dark mode',
+      icon: isDark ? <Sun size={16} /> : <Moon size={16} />,
+      onRun: () => setDarkMode(!isDark),
+    },
+    {
+      id: 'toggle-sidebar',
+      label: 'Toggle sidebar',
+      title: 'Toggle sidebar',
+      hotkey: 'Mod+Shift+E',
+      hotkeyLabel: 'Ctrl+Shift+E',
+      hidden: true,
+      onRun: toggleSidebar,
+    },
+  ], [canEditCurrentPage, currentPage?.path, currentPath, handleEdit, isDark, setDarkMode, setQuickSwitcherOpen, setSearchOpen, toggleSidebar])
+
+  useToolbarActions(toolbarActions)
 
   return (
     <>
@@ -227,8 +278,6 @@ export function WikiShell({ children }: WikiShellProps) {
         activePath={activePath}
         openPaths={openPaths}
         sidebarVisible={sidebarVisible}
-        isDark={isDark}
-        onToggleTheme={() => setDarkMode(!isDark)}
         onToggleSidebar={toggleSidebar}
         onNavigate={handleNavigate}
         onToggleNode={(path) => {
@@ -240,12 +289,23 @@ export function WikiShell({ children }: WikiShellProps) {
         onCreate={(parentPathValue, kind) =>
           setDialogState({ type: 'create', parentPath: parentPathValue || createTargetParentPath, kind })
         }
+        onEdit={handleEdit}
+        onMove={(path) => setDialogState({ type: 'move', path })}
+        onCopy={(path) => setDialogState({ type: 'copy', path })}
+        onDelete={(path) => setDialogState({ type: 'delete', path })}
+        onSort={(page) => setDialogState({ type: 'sort', page })}
+        onConvert={(path, targetKind) => void handleConvert(path, targetKind)}
+        onExpandAll={expandAll}
+        onCollapseAll={collapseAll}
         onOpenSearch={() => setSearchOpen(true)}
-        onOpenQuickSwitcher={() => setQuickSwitcherOpen(true)}
         currentUsername={currentUser?.username ?? null}
         canManageUsers={canManageUsers}
         canAccessAccount={canAccessAccount}
         canCreate={canEdit && !isAnonymousPublicReader}
+        canEditCurrent={canEditCurrentPage}
+        editorTitle={isEditorRoute ? editorTitle : null}
+        editorPath={isEditorRoute ? editorPage?.path ?? currentPath : null}
+        editorDirty={editorHasUnsavedChanges}
         onLogout={() => void handleLogout()}
       >
         {children}
@@ -281,60 +341,47 @@ export function WikiShell({ children }: WikiShellProps) {
       <MoveCopyDialog
         mode="move"
         open={dialogState.type === 'move'}
-        currentPath={currentPage?.path ?? ''}
+        currentPath={dialogState.type === 'move' ? dialogState.path : ''}
         onOpenChange={(open) => {
           if (!open) {
             setDialogState({ type: 'none' })
           }
         }}
-        onSubmit={(payload) => handleMoveCopy('move', payload)}
+        onSubmit={(payload) => handleMoveCopy('move', dialogState.type === 'move' ? dialogState.path : '', payload)}
       />
 
       <MoveCopyDialog
         mode="copy"
         open={dialogState.type === 'copy'}
-        currentPath={currentPage?.path ?? ''}
+        currentPath={dialogState.type === 'copy' ? dialogState.path : ''}
         onOpenChange={(open) => {
           if (!open) {
             setDialogState({ type: 'none' })
           }
         }}
-        onSubmit={(payload) => handleMoveCopy('copy', payload)}
+        onSubmit={(payload) => handleMoveCopy('copy', dialogState.type === 'copy' ? dialogState.path : '', payload)}
       />
 
       <DeleteDialog
         open={dialogState.type === 'delete'}
-        path={currentPage?.path ?? ''}
+        path={dialogState.type === 'delete' ? dialogState.path : ''}
         onOpenChange={(open) => {
           if (!open) {
             setDialogState({ type: 'none' })
           }
         }}
-        onConfirm={handleDelete}
+        onConfirm={() => handleDelete(dialogState.type === 'delete' ? dialogState.path : '')}
       />
 
       <SortChildrenDialog
         open={dialogState.type === 'sort'}
-        page={
-          currentPage && currentPage.kind !== 'PAGE'
-            ? {
-                id: currentPage.id,
-                path: currentPage.path,
-                parentPath: currentPage.parentPath,
-                title: currentPage.title,
-                slug: currentPage.slug,
-                kind: currentPage.kind,
-                hasChildren: currentPage.children.length > 0,
-                children: currentPage.children,
-              }
-            : null
-        }
+        page={dialogState.type === 'sort' ? dialogState.page : null}
         onOpenChange={(open) => {
           if (!open) {
             setDialogState({ type: 'none' })
           }
         }}
-        onSubmit={handleSort}
+        onSubmit={(orderedSlugs) => handleSort(dialogState.type === 'sort' ? dialogState.page.path : '', orderedSlugs)}
       />
     </>
   )

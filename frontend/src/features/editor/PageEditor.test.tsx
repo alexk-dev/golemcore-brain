@@ -137,10 +137,26 @@ describe('PageEditor', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit metadata' }))
     expect(screen.getByText('Metadata')).toBeInTheDocument()
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
 
     fireEvent.click(screen.getByRole('button', { name: 'Close editor' }))
-    expect(screen.getByText('Unsaved changes')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Unsaved changes' })).toBeInTheDocument()
     expect(navigateMock).not.toHaveBeenCalledWith('/guides/runbook')
+  })
+
+  it('keeps save disabled until the editor is dirty', () => {
+    render(
+      <MemoryRouter>
+        <PageEditor />
+      </MemoryRouter>,
+    )
+
+    const saveButton = screen.getByRole('button', { name: 'Saved' })
+    expect(saveButton).toBeDisabled()
+
+    fireEvent.click(saveButton)
+    expect(savePageMock).not.toHaveBeenCalled()
   })
 
   it('uploads pasted image assets into the current page', async () => {

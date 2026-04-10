@@ -1,18 +1,26 @@
-import { ChevronDown, ChevronRight, FileText, Folder, FolderOpen, Plus } from 'lucide-react'
+import { ChevronDown, ChevronRight, Copy, FileText, Folder, FolderOpen, List, MoreVertical, Move, Pencil, Plus, Repeat2, Trash2 } from 'lucide-react'
 import clsx from 'clsx'
+import { useState } from 'react'
 import type { MouseEvent } from 'react'
 
-import type { WikiTreeNode } from '../types'
+import type { WikiNodeKind, WikiTreeNode } from '../types'
 
 interface TreeNodeItemProps {
   node: WikiTreeNode
   activePath: string
   openPaths: string[]
   canCreate: boolean
+  canEdit: boolean
   depth?: number
   onNavigate: (path: string) => void
   onToggle: (path: string) => void
   onCreate: (parentPath: string, kind: 'PAGE' | 'SECTION') => void
+  onEdit: (path: string) => void
+  onMove: (path: string) => void
+  onCopy: (path: string) => void
+  onDelete: (path: string) => void
+  onSort: (node: WikiTreeNode) => void
+  onConvert: (path: string, targetKind: Exclude<WikiNodeKind, 'ROOT'>) => void
 }
 
 export function TreeNodeItem({
@@ -20,14 +28,28 @@ export function TreeNodeItem({
   activePath,
   openPaths,
   canCreate,
+  canEdit,
   depth = 0,
   onNavigate,
   onToggle,
   onCreate,
+  onEdit,
+  onMove,
+  onCopy,
+  onDelete,
+  onSort,
+  onConvert,
 }: TreeNodeItemProps) {
+  const [mobileActionsOpen, setMobileActionsOpen] = useState(false)
   const isActive = node.path === activePath
   const isOpen = node.kind !== 'PAGE' && openPaths.includes(node.path)
   const hasChildren = node.children.length > 0
+  const convertTargetKind: Exclude<WikiNodeKind, 'ROOT'> | null =
+    node.kind === 'PAGE'
+      ? 'SECTION'
+      : node.kind === 'SECTION' && !hasChildren
+        ? 'PAGE'
+        : null
 
   const handleNavigate = (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()
@@ -75,25 +97,237 @@ export function TreeNodeItem({
           )}
           <span className="truncate">{node.title}</span>
         </button>
-        {canCreate && node.kind !== 'PAGE' ? (
-          <div className="hidden items-center gap-1 group-hover:flex">
-            <button
-              type="button"
-              className="rounded-lg p-1.5 text-sidebar-foreground/60 transition hover:bg-white/10 hover:text-sidebar-foreground"
-              onClick={() => onCreate(node.path, 'PAGE')}
-              title="New page"
-            >
-              <Plus size={14} />
-            </button>
-            <button
-              type="button"
-              className="rounded-lg p-1.5 text-sidebar-foreground/60 transition hover:bg-white/10 hover:text-sidebar-foreground"
-              onClick={() => onCreate(node.path, 'SECTION')}
-              title="New section"
-            >
-              <Folder size={14} />
-            </button>
-          </div>
+        {canEdit || (canCreate && node.kind !== 'PAGE') ? (
+          <>
+            <div className="hidden items-center gap-1 group-hover:flex group-focus-within:flex max-md:hidden">
+              {canEdit ? (
+                <>
+                  <button
+                    type="button"
+                    className="rounded-lg p-1.5 text-sidebar-foreground/60 transition hover:bg-white/10 hover:text-sidebar-foreground"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onEdit(node.path)
+                    }}
+                    title={`Edit ${node.title}`}
+                    aria-label={`Edit ${node.title}`}
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-lg p-1.5 text-sidebar-foreground/60 transition hover:bg-white/10 hover:text-sidebar-foreground"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onMove(node.path)
+                    }}
+                    title={`Move ${node.title}`}
+                    aria-label={`Move ${node.title}`}
+                  >
+                    <Move size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-lg p-1.5 text-sidebar-foreground/60 transition hover:bg-white/10 hover:text-sidebar-foreground"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onCopy(node.path)
+                    }}
+                    title={`Copy ${node.title}`}
+                    aria-label={`Copy ${node.title}`}
+                  >
+                    <Copy size={14} />
+                  </button>
+                  {node.kind !== 'PAGE' ? (
+                    <button
+                      type="button"
+                      className="rounded-lg p-1.5 text-sidebar-foreground/60 transition hover:bg-white/10 hover:text-sidebar-foreground"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onSort(node)
+                      }}
+                      title={`Sort ${node.title}`}
+                      aria-label={`Sort ${node.title}`}
+                    >
+                      <List size={14} />
+                    </button>
+                  ) : null}
+                  {convertTargetKind ? (
+                    <button
+                      type="button"
+                      className="rounded-lg p-1.5 text-sidebar-foreground/60 transition hover:bg-white/10 hover:text-sidebar-foreground"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onConvert(node.path, convertTargetKind)
+                      }}
+                      title={`Convert ${node.title} to ${convertTargetKind.toLowerCase()}`}
+                      aria-label={`Convert ${node.title} to ${convertTargetKind.toLowerCase()}`}
+                    >
+                      <Repeat2 size={14} />
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="rounded-lg p-1.5 text-sidebar-foreground/60 transition hover:bg-white/10 hover:text-danger"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onDelete(node.path)
+                    }}
+                    title={`Delete ${node.title}`}
+                    aria-label={`Delete ${node.title}`}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </>
+              ) : null}
+              {canCreate && node.kind !== 'PAGE' ? (
+                <>
+                  <button
+                    type="button"
+                    className="rounded-lg p-1.5 text-sidebar-foreground/60 transition hover:bg-white/10 hover:text-sidebar-foreground"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onCreate(node.path, 'PAGE')
+                    }}
+                    title="New page"
+                    aria-label={`New page under ${node.title}`}
+                  >
+                    <Plus size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-lg p-1.5 text-sidebar-foreground/60 transition hover:bg-white/10 hover:text-sidebar-foreground"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onCreate(node.path, 'SECTION')
+                    }}
+                    title="New section"
+                    aria-label={`New section under ${node.title}`}
+                  >
+                    <Folder size={14} />
+                  </button>
+                </>
+              ) : null}
+            </div>
+            <div className="relative hidden max-md:block">
+              <button
+                type="button"
+                className="rounded-lg p-1.5 text-sidebar-foreground/60 transition hover:bg-white/10 hover:text-sidebar-foreground"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  setMobileActionsOpen((open) => !open)
+                }}
+                title={`More actions for ${node.title}`}
+                aria-label={`More actions for ${node.title}`}
+              >
+                <MoreVertical size={14} />
+              </button>
+              {mobileActionsOpen ? (
+                <div className="absolute right-0 top-full z-20 mt-1 flex min-w-40 flex-col gap-1 rounded-lg border border-surface-border bg-surface px-2 py-2 shadow-lg">
+                  {canEdit ? (
+                    <>
+                      <button
+                        type="button"
+                        className="action-button-secondary justify-start"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          setMobileActionsOpen(false)
+                          onEdit(node.path)
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="action-button-secondary justify-start"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          setMobileActionsOpen(false)
+                          onMove(node.path)
+                        }}
+                      >
+                        Move
+                      </button>
+                      <button
+                        type="button"
+                        className="action-button-secondary justify-start"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          setMobileActionsOpen(false)
+                          onCopy(node.path)
+                        }}
+                      >
+                        Copy
+                      </button>
+                      {node.kind !== 'PAGE' ? (
+                        <button
+                          type="button"
+                          className="action-button-secondary justify-start"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            setMobileActionsOpen(false)
+                            onSort(node)
+                          }}
+                        >
+                          Sort
+                        </button>
+                      ) : null}
+                      {convertTargetKind ? (
+                        <button
+                          type="button"
+                          className="action-button-secondary justify-start"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            setMobileActionsOpen(false)
+                            onConvert(node.path, convertTargetKind)
+                          }}
+                        >
+                          Convert to {convertTargetKind.toLowerCase()}
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="action-button-danger justify-start"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          setMobileActionsOpen(false)
+                          onDelete(node.path)
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </>
+                  ) : null}
+                  {canCreate && node.kind !== 'PAGE' ? (
+                    <>
+                      <button
+                        type="button"
+                        className="action-button-secondary justify-start"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          setMobileActionsOpen(false)
+                          onCreate(node.path, 'PAGE')
+                        }}
+                      >
+                        New page
+                      </button>
+                      <button
+                        type="button"
+                        className="action-button-secondary justify-start"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          setMobileActionsOpen(false)
+                          onCreate(node.path, 'SECTION')
+                        }}
+                      >
+                        New section
+                      </button>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          </>
         ) : null}
       </div>
       {node.kind !== 'PAGE' && hasChildren && isOpen ? (
@@ -105,10 +339,17 @@ export function TreeNodeItem({
               activePath={activePath}
               openPaths={openPaths}
               canCreate={canCreate}
+              canEdit={canEdit}
               depth={depth + 1}
               onNavigate={onNavigate}
               onToggle={onToggle}
               onCreate={onCreate}
+              onEdit={onEdit}
+              onMove={onMove}
+              onCopy={onCopy}
+              onDelete={onDelete}
+              onSort={onSort}
+              onConvert={onConvert}
             />
           ))}
         </ul>

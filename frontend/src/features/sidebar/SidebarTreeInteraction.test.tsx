@@ -9,6 +9,8 @@ import { useTreeStore } from '../../stores/tree'
 import { useUiStore } from '../../stores/ui'
 import { useViewerStore } from '../../stores/viewer'
 
+const convertPageMock = vi.hoisted(() => vi.fn())
+
 vi.mock('../../lib/api', () => ({
   getAuthConfig: vi.fn(async () => ({
     authDisabled: true,
@@ -163,6 +165,7 @@ vi.mock('../../lib/api', () => ({
   deletePage: vi.fn(),
   movePage: vi.fn(),
   copyPage: vi.fn(),
+  convertPage: (...args: unknown[]) => convertPageMock(...args),
   sortSection: vi.fn(),
   ensurePage: vi.fn(),
   lookupPath: vi.fn(),
@@ -182,6 +185,19 @@ vi.mock('../../lib/api', () => ({
 
 describe('Sidebar tree interaction parity', () => {
   beforeEach(() => {
+    convertPageMock.mockReset()
+    convertPageMock.mockResolvedValue({
+      id: 'product/roadmap',
+      path: 'product/roadmap',
+      parentPath: 'product',
+      title: 'Roadmap',
+      slug: 'roadmap',
+      kind: 'SECTION',
+      content: '# Product',
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+      children: [],
+    })
     useTreeStore.setState({
       tree: null,
       loading: false,
@@ -267,6 +283,101 @@ describe('Sidebar tree interaction parity', () => {
     await waitFor(() => {
       expect(within(sidebar).getByText('Setup')).toBeInTheDocument()
       expect(within(sidebar).getByText('Roadmap')).toBeInTheDocument()
+    })
+  })
+
+  it('opens the selected tree node directly in the editor', async () => {
+    render(
+      <MemoryRouter initialEntries={['/guides']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    const sidebar = await screen.findByTestId('sidebar')
+    fireEvent.click(within(sidebar).getByRole('button', { name: 'Expand section' }))
+
+    await waitFor(() => {
+      expect(within(sidebar).getByText('Roadmap')).toBeInTheDocument()
+    })
+
+    fireEvent.click(within(sidebar).getByRole('button', { name: 'Edit Roadmap' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Close editor' })).toBeInTheDocument()
+    })
+    expect(screen.getAllByText('/product/roadmap')).toHaveLength(2)
+  })
+
+  it('opens page operations from tree node actions', async () => {
+    render(
+      <MemoryRouter initialEntries={['/guides']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    const sidebar = await screen.findByTestId('sidebar')
+    fireEvent.click(within(sidebar).getByRole('button', { name: 'Expand section' }))
+
+    await waitFor(() => {
+      expect(within(sidebar).getByText('Roadmap')).toBeInTheDocument()
+    })
+
+    fireEvent.click(within(sidebar).getByRole('button', { name: 'Move Roadmap' }))
+
+    expect(await screen.findByText('Move page')).toBeInTheDocument()
+    expect(screen.getByText('Current path: /product/roadmap')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    fireEvent.click(within(sidebar).getByRole('button', { name: 'Sort Product' }))
+
+    expect(await screen.findByText('Sort child pages')).toBeInTheDocument()
+    expect(screen.getByText('Section: /product')).toBeInTheDocument()
+  })
+
+  it('expands, collapses, and sorts from the tree toolbar', async () => {
+    render(
+      <MemoryRouter initialEntries={['/guides']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    const sidebar = await screen.findByTestId('sidebar')
+    await waitFor(() => {
+      expect(within(sidebar).getByText('Setup')).toBeInTheDocument()
+    })
+
+    fireEvent.click(within(sidebar).getByRole('button', { name: 'Expand all' }))
+    expect(within(sidebar).getByText('Roadmap')).toBeInTheDocument()
+
+    fireEvent.click(within(sidebar).getByRole('button', { name: 'Collapse all' }))
+    await waitFor(() => {
+      expect(within(sidebar).queryByText('Roadmap')).not.toBeInTheDocument()
+    })
+
+    fireEvent.click(within(sidebar).getByRole('button', { name: 'Sort root pages' }))
+    expect(await screen.findByText('Sort child pages')).toBeInTheDocument()
+    expect(screen.getByText('Section: /')).toBeInTheDocument()
+  })
+
+  it('converts a tree page to a section from node actions', async () => {
+    render(
+      <MemoryRouter initialEntries={['/guides']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    const sidebar = await screen.findByTestId('sidebar')
+    fireEvent.click(within(sidebar).getByRole('button', { name: 'Expand section' }))
+
+    await waitFor(() => {
+      expect(within(sidebar).getByText('Roadmap')).toBeInTheDocument()
+    })
+
+    fireEvent.click(within(sidebar).getByRole('button', { name: 'Convert Roadmap to section' }))
+
+    await waitFor(() => {
+      expect(convertPageMock).toHaveBeenCalledWith('product/roadmap', { targetKind: 'SECTION' })
     })
   })
 })

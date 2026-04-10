@@ -79,6 +79,7 @@ vi.mock('../../lib/api', () => ({
   deletePage: vi.fn(),
   movePage: vi.fn(),
   copyPage: vi.fn(),
+  convertPage: vi.fn(),
   sortSection: vi.fn(),
   ensurePage: (...args: unknown[]) => ensurePageMock(...args),
   lookupPath: vi.fn(),
