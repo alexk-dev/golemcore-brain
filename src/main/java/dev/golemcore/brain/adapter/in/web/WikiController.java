@@ -1,5 +1,6 @@
 package dev.golemcore.brain.adapter.in.web;
 
+import dev.golemcore.brain.adapter.in.web.auth.AuthCookieHelper;
 import dev.golemcore.brain.adapter.in.web.dto.CopyPagePayload;
 import dev.golemcore.brain.adapter.in.web.dto.CreatePagePayload;
 import dev.golemcore.brain.adapter.in.web.dto.EnsurePagePayload;
@@ -8,6 +9,7 @@ import dev.golemcore.brain.adapter.in.web.dto.RenameAssetPayload;
 import dev.golemcore.brain.adapter.in.web.dto.SortChildrenPayload;
 import dev.golemcore.brain.adapter.in.web.dto.UpdatePagePayload;
 import dev.golemcore.brain.application.service.WikiApplicationService;
+import dev.golemcore.brain.application.service.auth.AuthService;
 import dev.golemcore.brain.domain.WikiAsset;
 import dev.golemcore.brain.domain.WikiAssetContent;
 import dev.golemcore.brain.domain.WikiConfigResponse;
@@ -16,6 +18,7 @@ import dev.golemcore.brain.domain.WikiPage;
 import dev.golemcore.brain.domain.WikiPathLookupResult;
 import dev.golemcore.brain.domain.WikiSearchHit;
 import dev.golemcore.brain.domain.WikiTreeNode;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.io.IOException;
 import java.util.List;
@@ -41,6 +44,8 @@ import org.springframework.web.multipart.MultipartFile;
 public class WikiController {
 
     private final WikiApplicationService wikiApplicationService;
+    private final AuthService authService;
+    private final AuthCookieHelper authCookieHelper;
 
     @GetMapping("/config")
     public WikiConfigResponse getConfig() {
@@ -63,7 +68,8 @@ public class WikiController {
     }
 
     @PostMapping("/pages")
-    public WikiPage createPage(@Valid @RequestBody CreatePagePayload payload) {
+    public WikiPage createPage(@Valid @RequestBody CreatePagePayload payload, HttpServletRequest request) {
+        authService.requireEditAccess(authCookieHelper.readSessionToken(request));
         return wikiApplicationService.createPage(WikiApplicationService.CreatePageCommand.builder()
                 .parentPath(payload.getParentPath())
                 .title(payload.getTitle())
@@ -74,7 +80,8 @@ public class WikiController {
     }
 
     @PostMapping("/pages/ensure")
-    public WikiPage ensurePage(@Valid @RequestBody EnsurePagePayload payload) {
+    public WikiPage ensurePage(@Valid @RequestBody EnsurePagePayload payload, HttpServletRequest request) {
+        authService.requireEditAccess(authCookieHelper.readSessionToken(request));
         return wikiApplicationService.ensurePage(payload.getPath(), payload.getTargetTitle());
     }
 
@@ -84,7 +91,8 @@ public class WikiController {
     }
 
     @PutMapping("/page")
-    public WikiPage updatePage(@RequestParam(name = "path") String path, @Valid @RequestBody UpdatePagePayload payload) {
+    public WikiPage updatePage(@RequestParam(name = "path") String path, @Valid @RequestBody UpdatePagePayload payload, HttpServletRequest request) {
+        authService.requireEditAccess(authCookieHelper.readSessionToken(request));
         return wikiApplicationService.updatePage(WikiApplicationService.UpdatePageCommand.builder()
                 .path(path)
                 .title(payload.getTitle())
@@ -94,12 +102,14 @@ public class WikiController {
     }
 
     @DeleteMapping("/page")
-    public void deletePage(@RequestParam(name = "path") String path) {
+    public void deletePage(@RequestParam(name = "path") String path, HttpServletRequest request) {
+        authService.requireEditAccess(authCookieHelper.readSessionToken(request));
         wikiApplicationService.deletePage(path);
     }
 
     @PostMapping("/page/move")
-    public WikiPage movePage(@RequestParam(name = "path") String path, @Valid @RequestBody MovePagePayload payload) {
+    public WikiPage movePage(@RequestParam(name = "path") String path, @Valid @RequestBody MovePagePayload payload, HttpServletRequest request) {
+        authService.requireEditAccess(authCookieHelper.readSessionToken(request));
         return wikiApplicationService.movePage(WikiApplicationService.MovePageCommand.builder()
                 .path(path)
                 .targetParentPath(payload.getTargetParentPath())
@@ -109,7 +119,8 @@ public class WikiController {
     }
 
     @PostMapping("/page/copy")
-    public WikiPage copyPage(@RequestParam(name = "path") String path, @Valid @RequestBody CopyPagePayload payload) {
+    public WikiPage copyPage(@RequestParam(name = "path") String path, @Valid @RequestBody CopyPagePayload payload, HttpServletRequest request) {
+        authService.requireEditAccess(authCookieHelper.readSessionToken(request));
         return wikiApplicationService.copyPage(WikiApplicationService.CopyPageCommand.builder()
                 .path(path)
                 .targetParentPath(payload.getTargetParentPath())
@@ -119,7 +130,8 @@ public class WikiController {
     }
 
     @PutMapping("/section/sort")
-    public void sortChildren(@RequestParam(name = "path") String path, @Valid @RequestBody SortChildrenPayload payload) {
+    public void sortChildren(@RequestParam(name = "path") String path, @Valid @RequestBody SortChildrenPayload payload, HttpServletRequest request) {
+        authService.requireEditAccess(authCookieHelper.readSessionToken(request));
         wikiApplicationService.sortChildren(WikiApplicationService.SortChildrenCommand.builder()
                 .path(path)
                 .orderedSlugs(payload.getOrderedSlugs())
@@ -137,22 +149,26 @@ public class WikiController {
     }
 
     @GetMapping("/pages/assets")
-    public List<WikiAsset> listAssets(@RequestParam(name = "path") String path) {
+    public List<WikiAsset> listAssets(@RequestParam(name = "path") String path, HttpServletRequest request) {
+        authService.requireEditAccess(authCookieHelper.readSessionToken(request));
         return wikiApplicationService.listAssets(path);
     }
 
     @PostMapping(value = "/pages/assets", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public WikiAsset uploadAsset(@RequestParam(name = "path") String path, @RequestPart("file") MultipartFile file) throws IOException {
+    public WikiAsset uploadAsset(@RequestParam(name = "path") String path, @RequestPart("file") MultipartFile file, HttpServletRequest request) throws IOException {
+        authService.requireEditAccess(authCookieHelper.readSessionToken(request));
         return wikiApplicationService.uploadAsset(path, file.getOriginalFilename(), file.getContentType(), file.getInputStream());
     }
 
     @PutMapping("/pages/assets/rename")
-    public WikiAsset renameAsset(@RequestParam(name = "path") String path, @Valid @RequestBody RenameAssetPayload payload) {
+    public WikiAsset renameAsset(@RequestParam(name = "path") String path, @Valid @RequestBody RenameAssetPayload payload, HttpServletRequest request) {
+        authService.requireEditAccess(authCookieHelper.readSessionToken(request));
         return wikiApplicationService.renameAsset(path, payload.getOldName(), payload.getNewName());
     }
 
     @DeleteMapping("/pages/assets")
-    public void deleteAsset(@RequestParam(name = "path") String path, @RequestParam(name = "name") String name) {
+    public void deleteAsset(@RequestParam(name = "path") String path, @RequestParam(name = "name") String name, HttpServletRequest request) {
+        authService.requireEditAccess(authCookieHelper.readSessionToken(request));
         wikiApplicationService.deleteAsset(path, name);
     }
 

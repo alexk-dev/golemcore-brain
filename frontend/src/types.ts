@@ -1,4 +1,18 @@
 export type WikiNodeKind = 'ROOT' | 'SECTION' | 'PAGE'
+export type UserRole = 'ADMIN' | 'EDITOR' | 'VIEWER'
+
+export interface PublicUserView {
+  id: string
+  username: string
+  email: string
+  role: UserRole
+}
+
+export interface AuthConfig {
+  authDisabled: boolean
+  publicAccess: boolean
+  user: PublicUserView | null
+}
 
 export interface WikiTreeNode {
   id: string
