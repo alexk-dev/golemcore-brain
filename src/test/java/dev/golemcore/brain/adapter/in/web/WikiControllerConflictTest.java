@@ -11,7 +11,6 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -21,7 +20,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
-class WikiControllerHistoryTest {
+class WikiControllerConflictTest {
 
     private static Path storageRoot;
 
@@ -30,7 +29,7 @@ class WikiControllerHistoryTest {
 
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
-        storageRoot = tempDir.resolve("wiki-controller-history-test");
+        storageRoot = tempDir.resolve("wiki-controller-conflict-test");
         registry.add("brain.storage-root", () -> storageRoot.toString());
         registry.add("brain.seed-demo-content", () -> "false");
         registry.add("brain.auth-disabled", () -> "true");
@@ -40,7 +39,7 @@ class WikiControllerHistoryTest {
     private MockMvc mockMvc;
 
     @Test
-    void shouldListAndRestorePageHistory() throws Exception {
+    void shouldRejectStaleSaveAndReturnCurrentPageSnapshot() throws Exception {
         mockMvc.perform(post("/api/pages")
                         .contentType("application/json")
                         .content("""
@@ -67,6 +66,13 @@ class WikiControllerHistoryTest {
                                 """))
                 .andExpect(status().isOk());
 
+        MvcResult originalPage = mockMvc.perform(get("/api/pages/by-path").param("path", "operations/runbook"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.revision").isString())
+                .andReturn();
+
+        String originalRevision = extractField(originalPage.getResponse().getContentAsString(), "revision");
+
         mockMvc.perform(put("/api/page")
                         .param("path", "operations/runbook")
                         .contentType("application/json")
@@ -74,47 +80,32 @@ class WikiControllerHistoryTest {
                                 {
                                   "title": "Runbook v2",
                                   "slug": "runbook",
-                                  "content": "Version two"
+                                  "content": "Version two",
+                                  "revision": "%s"
                                 }
-                                """))
-                .andExpect(status().isOk());
+                                """.formatted(originalRevision)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title", is("Runbook v2")));
 
         mockMvc.perform(put("/api/page")
                         .param("path", "operations/runbook")
                         .contentType("application/json")
                         .content("""
                                 {
-                                  "title": "Runbook v3",
+                                  "title": "Runbook stale",
                                   "slug": "runbook",
-                                  "content": "Version three"
+                                  "content": "Stale overwrite",
+                                  "revision": "%s"
                                 }
-                                """))
-                .andExpect(status().isOk());
-
-        MvcResult historyResult = mockMvc.perform(get("/api/page/history").param("path", "operations/runbook"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(2)))
-                .andExpect(jsonPath("$[0].title", is("Runbook v2")))
-                .andExpect(jsonPath("$[0].author", is("Local editor")))
-                .andExpect(jsonPath("$[0].reason", is("Manual save")))
-                .andExpect(jsonPath("$[1].title", is("Runbook v1")))
-                .andReturn();
-
-        String versionId = extractFirstVersionId(historyResult.getResponse().getContentAsString());
-
-        mockMvc.perform(get("/api/page/history/version")
-                        .param("path", "operations/runbook")
-                        .param("versionId", versionId))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.title", is("Runbook v2")))
-                .andExpect(jsonPath("$.content", is("Version two")))
-                .andExpect(jsonPath("$.author", is("Local editor")))
-                .andExpect(jsonPath("$.reason", is("Manual save")));
-
-        mockMvc.perform(post("/api/page/history/restore")
-                        .param("path", "operations/runbook")
-                        .param("versionId", versionId))
-                .andExpect(status().isOk());
+                                """.formatted(originalRevision)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code", is("PAGE_EDIT_CONFLICT")))
+                .andExpect(jsonPath("$.expectedRevision", is(originalRevision)))
+                .andExpect(jsonPath("$.currentPage.path", is("operations/runbook")))
+                .andExpect(jsonPath("$.currentPage.title", is("Runbook v2")))
+                .andExpect(jsonPath("$.currentPage.content", is("Version two")))
+                .andExpect(jsonPath("$.currentPage.revision").isString())
+                .andExpect(jsonPath("$.currentRevision").isString());
 
         mockMvc.perform(get("/api/pages/by-path").param("path", "operations/runbook"))
                 .andExpect(status().isOk())
@@ -122,8 +113,8 @@ class WikiControllerHistoryTest {
                 .andExpect(jsonPath("$.content", is("Version two")));
     }
 
-    private String extractFirstVersionId(String body) {
-        String marker = "\"id\":\"";
+    private String extractField(String body, String fieldName) {
+        String marker = "\"" + fieldName + "\":\"";
         int startIndex = body.indexOf(marker);
         int valueStart = startIndex + marker.length();
         int valueEnd = body.indexOf('"', valueStart);

@@ -11,4 +11,7 @@ public class WikiPageHistoryVersion {
     String slug;
     String content;
     String recordedAt;
+    String author;
+    String reason;
+    String summary;
 }

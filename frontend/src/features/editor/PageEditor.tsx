@@ -52,6 +52,13 @@ function getPastedFile(event: ReactClipboardEvent<HTMLDivElement>): File | null 
   return event.clipboardData.files[0] ?? null
 }
 
+function formatTimestamp(timestamp?: string) {
+  if (!timestamp) {
+    return 'unknown time'
+  }
+  return new Date(timestamp).toLocaleString()
+}
+
 export function PageEditor() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -61,6 +68,7 @@ export function PageEditor() {
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)
   const [pendingNavigationPath, setPendingNavigationPath] = useState<string | null>(null)
   const [showMetadataPanel, setShowMetadataPanel] = useState(false)
+  const [showConflictDialog, setShowConflictDialog] = useState(false)
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'))
 
   const loadPageData = useEditorStore((state) => state.loadPageData)
@@ -75,6 +83,9 @@ export function PageEditor() {
   const setContent = useEditorStore((state) => state.setContent)
   const loading = useEditorStore((state) => state.loading)
   const error = useEditorStore((state) => state.error)
+  const conflict = useEditorStore((state) => state.conflict)
+  const reloadFromConflict = useEditorStore((state) => state.reloadFromConflict)
+  const mergeConflictWithLocalDraft = useEditorStore((state) => state.mergeConflictWithLocalDraft)
   const setActiveNodeId = useTreeStore((state) => state.setActiveNodeId)
   const openAncestorsForPath = useTreeStore((state) => state.openAncestorsForPath)
   const getPageByPath = useTreeStore((state) => state.getPageByPath)
@@ -99,6 +110,12 @@ export function PageEditor() {
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
     return () => observer.disconnect()
   }, [])
+
+  useEffect(() => {
+    if (conflict) {
+      setShowConflictDialog(true)
+    }
+  }, [conflict])
 
   const hasUnsavedChanges =
     page !== null &&
@@ -182,6 +199,18 @@ export function PageEditor() {
     setPendingNavigationPath(null)
   }
 
+  const handleReloadLatest = () => {
+    reloadFromConflict()
+    setShowConflictDialog(false)
+    toast.success('Reloaded the latest saved version')
+  }
+
+  const handleMergeWithLatest = () => {
+    mergeConflictWithLocalDraft()
+    setShowConflictDialog(false)
+    toast.success('Latest version loaded as the new base. Your draft was preserved for manual merge.')
+  }
+
   const handlePaste = async (event: ReactClipboardEvent<HTMLDivElement>) => {
     if (!page) {
       return
@@ -204,7 +233,7 @@ export function PageEditor() {
     return <div className="page-editor__error">Loading page...</div>
   }
 
-  if (error || !page) {
+  if (!page) {
     return <div className="page-editor__error">Error: {error ?? 'Page not found'}</div>
   }
 
@@ -242,6 +271,27 @@ export function PageEditor() {
             </button>
           </div>
         </div>
+        {conflict ? (
+          <div className="mx-6 mt-4 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            Another session saved this page at {formatTimestamp(conflict.updatedAt)}. Your draft is still in the editor.
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" className="action-button-secondary" onClick={() => setShowConflictDialog(true)}>
+                Review conflict
+              </button>
+              <button type="button" className="action-button-secondary" onClick={handleMergeWithLatest}>
+                Merge with latest
+              </button>
+              <button type="button" className="action-button-danger" onClick={handleReloadLatest}>
+                Reload latest
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {error && !conflict ? (
+          <div className="mx-6 mt-4 rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+            {error}
+          </div>
+        ) : null}
         <div className="page-editor__grid">
           <div className="page-editor__form">
             {showMetadataPanel ? (
@@ -314,6 +364,42 @@ export function PageEditor() {
               </button>
               <button type="button" className="action-button-danger" onClick={() => void handleConfirmNavigation()}>
                 Discard changes
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showConflictDialog && conflict ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="surface-card max-h-[90vh] w-full max-w-5xl overflow-auto p-6">
+            <h2 className="mb-2 text-xl font-semibold">Page changed in another session</h2>
+            <p className="mb-4 text-sm text-muted">
+              The latest saved version was updated at {formatTimestamp(conflict.updatedAt)}. Reload it to discard your draft, or rebase your draft onto the latest revision for a manual merge.
+            </p>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-surface-border bg-surface-alt/60 p-4">
+                <div className="mb-2 text-sm font-semibold">Your draft</div>
+                <div className="mb-2 text-xs text-muted">/{(page.parentPath ? `${page.parentPath}/` : '') + slug}</div>
+                <div className="mb-2 text-sm font-medium">{title}</div>
+                <pre className="max-h-80 overflow-auto whitespace-pre-wrap text-xs text-muted">{content || '(empty)'}</pre>
+              </div>
+              <div className="rounded-2xl border border-surface-border bg-surface-alt/60 p-4">
+                <div className="mb-2 text-sm font-semibold">Latest saved version</div>
+                <div className="mb-2 text-xs text-muted">/{conflict.path}</div>
+                <div className="mb-2 text-sm font-medium">{conflict.title}</div>
+                <pre className="max-h-80 overflow-auto whitespace-pre-wrap text-xs text-muted">{conflict.content || '(empty)'}</pre>
+              </div>
+            </div>
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <button type="button" className="action-button-secondary" onClick={() => setShowConflictDialog(false)}>
+                Stay on draft
+              </button>
+              <button type="button" className="action-button-secondary" onClick={handleMergeWithLatest}>
+                Merge with latest
+              </button>
+              <button type="button" className="action-button-danger" onClick={handleReloadLatest}>
+                Reload latest
               </button>
             </div>
           </div>

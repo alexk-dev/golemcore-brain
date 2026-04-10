@@ -23,7 +23,7 @@ public interface WikiRepository {
 
     WikiPageDocument createPage(String parentPath, String title, String slug, String content, dev.golemcore.brain.domain.WikiNodeKind kind);
 
-    WikiPageDocument updatePage(String path, String title, String slug, String content);
+    WikiPageDocument updatePage(String path, String title, String slug, String content, String expectedRevision, String actor, String reason, String summary);
 
     void deletePage(String path);
 
@@ -37,7 +37,9 @@ public interface WikiRepository {
 
     List<WikiPageHistoryEntry> listPageHistory(String path);
 
-    WikiPageDocument restorePageVersion(String path, String versionId);
+    WikiPageDocument restorePageVersion(String path, String versionId, String actor, String reason, String summary);
+
+    dev.golemcore.brain.domain.WikiPageHistoryVersion readPageHistoryVersion(String path, String versionId);
 
     List<WikiAsset> listAssets(String path);
 

@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useMemo } from 'react'
 
-import { pathToRoute } from '../../lib/paths'
+import { editorPathToRoute, pathToRoute } from '../../lib/paths'
 import { useTreeStore } from '../../stores/tree'
 import { useUiStore } from '../../stores/ui'
 import { LinkInfo } from '../links/LinkInfo'
@@ -28,6 +28,7 @@ export function PageViewer() {
   const isDark = useUiStore((state) => state.isDark)
   const authDisabled = useUiStore((state) => state.authDisabled)
   const currentUser = useUiStore((state) => state.currentUser)
+  const canEdit = authDisabled || currentUser?.role === 'ADMIN' || currentUser?.role === 'EDITOR'
 
   const currentPath = useMemo(
     () => normalizeWikiPath(location.pathname),
@@ -113,6 +114,11 @@ export function PageViewer() {
           <span className="page-viewer__metadata-item">
             Updated {new Date(page.updatedAt).toLocaleString()}
           </span>
+          {canEdit ? (
+            <Link to={editorPathToRoute(page.path)} className="action-button-secondary">
+              Edit page
+            </Link>
+          ) : null}
         </div>
       </div>
       <div className="page-viewer__body">

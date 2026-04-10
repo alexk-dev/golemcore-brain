@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -61,6 +61,7 @@ vi.mock('./lib/api', () => ({
     outgoings: [],
     brokenOutgoings: [],
   })),
+  getPageHistoryVersion: vi.fn(),
   getSearchStatus: vi.fn(async () => ({
     mode: 'live-scan',
     ready: true,
@@ -99,7 +100,7 @@ describe('App', () => {
       mustOpenNodeIdSet: {},
       suggestedOpenNodeIdSet: {},
     })
-    useViewerStore.setState({ page: null, linkStatus: null, loading: false, error: null })
+    useViewerStore.setState({ page: null, linkStatus: null, history: [], loading: false, error: null })
     useEditorStore.setState({
       page: null,
       initialPage: null,
@@ -132,5 +133,29 @@ describe('App', () => {
     })
 
     expect(screen.getByText('Tree')).toBeInTheDocument()
+  })
+
+  it('supports viewer and shell keyboard shortcuts', async () => {
+    render(
+      <MemoryRouter initialEntries={['/guides']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Tree')).toBeInTheDocument()
+    })
+
+    fireEvent.keyDown(window, { key: 'E', ctrlKey: true, shiftKey: true })
+
+    await waitFor(() => {
+      expect(screen.queryByText('Tree')).not.toBeInTheDocument()
+    })
+
+    fireEvent.keyDown(window, { key: 'e', ctrlKey: true })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Close editor' })).toBeInTheDocument()
+    })
   })
 })

@@ -4,6 +4,7 @@ import dev.golemcore.brain.adapter.in.web.auth.AuthCookieHelper;
 import dev.golemcore.brain.adapter.in.web.dto.CopyPagePayload;
 import dev.golemcore.brain.adapter.in.web.dto.CreatePagePayload;
 import dev.golemcore.brain.adapter.in.web.dto.EnsurePagePayload;
+import dev.golemcore.brain.adapter.in.web.dto.MarkdownImportOptionsPayload;
 import dev.golemcore.brain.adapter.in.web.dto.MovePagePayload;
 import dev.golemcore.brain.adapter.in.web.dto.RenameAssetPayload;
 import dev.golemcore.brain.adapter.in.web.dto.SortChildrenPayload;
@@ -18,10 +19,12 @@ import dev.golemcore.brain.domain.WikiImportPlanResponse;
 import dev.golemcore.brain.domain.WikiLinkStatus;
 import dev.golemcore.brain.domain.WikiPage;
 import dev.golemcore.brain.domain.WikiPageHistoryEntry;
+import dev.golemcore.brain.domain.WikiPageHistoryVersion;
 import dev.golemcore.brain.domain.WikiPathLookupResult;
 import dev.golemcore.brain.domain.WikiSearchHit;
 import dev.golemcore.brain.domain.WikiSearchStatus;
 import dev.golemcore.brain.domain.WikiTreeNode;
+import dev.golemcore.brain.domain.auth.AuthContext;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.io.IOException;
@@ -76,10 +79,15 @@ public class WikiController {
         return wikiApplicationService.getPageHistory(path);
     }
 
+    @GetMapping("/page/history/version")
+    public WikiPageHistoryVersion getPageHistoryVersion(@RequestParam(name = "path") String path, @RequestParam(name = "versionId") String versionId) {
+        return wikiApplicationService.getPageHistoryVersion(path, versionId);
+    }
+
     @PostMapping("/page/history/restore")
     public WikiPage restorePageHistory(@RequestParam(name = "path") String path, @RequestParam(name = "versionId") String versionId, HttpServletRequest request) {
         authService.requireEditAccess(authCookieHelper.readSessionToken(request));
-        return wikiApplicationService.restorePageHistory(path, versionId);
+        return wikiApplicationService.restorePageHistory(path, versionId, resolveActor(request));
     }
 
     @PostMapping("/pages")
@@ -113,6 +121,8 @@ public class WikiController {
                 .title(payload.getTitle())
                 .slug(payload.getSlug())
                 .content(payload.getContent())
+                .expectedRevision(payload.getRevision())
+                .actor(resolveActor(request))
                 .build());
     }
 
@@ -164,13 +174,33 @@ public class WikiController {
     }
 
     @PostMapping(value = "/import/markdown/plan", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public WikiImportPlanResponse planMarkdownImport(@RequestPart("file") MultipartFile file) throws IOException {
-        return wikiApplicationService.planMarkdownImport(file.getInputStream());
+    public WikiImportPlanResponse planMarkdownImport(
+            @RequestPart("file") MultipartFile file,
+            @RequestPart(name = "options", required = false) MarkdownImportOptionsPayload options) throws IOException {
+        MarkdownImportOptionsPayload resolvedOptions = options == null ? new MarkdownImportOptionsPayload() : options;
+        return wikiApplicationService.planMarkdownImport(file.getInputStream(), WikiApplicationService.ImportPlanCommand.builder()
+                .targetRootPath(resolvedOptions.getTargetRootPath())
+                .build());
     }
 
     @PostMapping(value = "/import/markdown/apply", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public WikiImportApplyResponse applyMarkdownImport(@RequestPart("file") MultipartFile file) throws IOException {
-        return wikiApplicationService.applyMarkdownImport(file.getInputStream());
+    public WikiImportApplyResponse applyMarkdownImport(
+            @RequestPart("file") MultipartFile file,
+            @RequestPart(name = "options", required = false) MarkdownImportOptionsPayload options,
+            HttpServletRequest request) throws IOException {
+        authService.requireEditAccess(authCookieHelper.readSessionToken(request));
+        MarkdownImportOptionsPayload resolvedOptions = options == null ? new MarkdownImportOptionsPayload() : options;
+        return wikiApplicationService.applyMarkdownImport(file.getInputStream(), WikiApplicationService.ImportApplyCommand.builder()
+                .targetRootPath(resolvedOptions.getTargetRootPath())
+                .items(resolvedOptions.getItems().stream()
+                        .map(item -> WikiApplicationService.ImportSelectionCommand.builder()
+                                .sourcePath(item.getSourcePath())
+                                .selected(item.isSelected())
+                                .policy(item.getPolicy())
+                                .build())
+                        .toList())
+                .actor(resolveActor(request))
+                .build());
     }
 
     @GetMapping("/links")
@@ -210,5 +240,13 @@ public class WikiController {
                 .contentLength(assetContent.getSize())
                 .contentType(MediaType.parseMediaType(assetContent.getContentType()))
                 .body(new InputStreamResource(assetContent.getInputStream()));
+    }
+
+    private String resolveActor(HttpServletRequest request) {
+        AuthContext authContext = authService.requireContext(authCookieHelper.readSessionToken(request));
+        if (authContext.getUser() == null || authContext.getUser().getUsername() == null || authContext.getUser().getUsername().isBlank()) {
+            return "Local editor";
+        }
+        return authContext.getUser().getUsername();
     }
 }

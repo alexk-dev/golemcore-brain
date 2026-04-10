@@ -1,10 +1,21 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 
 import { ImportPage } from './ImportPage'
+import { useTreeStore } from '../../stores/tree'
 
 const planMarkdownImportMock = vi.fn()
 const applyMarkdownImportMock = vi.fn()
+const navigateMock = vi.fn()
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
+  return {
+    ...actual,
+    useNavigate: () => navigateMock,
+  }
+})
 
 vi.mock('../../lib/api', () => ({
   planMarkdownImport: (...args: unknown[]) => planMarkdownImportMock(...args),
@@ -20,10 +31,18 @@ vi.mock('sonner', () => ({
 
 describe('ImportPage', () => {
   it('previews and applies a markdown zip import', async () => {
+    useTreeStore.setState({
+      reloadTree: vi.fn(async () => undefined),
+    })
     planMarkdownImportMock.mockResolvedValue({
+      targetRootPath: 'knowledge',
+      createCount: 2,
+      updateCount: 0,
+      skipCount: 0,
+      warnings: [],
       items: [
-        { path: 'guides', title: 'Guides', kind: 'SECTION', action: 'CREATE', implicitSection: false, sourcePath: 'guides/index.md' },
-        { path: 'guides/setup', title: 'Setup', kind: 'PAGE', action: 'CREATE', implicitSection: false, sourcePath: 'guides/setup.md' },
+        { path: 'knowledge/guides', title: 'Guides', kind: 'SECTION', action: 'CREATE', policy: 'OVERWRITE', implicitSection: false, existing: false, selected: true, sourcePath: 'guides/index.md', note: 'Create' },
+        { path: 'knowledge/guides/setup', title: 'Setup', kind: 'PAGE', action: 'CREATE', policy: 'OVERWRITE', implicitSection: false, existing: false, selected: true, sourcePath: 'guides/setup.md', note: 'Create' },
       ],
     })
     applyMarkdownImportMock.mockResolvedValue({
@@ -31,27 +50,43 @@ describe('ImportPage', () => {
       createdCount: 2,
       updatedCount: 0,
       skippedCount: 0,
+      importedRootPath: 'knowledge/guides',
+      warnings: [],
       items: [],
     })
 
-    render(<ImportPage />)
+    render(
+      <MemoryRouter>
+        <ImportPage />
+      </MemoryRouter>,
+    )
 
     const file = new File(['zip-bytes'], 'docs.zip', { type: 'application/zip' })
     fireEvent.change(screen.getByLabelText(/Archive file/i), {
       target: { files: [file] },
     })
+    fireEvent.change(screen.getByLabelText(/Target root path/i), {
+      target: { value: 'knowledge' },
+    })
 
     fireEvent.click(screen.getByRole('button', { name: /Preview import/i }))
 
     await waitFor(() => {
-      expect(screen.getByText('guides/setup')).toBeInTheDocument()
+      expect(screen.getByText('knowledge/guides/setup')).toBeInTheDocument()
     })
 
     fireEvent.click(screen.getByRole('button', { name: /Apply import/i }))
 
     await waitFor(() => {
-      expect(applyMarkdownImportMock).toHaveBeenCalledWith(file)
+      expect(applyMarkdownImportMock).toHaveBeenCalledWith(file, {
+        targetRootPath: 'knowledge',
+        items: [
+          { sourcePath: 'guides/index.md', selected: true, policy: 'OVERWRITE' },
+          { sourcePath: 'guides/setup.md', selected: true, policy: 'OVERWRITE' },
+        ],
+      })
     })
     expect(screen.getByText(/Imported 2 item/i)).toBeInTheDocument()
+    expect(navigateMock).toHaveBeenCalledWith('/knowledge/guides')
   })
 })
