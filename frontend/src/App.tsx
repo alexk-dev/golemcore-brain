@@ -1,7 +1,9 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 
+import { AccountPage } from './features/account/AccountPage'
 import { LoginPage } from './features/auth/LoginPage'
 import { PageEditor } from './features/editor/PageEditor'
+import { ImportPage } from './features/import/ImportPage'
 import { AccessDeniedPage } from './features/page/AccessDeniedPage'
 import { UserManagementPage } from './features/users/UserManagementPage'
 import { PageViewer } from './features/viewer/PageViewer'
@@ -16,14 +18,34 @@ function App() {
   const canEdit = authDisabled || currentUser?.role === 'ADMIN' || currentUser?.role === 'EDITOR'
   const canView = authDisabled || publicAccess || currentUser !== null
   const canManageUsers = authDisabled || currentUser?.role === 'ADMIN'
+  const canAccessAccount = authDisabled || currentUser !== null
+  const needsLoginForEdit = !authDisabled && currentUser === null
 
   return (
     <WikiShell>
       <Routes>
         <Route path="/login" element={authDisabled ? <Navigate to="/" replace /> : <LoginPage />} />
+        <Route path="/account" element={canAccessAccount ? <AccountPage /> : <Navigate to="/login" replace />} />
         <Route path="/users" element={canManageUsers ? <UserManagementPage /> : <Navigate to="/" replace />} />
+        <Route path="/import" element={canEdit ? <ImportPage /> : <Navigate to="/" replace />} />
         <Route path="/" element={canView ? <PageViewer /> : <Navigate to="/login" replace />} />
-        <Route path="/e/*" element={canEdit ? <PageEditor /> : <AccessDeniedPage />} />
+        <Route
+          path="/e/*"
+          element={
+            canEdit ? (
+              <PageEditor />
+            ) : needsLoginForEdit ? (
+              <AccessDeniedPage
+                title="Sign in required"
+                message="You must sign in with an editor account to edit pages."
+                ctaLabel="Sign in to edit"
+                ctaTo="/login"
+              />
+            ) : (
+              <AccessDeniedPage />
+            )
+          }
+        />
         <Route path="*" element={canView ? <PageViewer /> : <Navigate to="/login" replace />} />
         <Route path="" element={<Navigate to="/" replace />} />
       </Routes>

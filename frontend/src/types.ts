@@ -1,5 +1,6 @@
 export type WikiNodeKind = 'ROOT' | 'SECTION' | 'PAGE'
 export type UserRole = 'ADMIN' | 'EDITOR' | 'VIEWER'
+export type WikiImportAction = 'CREATE' | 'UPDATE'
 
 export interface PublicUserView {
   id: string
@@ -12,6 +13,13 @@ export interface AuthConfig {
   authDisabled: boolean
   publicAccess: boolean
   user: PublicUserView | null
+}
+
+export interface UpdateUserPayload {
+  username: string
+  email: string
+  password?: string
+  role: UserRole
 }
 
 export interface WikiTreeNode {
@@ -38,6 +46,13 @@ export interface WikiPage {
   children: WikiTreeNode[]
 }
 
+export interface WikiPageHistoryEntry {
+  id: string
+  title: string
+  slug: string
+  recordedAt: string
+}
+
 export interface WikiSearchHit {
   id: string
   path: string
@@ -45,6 +60,34 @@ export interface WikiSearchHit {
   excerpt: string
   parentPath: string | null
   kind: WikiNodeKind
+}
+
+export interface WikiSearchStatus {
+  mode: string
+  ready: boolean
+  indexedDocuments: number
+  lastUpdatedAt: string
+}
+
+export interface WikiImportItem {
+  path: string
+  title: string
+  kind: WikiNodeKind
+  action: WikiImportAction
+  implicitSection: boolean
+  sourcePath: string
+}
+
+export interface WikiImportPlanResponse {
+  items: WikiImportItem[]
+}
+
+export interface WikiImportApplyResponse {
+  importedCount: number
+  createdCount: number
+  updatedCount: number
+  skippedCount: number
+  items: WikiImportItem[]
 }
 
 export interface WikiConfig {

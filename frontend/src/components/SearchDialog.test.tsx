@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { WikiTreeNode } from '../types'
@@ -23,6 +24,12 @@ vi.mock('../lib/api', () => ({
       kind: 'PAGE',
     },
   ]),
+  getSearchStatus: vi.fn(async () => ({
+    mode: 'live-scan',
+    ready: true,
+    indexedDocuments: 2,
+    lastUpdatedAt: '2026-01-01T00:00:00Z',
+  })),
 }))
 
 const tree: WikiTreeNode = {
@@ -60,5 +67,41 @@ describe('SearchDialog', () => {
     fireEvent.keyDown(input, { key: 'Enter' })
 
     expect(navigated.length).toBe(1)
+  })
+
+  it('renders as an embedded search pane without modal chrome', async () => {
+    render(
+      <SearchDialog
+        open={true}
+        tree={tree}
+        embedded={true}
+        onOpenChange={() => undefined}
+        onNavigate={() => undefined}
+      />,
+    )
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Search documentation, runbooks, and notes')).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(screen.getByText(/Search mode: live-scan/i)).toBeInTheDocument()
+    })
+  })
+
+  it('shows live search status details', async () => {
+    render(
+      <SearchDialog
+        open={true}
+        tree={tree}
+        embedded={true}
+        onOpenChange={() => undefined}
+        onNavigate={() => undefined}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText(/Search mode: live-scan/i)).toBeInTheDocument()
+    })
+    expect(screen.getByText(/2 documents indexed/i)).toBeInTheDocument()
   })
 })

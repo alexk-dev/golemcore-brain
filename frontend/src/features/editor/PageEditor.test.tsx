@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -7,6 +7,9 @@ import { useEditorStore } from '../../stores/editor'
 import { useTreeStore } from '../../stores/tree'
 
 const navigateMock = vi.fn()
+const uploadAssetMock = vi.fn()
+const setContentMock = vi.fn()
+const savePageMock = vi.fn()
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
@@ -17,6 +20,14 @@ vi.mock('react-router-dom', async () => {
   }
 })
 
+vi.mock('../../lib/api', async () => {
+  const actual = await vi.importActual<typeof import('../../lib/api')>('../../lib/api')
+  return {
+    ...actual,
+    uploadAsset: (...args: unknown[]) => uploadAssetMock(...args),
+  }
+})
+
 vi.mock('../assets/AssetManagerDialog', () => ({
   AssetManagerDialog: () => null,
 }))
@@ -24,6 +35,9 @@ vi.mock('../assets/AssetManagerDialog', () => ({
 describe('PageEditor', () => {
   beforeEach(() => {
     navigateMock.mockReset()
+    uploadAssetMock.mockReset()
+    setContentMock.mockReset()
+    savePageMock.mockReset()
     const treeNode = {
       id: 'guides/runbook',
       path: 'guides/runbook',
@@ -43,6 +57,9 @@ describe('PageEditor', () => {
       byPath: { 'guides/runbook': treeNode },
       byId: { 'guides/runbook': treeNode },
       flatPages: [treeNode],
+      manualNodeStateById: {},
+      mustOpenNodeIdSet: {},
+      suggestedOpenNodeIdSet: {},
       reloadTree: async () => undefined,
       toggleNode: () => undefined,
       openNode: () => undefined,
@@ -83,21 +100,22 @@ describe('PageEditor', () => {
       loading: false,
       error: null,
       loadPageData: async () => undefined,
-      savePage: async () => ({
-        id: 'guides/runbook',
-        path: 'guides/runbook',
-        parentPath: 'guides',
-        title: 'Runbook',
-        slug: 'runbook',
-        kind: 'PAGE',
-        content: 'Updated content',
-        createdAt: '2026-01-01T00:00:00Z',
-        updatedAt: '2026-01-01T00:00:00Z',
-        children: [],
-      }),
+      savePage: savePageMock,
       setTitle: () => undefined,
       setSlug: () => undefined,
-      setContent: () => undefined,
+      setContent: setContentMock,
+    })
+    savePageMock.mockResolvedValue({
+      id: 'guides/runbook',
+      path: 'guides/runbook',
+      parentPath: 'guides',
+      title: 'Runbook',
+      slug: 'runbook',
+      kind: 'PAGE',
+      content: 'Updated content',
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+      children: [],
     })
   })
 
@@ -116,5 +134,44 @@ describe('PageEditor', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close editor' }))
     expect(screen.getByText('Unsaved changes')).toBeInTheDocument()
     expect(navigateMock).not.toHaveBeenCalledWith('/guides/runbook')
+  })
+
+  it('uploads pasted image assets into the current page', async () => {
+    const file = new File(['image-bytes'], 'pasted-image.png', { type: 'image/png' })
+    uploadAssetMock.mockResolvedValue({
+      name: 'pasted-image.png',
+      path: '/api/assets?path=guides/runbook&name=pasted-image.png',
+      size: 1024,
+      contentType: 'image/png',
+    })
+
+    const { container } = render(
+      <MemoryRouter>
+        <PageEditor />
+      </MemoryRouter>,
+    )
+
+    const editor = container.querySelector('.markdown-code-editor')
+    expect(editor).not.toBeNull()
+
+    fireEvent.paste(editor as Element, {
+      clipboardData: {
+        files: [file],
+        items: [
+          {
+            kind: 'file',
+            type: 'image/png',
+            getAsFile: () => file,
+          },
+        ],
+      },
+    })
+
+    await waitFor(() => {
+      expect(uploadAssetMock).toHaveBeenCalledWith('guides/runbook', file)
+    })
+    await waitFor(() => {
+      expect(setContentMock).toHaveBeenCalled()
+    })
   })
 })

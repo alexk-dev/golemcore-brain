@@ -6,30 +6,43 @@ import dev.golemcore.brain.config.WikiProperties;
 import dev.golemcore.brain.domain.WikiAsset;
 import dev.golemcore.brain.domain.WikiAssetContent;
 import dev.golemcore.brain.domain.WikiConfigResponse;
+import dev.golemcore.brain.domain.WikiImportAction;
+import dev.golemcore.brain.domain.WikiImportApplyResponse;
+import dev.golemcore.brain.domain.WikiImportItem;
+import dev.golemcore.brain.domain.WikiImportPlanResponse;
 import dev.golemcore.brain.domain.WikiLinkStatus;
 import dev.golemcore.brain.domain.WikiLinkStatusItem;
 import dev.golemcore.brain.domain.WikiNodeKind;
 import dev.golemcore.brain.domain.WikiNodeReference;
 import dev.golemcore.brain.domain.WikiPage;
 import dev.golemcore.brain.domain.WikiPageDocument;
+import dev.golemcore.brain.domain.WikiPageHistoryEntry;
 import dev.golemcore.brain.domain.WikiPathLookupResult;
 import dev.golemcore.brain.domain.WikiPathLookupSegment;
 import dev.golemcore.brain.domain.WikiSearchDocument;
 import dev.golemcore.brain.domain.WikiSearchHit;
+import dev.golemcore.brain.domain.WikiSearchStatus;
 import dev.golemcore.brain.domain.WikiTreeNode;
 import jakarta.annotation.PostConstruct;
+import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 import lombok.Builder;
 import lombok.RequiredArgsConstructor;
 import lombok.Value;
@@ -68,6 +81,14 @@ public class WikiApplicationService {
         WikiNodeReference nodeReference = wikiRepository.findReference(path)
                 .orElseThrow(() -> new WikiNotFoundException("Page not found: " + normalizePath(path)));
         return toPage(nodeReference);
+    }
+
+    public List<WikiPageHistoryEntry> getPageHistory(String path) {
+        return wikiRepository.listPageHistory(path);
+    }
+
+    public WikiPage restorePageHistory(String path, String versionId) {
+        return toPageDocument(wikiRepository.restorePageVersion(path, versionId));
     }
 
     public WikiPage createPage(CreatePageCommand command) {
@@ -152,6 +173,64 @@ public class WikiApplicationService {
                         .kind(document.getKind())
                         .build())
                 .toList();
+    }
+
+    public WikiSearchStatus getSearchStatus() {
+        List<WikiNodeReference> references = wikiRepository.flatten();
+        Instant lastUpdatedAt = references.stream()
+                .map(wikiRepository::readDocument)
+                .map(WikiPageDocument::getUpdatedAt)
+                .max(Instant::compareTo)
+                .orElse(Instant.now());
+        return WikiSearchStatus.builder()
+                .mode("live-scan")
+                .ready(true)
+                .indexedDocuments(references.size())
+                .lastUpdatedAt(DATE_TIME_FORMATTER.format(lastUpdatedAt))
+                .build();
+    }
+
+    public WikiImportPlanResponse planMarkdownImport(InputStream inputStream) {
+        List<ImportEntry> entries = readImportEntries(inputStream);
+        return WikiImportPlanResponse.builder()
+                .items(entries.stream().map(this::toImportItem).toList())
+                .build();
+    }
+
+    public WikiImportApplyResponse applyMarkdownImport(InputStream inputStream) {
+        List<ImportEntry> entries = readImportEntries(inputStream);
+        List<WikiImportItem> items = new ArrayList<>();
+        int createdCount = 0;
+        int updatedCount = 0;
+        for (ImportEntry entry : entries) {
+            WikiImportItem item = toImportItem(entry);
+            items.add(item);
+            if (item.getAction() == WikiImportAction.CREATE) {
+                createPage(CreatePageCommand.builder()
+                        .parentPath(entry.getParentPath())
+                        .title(entry.getTitle())
+                        .slug(entry.getSlug())
+                        .content(entry.getBody())
+                        .kind(entry.getKind())
+                        .build());
+                createdCount++;
+            } else {
+                updatePage(UpdatePageCommand.builder()
+                        .path(entry.getPath())
+                        .title(entry.getTitle())
+                        .slug(entry.getSlug())
+                        .content(entry.getBody())
+                        .build());
+                updatedCount++;
+            }
+        }
+        return WikiImportApplyResponse.builder()
+                .importedCount(items.size())
+                .createdCount(createdCount)
+                .updatedCount(updatedCount)
+                .skippedCount(0)
+                .items(items)
+                .build();
     }
 
     public WikiLinkStatus getLinkStatus(String path) {
@@ -267,6 +346,129 @@ public class WikiApplicationService {
         return wikiRepository.openAsset(path, assetName);
     }
 
+    private List<ImportEntry> readImportEntries(InputStream inputStream) {
+        try {
+            Map<String, ImportEntry> entryByPath = new LinkedHashMap<>();
+            Set<String> sectionPaths = new LinkedHashSet<>();
+            ZipInputStream zipInputStream = new ZipInputStream(inputStream, StandardCharsets.UTF_8);
+            ZipEntry zipEntry;
+            while ((zipEntry = zipInputStream.getNextEntry()) != null) {
+                if (zipEntry.isDirectory() || !zipEntry.getName().endsWith(".md")) {
+                    continue;
+                }
+                String normalizedEntryPath = normalizeArchiveEntryPath(zipEntry.getName());
+                if (normalizedEntryPath.isBlank()) {
+                    continue;
+                }
+                String markdown = new String(zipInputStream.readAllBytes(), StandardCharsets.UTF_8);
+                ImportEntry entry = toImportEntry(normalizedEntryPath, markdown);
+                entryByPath.put(entry.getPath(), entry);
+                if (entry.getKind() == WikiNodeKind.SECTION) {
+                    sectionPaths.add(entry.getPath());
+                }
+                String parentPath = entry.getParentPath();
+                while (parentPath != null && !parentPath.isBlank()) {
+                    sectionPaths.add(parentPath);
+                    parentPath = parentPath.contains("/") ? parentPath.substring(0, parentPath.lastIndexOf('/')) : "";
+                }
+            }
+
+            for (String sectionPath : sectionPaths) {
+                if (entryByPath.containsKey(sectionPath)) {
+                    continue;
+                }
+                String slug = sectionPath.substring(sectionPath.lastIndexOf('/') + 1);
+                entryByPath.put(sectionPath, ImportEntry.builder()
+                        .path(sectionPath)
+                        .parentPath(sectionPath.contains("/") ? sectionPath.substring(0, sectionPath.lastIndexOf('/')) : "")
+                        .slug(slug)
+                        .title(humanizePath(slug))
+                        .body("")
+                        .kind(WikiNodeKind.SECTION)
+                        .implicitSection(true)
+                        .sourcePath(sectionPath + "/index.md")
+                        .build());
+            }
+
+            return entryByPath.values().stream()
+                    .sorted((left, right) -> {
+                        int depthCompare = Integer.compare(left.getPath().split("/").length, right.getPath().split("/").length);
+                        if (depthCompare != 0) {
+                            return depthCompare;
+                        }
+                        return left.getPath().compareTo(right.getPath());
+                    })
+                    .toList();
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to read markdown import archive", exception);
+        }
+    }
+
+    private ImportEntry toImportEntry(String archivePath, String markdown) {
+        boolean isSection = archivePath.endsWith("/index.md");
+        String normalizedPath = isSection
+                ? archivePath.substring(0, archivePath.length() - "/index.md".length())
+                : archivePath.substring(0, archivePath.length() - ".md".length());
+        String parentPath = normalizedPath.contains("/") ? normalizedPath.substring(0, normalizedPath.lastIndexOf('/')) : "";
+        String slug = normalizedPath.contains("/") ? normalizedPath.substring(normalizedPath.lastIndexOf('/') + 1) : normalizedPath;
+        String title = extractTitle(markdown, humanizePath(slug));
+        String body = extractBody(markdown);
+        return ImportEntry.builder()
+                .path(normalizedPath)
+                .parentPath(parentPath)
+                .slug(slug)
+                .title(title)
+                .body(body)
+                .kind(isSection ? WikiNodeKind.SECTION : WikiNodeKind.PAGE)
+                .implicitSection(false)
+                .sourcePath(archivePath)
+                .build();
+    }
+
+    private WikiImportItem toImportItem(ImportEntry entry) {
+        WikiImportAction action = wikiRepository.findReference(entry.getPath()).isPresent()
+                ? WikiImportAction.UPDATE
+                : WikiImportAction.CREATE;
+        return WikiImportItem.builder()
+                .path(entry.getPath())
+                .title(entry.getTitle())
+                .kind(entry.getKind())
+                .action(action)
+                .implicitSection(entry.isImplicitSection())
+                .sourcePath(entry.getSourcePath())
+                .build();
+    }
+
+    private String normalizeArchiveEntryPath(String archivePath) {
+        String normalized = archivePath.replace('\\', '/').trim();
+        while (normalized.startsWith("./")) {
+            normalized = normalized.substring(2);
+        }
+        if (normalized.startsWith("/") || normalized.contains("..")) {
+            throw new IllegalArgumentException("Invalid archive entry path");
+        }
+        return normalized;
+    }
+
+    private String extractTitle(String markdown, String fallbackTitle) {
+        String[] lines = markdown.split("\\R", -1);
+        if (lines.length > 0 && lines[0].startsWith("# ")) {
+            String title = lines[0].substring(2).trim();
+            if (!title.isBlank()) {
+                return title;
+            }
+        }
+        return fallbackTitle;
+    }
+
+    private String extractBody(String markdown) {
+        String[] lines = markdown.split("\\R", -1);
+        if (lines.length > 0 && lines[0].startsWith("# ")) {
+            return Arrays.stream(lines).skip(2).collect(Collectors.joining("\n")).strip();
+        }
+        return markdown.strip();
+    }
+
     private WikiTreeNode toTreeNode(WikiNodeReference nodeReference) {
         WikiPageDocument document = wikiRepository.readDocument(nodeReference);
         List<WikiTreeNode> children = nodeReference.getKind() == WikiNodeKind.PAGE
@@ -286,16 +488,22 @@ public class WikiApplicationService {
 
     private WikiPage toPage(WikiNodeReference nodeReference) {
         WikiPageDocument document = wikiRepository.readDocument(nodeReference);
+        return toPageDocument(document);
+    }
+
+    private WikiPage toPageDocument(WikiPageDocument document) {
+        WikiNodeReference nodeReference = wikiRepository.findReference(document.getPath())
+                .orElseThrow(() -> new WikiNotFoundException("Page not found: " + document.getPath()));
         List<WikiTreeNode> children = nodeReference.getKind() == WikiNodeKind.PAGE
                 ? List.of()
                 : wikiRepository.listChildren(nodeReference).stream().map(this::toTreeNode).toList();
         return WikiPage.builder()
-                .id(nodeReference.getId())
-                .path(nodeReference.getPath())
-                .parentPath(nodeReference.getParentPath())
+                .id(document.getId())
+                .path(document.getPath())
+                .parentPath(document.getParentPath())
                 .title(document.getTitle())
-                .slug(nodeReference.getSlug())
-                .kind(nodeReference.getKind())
+                .slug(document.getSlug())
+                .kind(document.getKind())
                 .content(document.getBody())
                 .createdAt(DATE_TIME_FORMATTER.format(document.getCreatedAt()))
                 .updatedAt(DATE_TIME_FORMATTER.format(document.getUpdatedAt()))
@@ -372,6 +580,19 @@ public class WikiApplicationService {
     @Builder
     private static class ResolvedLink {
         String targetPath;
+    }
+
+    @Value
+    @Builder
+    private static class ImportEntry {
+        String path;
+        String parentPath;
+        String slug;
+        String title;
+        String body;
+        WikiNodeKind kind;
+        boolean implicitSection;
+        String sourcePath;
     }
 
     @Value

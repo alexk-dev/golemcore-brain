@@ -6,6 +6,7 @@ import { oneDark } from '@codemirror/theme-one-dark'
 import { EditorView, keymap } from '@codemirror/view'
 import { githubLight } from '@fsegurai/codemirror-theme-github-light'
 import { useEffect, useRef, useState } from 'react'
+import type { ClipboardEventHandler, RefObject } from 'react'
 
 import { useTreeStore } from '../../stores/tree'
 
@@ -17,7 +18,8 @@ interface MarkdownCodeEditorProps {
   value: string
   darkMode: boolean
   onChange: (value: string) => void
-  editorViewRef: React.RefObject<EditorView | null>
+  editorViewRef: RefObject<EditorView | null>
+  onPaste?: ClipboardEventHandler<HTMLDivElement>
 }
 
 function getLinkTargetRange(context: CompletionContext) {
@@ -82,6 +84,7 @@ export function MarkdownCodeEditor({
   darkMode,
   onChange,
   editorViewRef,
+  onPaste,
 }: MarkdownCodeEditorProps) {
   const editorRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
@@ -185,5 +188,5 @@ export function MarkdownCodeEditor({
     })
   }, [darkMode, themeCompartment])
 
-  return <div ref={editorRef} className="markdown-code-editor" />
+  return <div ref={editorRef} className="markdown-code-editor" onPaste={onPaste} />
 }

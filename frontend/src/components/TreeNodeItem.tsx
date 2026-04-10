@@ -8,6 +8,7 @@ interface TreeNodeItemProps {
   node: WikiTreeNode
   activePath: string
   openPaths: string[]
+  canCreate: boolean
   depth?: number
   onNavigate: (path: string) => void
   onToggle: (path: string) => void
@@ -18,6 +19,7 @@ export function TreeNodeItem({
   node,
   activePath,
   openPaths,
+  canCreate,
   depth = 0,
   onNavigate,
   onToggle,
@@ -29,6 +31,10 @@ export function TreeNodeItem({
 
   const handleNavigate = (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()
+    if (node.kind !== 'PAGE' && isActive) {
+      onToggle(node.path)
+      return
+    }
     onNavigate(node.path)
   }
 
@@ -69,7 +75,7 @@ export function TreeNodeItem({
           )}
           <span className="truncate">{node.title}</span>
         </button>
-        {node.kind !== 'PAGE' ? (
+        {canCreate && node.kind !== 'PAGE' ? (
           <div className="hidden items-center gap-1 group-hover:flex">
             <button
               type="button"
@@ -98,6 +104,7 @@ export function TreeNodeItem({
               node={childNode}
               activePath={activePath}
               openPaths={openPaths}
+              canCreate={canCreate}
               depth={depth + 1}
               onNavigate={onNavigate}
               onToggle={onToggle}

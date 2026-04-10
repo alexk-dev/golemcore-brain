@@ -13,10 +13,14 @@ import dev.golemcore.brain.application.service.auth.AuthService;
 import dev.golemcore.brain.domain.WikiAsset;
 import dev.golemcore.brain.domain.WikiAssetContent;
 import dev.golemcore.brain.domain.WikiConfigResponse;
+import dev.golemcore.brain.domain.WikiImportApplyResponse;
+import dev.golemcore.brain.domain.WikiImportPlanResponse;
 import dev.golemcore.brain.domain.WikiLinkStatus;
 import dev.golemcore.brain.domain.WikiPage;
+import dev.golemcore.brain.domain.WikiPageHistoryEntry;
 import dev.golemcore.brain.domain.WikiPathLookupResult;
 import dev.golemcore.brain.domain.WikiSearchHit;
+import dev.golemcore.brain.domain.WikiSearchStatus;
 import dev.golemcore.brain.domain.WikiTreeNode;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -65,6 +69,17 @@ public class WikiController {
     @GetMapping("/pages/by-path")
     public WikiPage getPageByPath(@RequestParam(name = "path", defaultValue = "") String path) {
         return wikiApplicationService.getPage(path);
+    }
+
+    @GetMapping("/page/history")
+    public List<WikiPageHistoryEntry> getPageHistory(@RequestParam(name = "path") String path) {
+        return wikiApplicationService.getPageHistory(path);
+    }
+
+    @PostMapping("/page/history/restore")
+    public WikiPage restorePageHistory(@RequestParam(name = "path") String path, @RequestParam(name = "versionId") String versionId, HttpServletRequest request) {
+        authService.requireEditAccess(authCookieHelper.readSessionToken(request));
+        return wikiApplicationService.restorePageHistory(path, versionId);
     }
 
     @PostMapping("/pages")
@@ -141,6 +156,21 @@ public class WikiController {
     @GetMapping("/search")
     public List<WikiSearchHit> search(@RequestParam(name = "q", defaultValue = "") String query) {
         return wikiApplicationService.search(query);
+    }
+
+    @GetMapping("/search/status")
+    public WikiSearchStatus getSearchStatus() {
+        return wikiApplicationService.getSearchStatus();
+    }
+
+    @PostMapping(value = "/import/markdown/plan", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public WikiImportPlanResponse planMarkdownImport(@RequestPart("file") MultipartFile file) throws IOException {
+        return wikiApplicationService.planMarkdownImport(file.getInputStream());
+    }
+
+    @PostMapping(value = "/import/markdown/apply", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public WikiImportApplyResponse applyMarkdownImport(@RequestPart("file") MultipartFile file) throws IOException {
+        return wikiApplicationService.applyMarkdownImport(file.getInputStream());
     }
 
     @GetMapping("/links")

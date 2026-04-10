@@ -2,22 +2,27 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import App from './App'
-import { useEditorStore } from './stores/editor'
-import { useTreeStore } from './stores/tree'
-import { useUiStore } from './stores/ui'
-import { useViewerStore } from './stores/viewer'
+import App from '../../App'
+import { useEditorStore } from '../../stores/editor'
+import { useTreeStore } from '../../stores/tree'
+import { useUiStore } from '../../stores/ui'
+import { useViewerStore } from '../../stores/viewer'
 
-vi.mock('./lib/api', () => ({
+vi.mock('../../lib/api', () => ({
   getAuthConfig: vi.fn(async () => ({
-    authDisabled: true,
-    publicAccess: true,
-    user: null,
+    authDisabled: false,
+    publicAccess: false,
+    user: {
+      id: 'admin-1',
+      username: 'admin',
+      email: 'admin@example.com',
+      role: 'ADMIN',
+    },
   })),
   getConfig: vi.fn(async () => ({
-    publicAccess: true,
+    publicAccess: false,
     hideLinkMetadataSection: false,
-    authDisabled: true,
+    authDisabled: false,
     maxAssetUploadSizeBytes: 1024,
     siteTitle: 'GolemCore Brain',
     rootPath: '',
@@ -29,28 +34,17 @@ vi.mock('./lib/api', () => ({
     title: 'Welcome',
     slug: '',
     kind: 'ROOT',
-    hasChildren: true,
-    children: [
-      {
-        id: 'guides',
-        path: 'guides',
-        parentPath: '',
-        title: 'Guides',
-        slug: 'guides',
-        kind: 'SECTION',
-        hasChildren: false,
-        children: [],
-      },
-    ],
+    hasChildren: false,
+    children: [],
   })),
   getPageByPath: vi.fn(async (path: string) => ({
     id: path || 'root',
     path,
-    parentPath: path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '',
-    title: path ? 'Guides' : 'Welcome',
+    parentPath: '',
+    title: path || 'Welcome',
     slug: path.split('/').pop() || '',
-    kind: path ? 'SECTION' : 'ROOT',
-    content: '# Demo\n\nLoaded page',
+    kind: path ? 'PAGE' : 'ROOT',
+    content: '# Demo',
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
     children: [],
@@ -67,6 +61,8 @@ vi.mock('./lib/api', () => ({
     indexedDocuments: 1,
     lastUpdatedAt: '2026-01-01T00:00:00Z',
   })),
+  logout: vi.fn(async () => ({ message: 'Logged out', user: null })),
+  changePassword: vi.fn(async () => ({ message: 'Password changed', user: null })),
   createPage: vi.fn(),
   deletePage: vi.fn(),
   movePage: vi.fn(),
@@ -80,11 +76,15 @@ vi.mock('./lib/api', () => ({
   renameAsset: vi.fn(),
   deleteAsset: vi.fn(),
   searchPages: vi.fn(async () => []),
+  listUsers: vi.fn(async () => []),
+  createUser: vi.fn(),
+  updateUser: vi.fn(),
+  deleteUserAccount: vi.fn(),
   planMarkdownImport: vi.fn(async () => ({ items: [] })),
   applyMarkdownImport: vi.fn(async () => ({ importedCount: 0, createdCount: 0, updatedCount: 0, skippedCount: 0, items: [] })),
-}));
+}))
 
-describe('App', () => {
+describe('Account route', () => {
   beforeEach(() => {
     useTreeStore.setState({
       tree: null,
@@ -114,23 +114,26 @@ describe('App', () => {
       sidebarVisible: true,
       searchOpen: false,
       quickSwitcherOpen: false,
-      authDisabled: true,
-      publicAccess: true,
-      currentUser: null,
+      authDisabled: false,
+      publicAccess: false,
+      currentUser: {
+        id: 'admin-1',
+        username: 'admin',
+        email: 'admin@example.com',
+        role: 'ADMIN',
+      },
     })
   })
 
-  it('renders the shell and loads the root page without crashing', async () => {
+  it('renders the account password page for authenticated users', async () => {
     render(
-      <MemoryRouter initialEntries={['/']}>
+      <MemoryRouter initialEntries={['/account']}>
         <App />
       </MemoryRouter>,
     )
 
     await waitFor(() => {
-      expect(screen.getByText('GolemCore Brain')).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Change password' })).toBeInTheDocument()
     })
-
-    expect(screen.getByText('Tree')).toBeInTheDocument()
   })
 })

@@ -2,22 +2,24 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import App from './App'
-import { useEditorStore } from './stores/editor'
-import { useTreeStore } from './stores/tree'
-import { useUiStore } from './stores/ui'
-import { useViewerStore } from './stores/viewer'
+import App from '../../App'
+import { useEditorStore } from '../../stores/editor'
+import { useTreeStore } from '../../stores/tree'
+import { useUiStore } from '../../stores/ui'
+import { useViewerStore } from '../../stores/viewer'
 
-vi.mock('./lib/api', () => ({
+const ensurePageMock = vi.fn()
+
+vi.mock('../../lib/api', () => ({
   getAuthConfig: vi.fn(async () => ({
-    authDisabled: true,
+    authDisabled: false,
     publicAccess: true,
     user: null,
   })),
   getConfig: vi.fn(async () => ({
     publicAccess: true,
     hideLinkMetadataSection: false,
-    authDisabled: true,
+    authDisabled: false,
     maxAssetUploadSizeBytes: 1024,
     siteTitle: 'GolemCore Brain',
     rootPath: '',
@@ -43,18 +45,23 @@ vi.mock('./lib/api', () => ({
       },
     ],
   })),
-  getPageByPath: vi.fn(async (path: string) => ({
-    id: path || 'root',
-    path,
-    parentPath: path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '',
-    title: path ? 'Guides' : 'Welcome',
-    slug: path.split('/').pop() || '',
-    kind: path ? 'SECTION' : 'ROOT',
-    content: '# Demo\n\nLoaded page',
-    createdAt: '2026-01-01T00:00:00Z',
-    updatedAt: '2026-01-01T00:00:00Z',
-    children: [],
-  })),
+  getPageByPath: vi.fn(async (path: string) => {
+    if (path === 'missing-page') {
+      throw new Error('Page not found')
+    }
+    return {
+      id: path || 'root',
+      path,
+      parentPath: path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '',
+      title: path ? 'Guides' : 'Welcome',
+      slug: path.split('/').pop() || '',
+      kind: path ? 'SECTION' : 'ROOT',
+      content: '# Demo\n\nLoaded page',
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+      children: [],
+    }
+  }),
   getLinkStatus: vi.fn(async () => ({
     backlinks: [],
     brokenIncoming: [],
@@ -72,7 +79,7 @@ vi.mock('./lib/api', () => ({
   movePage: vi.fn(),
   copyPage: vi.fn(),
   sortSection: vi.fn(),
-  ensurePage: vi.fn(),
+  ensurePage: (...args: unknown[]) => ensurePageMock(...args),
   lookupPath: vi.fn(),
   updatePage: vi.fn(),
   listAssets: vi.fn(async () => []),
@@ -80,12 +87,19 @@ vi.mock('./lib/api', () => ({
   renameAsset: vi.fn(),
   deleteAsset: vi.fn(),
   searchPages: vi.fn(async () => []),
+  logout: vi.fn(async () => ({ message: 'Logged out', user: null })),
+  changePassword: vi.fn(async () => ({ message: 'Password changed', user: null })),
+  listUsers: vi.fn(async () => []),
+  createUser: vi.fn(),
+  updateUser: vi.fn(),
+  deleteUserAccount: vi.fn(),
   planMarkdownImport: vi.fn(async () => ({ items: [] })),
   applyMarkdownImport: vi.fn(async () => ({ importedCount: 0, createdCount: 0, updatedCount: 0, skippedCount: 0, items: [] })),
-}));
+}))
 
-describe('App', () => {
+describe('Public read-only mode', () => {
   beforeEach(() => {
+    ensurePageMock.mockReset()
     useTreeStore.setState({
       tree: null,
       loading: false,
@@ -114,13 +128,13 @@ describe('App', () => {
       sidebarVisible: true,
       searchOpen: false,
       quickSwitcherOpen: false,
-      authDisabled: true,
+      authDisabled: false,
       publicAccess: true,
       currentUser: null,
     })
   })
 
-  it('renders the shell and loads the root page without crashing', async () => {
+  it('hides create affordances for anonymous public readers', async () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <App />
@@ -131,6 +145,38 @@ describe('App', () => {
       expect(screen.getByText('GolemCore Brain')).toBeInTheDocument()
     })
 
-    expect(screen.getByText('Tree')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'New page' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'New section' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Account')).not.toBeInTheDocument()
+    expect(screen.queryByText('Logout')).not.toBeInTheDocument()
+  })
+
+  it('shows sign-in CTA instead of create-by-path for missing pages', async () => {
+    render(
+      <MemoryRouter initialEntries={['/missing-page']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Page not found')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByRole('button', { name: /Create page by path/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Sign in to create this page/i })).toBeInTheDocument()
+  })
+
+  it('redirects anonymous editor access to sign-in guidance', async () => {
+    render(
+      <MemoryRouter initialEntries={['/e/guides']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Sign in required')).toBeInTheDocument()
+    })
+
+    expect(screen.getByRole('link', { name: /Sign in to edit/i })).toBeInTheDocument()
   })
 })

@@ -66,6 +66,32 @@ public class AuthService {
                 .build();
     }
 
+    public AuthResponse changePassword(Optional<String> sessionToken, String currentPassword, String newPassword) {
+        AuthContext authContext = requireAuthenticated(sessionToken);
+        PublicUserView currentUser = authContext.getUser();
+        if (currentUser == null) {
+            throw new AuthUnauthorizedException("Authentication required");
+        }
+        WikiUser user = userRepository.findById(currentUser.getId())
+                .orElseThrow(() -> new AuthUnauthorizedException("User not found"));
+        if (!passwordHasher.matches(currentPassword, user.getPasswordHash())) {
+            throw new AuthUnauthorizedException("Current password is incorrect");
+        }
+        WikiUser updatedUser = WikiUser.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .email(user.getEmail())
+                .passwordHash(passwordHasher.hash(newPassword))
+                .role(user.getRole())
+                .build();
+        userRepository.save(updatedUser);
+        sessionRepository.deleteByUserId(user.getId());
+        return AuthResponse.builder()
+                .message("Password changed")
+                .user(null)
+                .build();
+    }
+
     public void logout(Optional<String> sessionToken) {
         sessionToken.ifPresent(sessionRepository::delete);
     }

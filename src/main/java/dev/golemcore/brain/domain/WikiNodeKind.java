@@ -8,4 +8,8 @@ public enum WikiNodeKind {
     public boolean isContainer() {
         return this == ROOT || this == SECTION;
     }
+
+    public boolean keepsHistory() {
+        return this == PAGE || this == SECTION;
+    }
 }
