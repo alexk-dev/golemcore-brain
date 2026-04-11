@@ -14,7 +14,6 @@ import dev.golemcore.brain.adapter.in.web.dto.UpdatePagePayload;
 import dev.golemcore.brain.application.service.WikiApplicationService;
 import dev.golemcore.brain.domain.WikiAsset;
 import dev.golemcore.brain.domain.WikiAssetContent;
-import dev.golemcore.brain.domain.WikiEmbeddingSearchHit;
 import dev.golemcore.brain.domain.WikiImportApplyResponse;
 import dev.golemcore.brain.domain.WikiImportPlanResponse;
 import dev.golemcore.brain.domain.WikiLinkStatus;
@@ -23,6 +22,7 @@ import dev.golemcore.brain.domain.WikiPageHistoryEntry;
 import dev.golemcore.brain.domain.WikiPageHistoryVersion;
 import dev.golemcore.brain.domain.WikiPathLookupResult;
 import dev.golemcore.brain.domain.WikiSearchHit;
+import dev.golemcore.brain.domain.WikiSemanticSearchResult;
 import dev.golemcore.brain.domain.WikiSearchStatus;
 import dev.golemcore.brain.domain.WikiTreeNode;
 import dev.golemcore.brain.domain.auth.AuthContext;
@@ -205,7 +205,7 @@ public class WikiController {
     }
 
     @PostMapping("/search/semantic")
-    public List<WikiEmbeddingSearchHit> semanticSearch(@PathVariable String slug,
+    public WikiSemanticSearchResult semanticSearch(@PathVariable String slug,
             @Valid @RequestBody SemanticSearchPayload payload, HttpServletRequest request) {
         requireView(request);
         return wikiApplicationService.semanticSearch(payload.getQuery());

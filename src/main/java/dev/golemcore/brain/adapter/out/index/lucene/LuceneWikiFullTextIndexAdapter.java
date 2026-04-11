@@ -54,14 +54,14 @@ public class LuceneWikiFullTextIndexAdapter implements WikiFullTextIndexPort {
     private final WikiProperties wikiProperties;
 
     @Override
-    public synchronized void applyChanges(WikiDocumentChangeSet changeSet) {
-        if (changeSet == null || changeSet.getSpaceId() == null || changeSet.isEmpty()) {
+    public synchronized void applyChanges(String spaceId, WikiDocumentChangeSet changeSet) {
+        if (changeSet == null || spaceId == null || spaceId.isBlank() || changeSet.isEmpty()) {
             return;
         }
         try {
-            Files.createDirectories(indexPath(changeSet.getSpaceId()));
+            Files.createDirectories(indexPath(spaceId));
             try (StandardAnalyzer analyzer = new StandardAnalyzer();
-                    Directory directory = openDirectory(changeSet.getSpaceId());
+                    Directory directory = openDirectory(spaceId);
                     IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig(analyzer))) {
                 if (changeSet.isFullRebuild()) {
                     writer.deleteAll();
@@ -71,7 +71,7 @@ public class LuceneWikiFullTextIndexAdapter implements WikiFullTextIndexPort {
                 }
                 for (WikiIndexedDocument document : safeList(changeSet.getUpserts())) {
                     writer.updateDocument(new Term(FIELD_PATH, document.getPath()),
-                            toLuceneDocument(changeSet.getSpaceId(), document));
+                            toLuceneDocument(spaceId, document));
                 }
                 writer.commit();
             }

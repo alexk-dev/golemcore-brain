@@ -9,7 +9,13 @@ public class WikiSearchStatus {
     String mode;
     boolean ready;
     int indexedDocuments;
+    int fullTextIndexedDocuments;
     int embeddingDocuments;
+    int embeddingIndexedDocuments;
+    int staleDocuments;
     boolean embeddingsReady;
+    String lastIndexingError;
+    String embeddingModelId;
+    String lastFullRebuildAt;
     String lastUpdatedAt;
 }

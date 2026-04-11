@@ -31,6 +31,7 @@ import type {
   WikiPathLookupResult,
   WikiSearchHit,
   WikiSearchStatus,
+  WikiSemanticSearchResult,
   WikiTreeNode,
 } from '../types'
 
@@ -319,6 +320,13 @@ export function searchPages(query: string): Promise<WikiSearchHit[]> {
 
 export function getSearchStatus(): Promise<WikiSearchStatus> {
   return readJson<WikiSearchStatus>(spaceUrl('/search/status'))
+}
+
+export function semanticSearchPages(query: string): Promise<WikiSemanticSearchResult> {
+  return readJson<WikiSemanticSearchResult>(spaceUrl('/search/semantic'), {
+    method: 'POST',
+    body: JSON.stringify({ query }),
+  })
 }
 
 function appendImportOptions(formData: FormData, options?: MarkdownImportOptions) {

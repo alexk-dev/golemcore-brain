@@ -7,9 +7,14 @@ import lombok.Value;
 @Value
 @Builder
 public class WikiIndexMetadata {
-    int documentCount;
-    int embeddingDocumentCount;
+    int totalDocuments;
+    int fullTextIndexedDocuments;
+    int embeddingIndexedDocuments;
+    int staleDocuments;
     Instant lastUpdatedAt;
+    String lastIndexingError;
+    String embeddingModelId;
+    Instant lastFullRebuildAt;
     boolean ready;
     boolean embeddingsReady;
 }

@@ -13,6 +13,7 @@ import dev.golemcore.brain.domain.WikiIndexMetadata;
 import dev.golemcore.brain.domain.WikiIndexStatus;
 import dev.golemcore.brain.domain.WikiIndexedDocument;
 import dev.golemcore.brain.domain.WikiSearchHit;
+import dev.golemcore.brain.domain.WikiSemanticSearchResult;
 import dev.golemcore.brain.domain.llm.LlmEmbeddingRequest;
 import dev.golemcore.brain.domain.llm.LlmEmbeddingResponse;
 import dev.golemcore.brain.domain.llm.LlmModelConfig;
@@ -42,6 +43,8 @@ public class WikiIndexingService {
     private final WikiEmbeddingIndexPort wikiEmbeddingIndexPort;
     private final LlmSettingsRepository llmSettingsRepository;
     private final LlmEmbeddingPort llmEmbeddingPort;
+
+    private final Map<String, IndexingObservation> observationsBySpaceId = new LinkedHashMap<>();
 
     public void synchronizeSpace(String spaceId) {
         List<WikiIndexedDocument> documents = wikiDocumentCatalogPort.listDocuments(spaceId);
@@ -104,6 +107,8 @@ public class WikiIndexingService {
                 .deletedPaths(List.of())
                 .fullRebuild(true)
                 .build());
+        observationsBySpaceId.computeIfAbsent(spaceId,
+                key -> IndexingObservation.builder().build()).lastFullRebuildAt = Instant.now();
     }
 
     public List<WikiSearchHit> search(String spaceId, String query) {
@@ -132,16 +137,63 @@ public class WikiIndexingService {
         return wikiEmbeddingIndexPort.search(spaceId, queryEmbedding.get(), EMBEDDING_SEARCH_LIMIT);
     }
 
+    public WikiSemanticSearchResult semanticSearch(String spaceId, String query) {
+        String normalizedQuery = Optional.ofNullable(query).orElse("").trim();
+        if (normalizedQuery.isBlank()) {
+            return WikiSemanticSearchResult.builder()
+                    .mode("empty-query")
+                    .semanticReady(false)
+                    .semanticHits(List.of())
+                    .fallbackHits(List.of())
+                    .build();
+        }
+        Optional<ResolvedEmbeddingModel> resolvedModel = resolveEmbeddingModel();
+        if (resolvedModel.isEmpty()) {
+            return fallbackSemanticResult(spaceId, normalizedQuery, "embedding-model-not-configured");
+        }
+        Optional<List<Double>> queryEmbedding = embedOne(resolvedModel.get(), normalizedQuery);
+        if (queryEmbedding.isEmpty()) {
+            return fallbackSemanticResult(spaceId, normalizedQuery, "embedding-query-failed");
+        }
+        synchronizeSpace(spaceId);
+        List<WikiEmbeddingSearchHit> semanticHits = wikiEmbeddingIndexPort.search(spaceId, queryEmbedding.get(),
+                EMBEDDING_SEARCH_LIMIT);
+        if (semanticHits.isEmpty()) {
+            return fallbackSemanticResult(spaceId, normalizedQuery, "embedding-index-empty");
+        }
+        return WikiSemanticSearchResult.builder()
+                .mode("semantic")
+                .semanticReady(true)
+                .semanticHits(semanticHits)
+                .fallbackHits(List.of())
+                .build();
+    }
+
     public WikiIndexStatus getStatus(String spaceId) {
         synchronizeSpace(spaceId);
         WikiIndexMetadata metadata = metadata(spaceId);
         return WikiIndexStatus.builder()
                 .mode(INDEX_MODE)
                 .ready(metadata.isReady())
-                .indexedDocuments(metadata.getDocumentCount())
-                .embeddingDocuments(metadata.getEmbeddingDocumentCount())
+                .totalDocuments(metadata.getTotalDocuments())
+                .fullTextIndexedDocuments(metadata.getFullTextIndexedDocuments())
+                .embeddingIndexedDocuments(metadata.getEmbeddingIndexedDocuments())
+                .staleDocuments(metadata.getStaleDocuments())
                 .lastUpdatedAt(metadata.getLastUpdatedAt())
                 .embeddingsReady(metadata.isEmbeddingsReady())
+                .lastIndexingError(metadata.getLastIndexingError())
+                .embeddingModelId(metadata.getEmbeddingModelId())
+                .lastFullRebuildAt(metadata.getLastFullRebuildAt())
+                .build();
+    }
+
+    private WikiSemanticSearchResult fallbackSemanticResult(String spaceId, String query, String reason) {
+        return WikiSemanticSearchResult.builder()
+                .mode("lexical-fallback")
+                .semanticReady(false)
+                .fallbackReason(reason)
+                .semanticHits(List.of())
+                .fallbackHits(search(spaceId, query))
                 .build();
     }
 
@@ -150,8 +202,14 @@ public class WikiIndexingService {
             return;
         }
         WikiDocumentChangeSet normalizedChangeSet = normalizeChangeSet(changeSet);
-        wikiFullTextIndexPort.applyChanges(normalizedChangeSet);
-        wikiEmbeddingIndexPort.applyChanges(withEmbeddings(normalizedChangeSet));
+        try {
+            wikiFullTextIndexPort.applyChanges(normalizedChangeSet.getSpaceId(), normalizedChangeSet);
+            wikiEmbeddingIndexPort.applyChanges(normalizedChangeSet.getSpaceId(), withEmbeddings(normalizedChangeSet));
+            recordIndexingSuccess(normalizedChangeSet.getSpaceId());
+        } catch (RuntimeException exception) {
+            recordIndexingFailure(normalizedChangeSet.getSpaceId(), exception);
+            throw new IllegalStateException("Failed to update search indexes", exception);
+        }
     }
 
     private WikiDocumentChangeSet normalizeChangeSet(WikiDocumentChangeSet changeSet) {
@@ -186,14 +244,17 @@ public class WikiIndexingService {
         return WikiDocumentChangeSet.builder()
                 .spaceId(changeSet.getSpaceId())
                 .upserts(changeSet.getUpserts())
-                .embeddingUpserts(embedDocuments(resolvedModel.get(), changeSet.getUpserts()))
+                .embeddingUpserts(embedDocuments(changeSet.getSpaceId(), resolvedModel.get(), changeSet.getUpserts()))
                 .deletedPaths(changeSet.getDeletedPaths())
                 .fullRebuild(changeSet.isFullRebuild())
                 .build();
     }
 
-    private List<WikiEmbeddingDocument> embedDocuments(ResolvedEmbeddingModel resolvedModel,
+    private List<WikiEmbeddingDocument> embedDocuments(String spaceId, ResolvedEmbeddingModel resolvedModel,
             List<WikiIndexedDocument> documents) {
+        if (documents.isEmpty()) {
+            return List.of();
+        }
         List<String> inputs = documents.stream().map(this::embeddingText).toList();
         LlmEmbeddingResponse response;
         try {
@@ -203,6 +264,7 @@ public class WikiIndexingService {
                     .inputs(inputs)
                     .build());
         } catch (RuntimeException exception) {
+            recordIndexingFailure(spaceId, exception);
             return List.of();
         }
         if (response == null || response.getEmbeddings() == null
@@ -282,13 +344,38 @@ public class WikiIndexingService {
                 .orElse(Instant.now());
         int fullTextCount = wikiFullTextIndexPort.count(spaceId);
         int embeddingCount = wikiEmbeddingIndexPort.count(spaceId);
+        int staleDocuments = Math.max(0, documents.size() - fullTextCount);
+        IndexingObservation observation = observationsBySpaceId.getOrDefault(spaceId,
+                IndexingObservation.builder().build());
         return WikiIndexMetadata.builder()
-                .documentCount(fullTextCount)
-                .embeddingDocumentCount(embeddingCount)
+                .totalDocuments(documents.size())
+                .fullTextIndexedDocuments(fullTextCount)
+                .embeddingIndexedDocuments(embeddingCount)
+                .staleDocuments(staleDocuments)
                 .lastUpdatedAt(lastUpdatedAt)
-                .ready(fullTextCount >= documents.size())
+                .lastIndexingError(observation.lastIndexingError)
+                .embeddingModelId(resolveEmbeddingModel().map(ResolvedEmbeddingModel::model)
+                        .map(LlmModelConfig::getId)
+                        .orElse(null))
+                .lastFullRebuildAt(observation.lastFullRebuildAt)
+                .ready(staleDocuments == 0)
                 .embeddingsReady(embeddingCount > 0)
                 .build();
+    }
+
+    private void recordIndexingSuccess(String spaceId) {
+        if (spaceId == null || spaceId.isBlank()) {
+            return;
+        }
+        observationsBySpaceId.remove(spaceId);
+    }
+
+    private void recordIndexingFailure(String spaceId, RuntimeException exception) {
+        if (spaceId == null || spaceId.isBlank()) {
+            return;
+        }
+        observationsBySpaceId.computeIfAbsent(spaceId,
+                key -> IndexingObservation.builder().build()).lastIndexingError = exception.getMessage();
     }
 
     private List<String> pathsMissingFrom(List<String> existingPaths, List<String> actualPaths) {
@@ -304,6 +391,12 @@ public class WikiIndexingService {
 
     private String safeRevision(WikiIndexedDocument document) {
         return document.getRevision() == null ? "" : document.getRevision();
+    }
+
+    @lombok.Builder
+    private static class IndexingObservation {
+        private String lastIndexingError;
+        private Instant lastFullRebuildAt;
     }
 
     private record ResolvedEmbeddingModel(LlmProviderConfig provider, LlmModelConfig model) {

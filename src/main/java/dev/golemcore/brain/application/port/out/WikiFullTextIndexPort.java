@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 public interface WikiFullTextIndexPort {
-    void applyChanges(WikiDocumentChangeSet changeSet);
+    void applyChanges(String spaceId, WikiDocumentChangeSet changeSet);
 
     List<WikiSearchHit> search(String spaceId, String query, int limit);
 

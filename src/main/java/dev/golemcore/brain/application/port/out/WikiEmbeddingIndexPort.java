@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 public interface WikiEmbeddingIndexPort {
-    void applyChanges(WikiDocumentChangeSet changeSet);
+    void applyChanges(String spaceId, WikiDocumentChangeSet changeSet);
 
     List<WikiEmbeddingSearchHit> search(String spaceId, List<Double> embedding, int limit);
 

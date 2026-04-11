@@ -27,7 +27,7 @@ class SqliteWikiEmbeddingIndexAdapterTest {
         properties.setStorageRoot(tempDir);
         SqliteWikiEmbeddingIndexAdapter adapter = new SqliteWikiEmbeddingIndexAdapter(properties);
 
-        adapter.applyChanges(WikiDocumentChangeSet.builder()
+        adapter.applyChanges("space-1", WikiDocumentChangeSet.builder()
                 .spaceId("space-1")
                 .embeddingUpserts(List.of(embedding("docs/alpha", "Alpha", List.of(1.0d, 0.0d))))
                 .deletedPaths(List.of())
@@ -38,7 +38,7 @@ class SqliteWikiEmbeddingIndexAdapterTest {
         assertEquals(1, alphaHits.size());
         assertEquals("docs/alpha", alphaHits.getFirst().getPath());
         assertEquals(1, adapter.count("space-1"));
-        adapter.applyChanges(WikiDocumentChangeSet.builder()
+        adapter.applyChanges("space-1", WikiDocumentChangeSet.builder()
                 .spaceId("space-1")
                 .embeddingUpserts(List.of(embedding("docs/beta", "Beta", List.of(0.0d, 1.0d))))
                 .deletedPaths(List.of())
@@ -49,7 +49,7 @@ class SqliteWikiEmbeddingIndexAdapterTest {
         assertEquals("docs/beta", betaHits.getFirst().getPath());
         assertEquals(2, adapter.count("space-1"));
 
-        adapter.applyChanges(WikiDocumentChangeSet.builder()
+        adapter.applyChanges("space-1", WikiDocumentChangeSet.builder()
                 .spaceId("space-1")
                 .deletedPaths(List.of("docs/alpha"))
                 .fullRebuild(false)
@@ -65,13 +65,13 @@ class SqliteWikiEmbeddingIndexAdapterTest {
         properties.setStorageRoot(tempDir);
         SqliteWikiEmbeddingIndexAdapter adapter = new SqliteWikiEmbeddingIndexAdapter(properties);
 
-        adapter.applyChanges(WikiDocumentChangeSet.builder()
+        adapter.applyChanges("space-a", WikiDocumentChangeSet.builder()
                 .spaceId("space-a")
                 .embeddingUpserts(List.of(embedding("docs/guide", "Alpha", "revision-a", List.of(1.0d, 0.0d))))
                 .deletedPaths(List.of())
                 .fullRebuild(false)
                 .build());
-        adapter.applyChanges(WikiDocumentChangeSet.builder()
+        adapter.applyChanges("space-b", WikiDocumentChangeSet.builder()
                 .spaceId("space-b")
                 .embeddingUpserts(List.of(embedding("docs/guide", "Beta", "revision-b", List.of(0.0d, 1.0d))))
                 .deletedPaths(List.of())
@@ -83,7 +83,7 @@ class SqliteWikiEmbeddingIndexAdapterTest {
         assertEquals(Map.of("docs/guide", "revision-a"), adapter.listIndexedRevisions("space-a"));
         assertEquals(Map.of("docs/guide", "revision-b"), adapter.listIndexedRevisions("space-b"));
 
-        adapter.applyChanges(WikiDocumentChangeSet.builder()
+        adapter.applyChanges("space-a", WikiDocumentChangeSet.builder()
                 .spaceId("space-a")
                 .deletedPaths(List.of("docs/guide"))
                 .fullRebuild(false)

@@ -82,9 +82,23 @@ export interface WikiSearchStatus {
   mode: string
   ready: boolean
   indexedDocuments: number
+  fullTextIndexedDocuments?: number
   embeddingDocuments?: number
+  embeddingIndexedDocuments?: number
+  staleDocuments?: number
   embeddingsReady?: boolean
+  lastIndexingError?: string | null
+  embeddingModelId?: string | null
+  lastFullRebuildAt?: string | null
   lastUpdatedAt: string
+}
+
+export interface WikiSemanticSearchResult {
+  mode: string
+  semanticReady: boolean
+  fallbackReason?: string | null
+  semanticHits: WikiSearchHit[]
+  fallbackHits: WikiSearchHit[]
 }
 
 export interface WikiImportItem {

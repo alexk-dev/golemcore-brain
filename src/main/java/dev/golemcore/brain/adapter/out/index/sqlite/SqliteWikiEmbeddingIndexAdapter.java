@@ -38,8 +38,8 @@ public class SqliteWikiEmbeddingIndexAdapter implements WikiEmbeddingIndexPort {
     private final WikiProperties wikiProperties;
 
     @Override
-    public synchronized void applyChanges(WikiDocumentChangeSet changeSet) {
-        if (changeSet == null || changeSet.getSpaceId() == null || hasNoEmbeddingIndexChanges(changeSet)) {
+    public synchronized void applyChanges(String spaceId, WikiDocumentChangeSet changeSet) {
+        if (changeSet == null || spaceId == null || spaceId.isBlank() || hasNoEmbeddingIndexChanges(changeSet)) {
             return;
         }
         try {
@@ -47,13 +47,13 @@ public class SqliteWikiEmbeddingIndexAdapter implements WikiEmbeddingIndexPort {
             try (Connection connection = openConnection()) {
                 initializeSchema(connection);
                 if (changeSet.isFullRebuild()) {
-                    deleteSpace(connection, changeSet.getSpaceId());
+                    deleteSpace(connection, spaceId);
                 }
                 for (String deletedPath : safeList(changeSet.getDeletedPaths())) {
-                    deletePath(connection, changeSet.getSpaceId(), deletedPath);
+                    deletePath(connection, spaceId, deletedPath);
                 }
                 for (WikiEmbeddingDocument embeddingDocument : safeList(changeSet.getEmbeddingUpserts())) {
-                    upsertDocument(connection, changeSet.getSpaceId(), embeddingDocument);
+                    upsertDocument(connection, spaceId, embeddingDocument);
                 }
             }
         } catch (SQLException exception) {

@@ -9,8 +9,13 @@ import lombok.Value;
 public class WikiIndexStatus {
     String mode;
     boolean ready;
-    int indexedDocuments;
-    int embeddingDocuments;
+    int totalDocuments;
+    int fullTextIndexedDocuments;
+    int embeddingIndexedDocuments;
+    int staleDocuments;
     Instant lastUpdatedAt;
     boolean embeddingsReady;
+    String lastIndexingError;
+    String embeddingModelId;
+    Instant lastFullRebuildAt;
 }

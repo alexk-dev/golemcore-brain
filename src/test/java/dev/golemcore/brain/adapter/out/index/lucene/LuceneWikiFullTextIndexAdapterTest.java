@@ -26,7 +26,7 @@ class LuceneWikiFullTextIndexAdapterTest {
         properties.setStorageRoot(tempDir);
         LuceneWikiFullTextIndexAdapter adapter = new LuceneWikiFullTextIndexAdapter(properties);
 
-        adapter.applyChanges(WikiDocumentChangeSet.builder()
+        adapter.applyChanges("space-1", WikiDocumentChangeSet.builder()
                 .spaceId("space-1")
                 .upserts(List.of(document("docs/guide", "Alpha guide", "deployment checklist", "revision-1")))
                 .deletedPaths(List.of())
@@ -38,7 +38,7 @@ class LuceneWikiFullTextIndexAdapterTest {
         assertEquals("docs/guide", hits.getFirst().getPath());
         assertEquals(Map.of("docs/guide", "revision-1"), adapter.listIndexedRevisions("space-1"));
 
-        adapter.applyChanges(WikiDocumentChangeSet.builder()
+        adapter.applyChanges("space-1", WikiDocumentChangeSet.builder()
                 .spaceId("space-1")
                 .upserts(List.of(document("docs/guide", "Alpha guide", "incident response", "revision-2")))
                 .deletedPaths(List.of())
@@ -49,7 +49,7 @@ class LuceneWikiFullTextIndexAdapterTest {
         assertEquals(1, adapter.search("space-1", "incident", 10).size());
         assertEquals(Map.of("docs/guide", "revision-2"), adapter.listIndexedRevisions("space-1"));
 
-        adapter.applyChanges(WikiDocumentChangeSet.builder()
+        adapter.applyChanges("space-1", WikiDocumentChangeSet.builder()
                 .spaceId("space-1")
                 .upserts(List.of())
                 .deletedPaths(List.of("docs/guide"))
@@ -66,13 +66,13 @@ class LuceneWikiFullTextIndexAdapterTest {
         properties.setStorageRoot(tempDir);
         LuceneWikiFullTextIndexAdapter adapter = new LuceneWikiFullTextIndexAdapter(properties);
 
-        adapter.applyChanges(WikiDocumentChangeSet.builder()
+        adapter.applyChanges("space-a", WikiDocumentChangeSet.builder()
                 .spaceId("space-a")
                 .upserts(List.of(document("docs/guide", "Alpha guide", "alpha-only token", "revision-a")))
                 .deletedPaths(List.of())
                 .fullRebuild(false)
                 .build());
-        adapter.applyChanges(WikiDocumentChangeSet.builder()
+        adapter.applyChanges("space-b", WikiDocumentChangeSet.builder()
                 .spaceId("space-b")
                 .upserts(List.of(document("docs/guide", "Beta guide", "beta-only token", "revision-b")))
                 .deletedPaths(List.of())

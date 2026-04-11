@@ -13,6 +13,7 @@ import dev.golemcore.brain.domain.WikiIndexStatus;
 import dev.golemcore.brain.domain.WikiIndexedDocument;
 import dev.golemcore.brain.domain.WikiNodeKind;
 import dev.golemcore.brain.domain.WikiSearchHit;
+import dev.golemcore.brain.domain.WikiSemanticSearchResult;
 import dev.golemcore.brain.domain.llm.LlmApiType;
 import dev.golemcore.brain.domain.llm.LlmEmbeddingRequest;
 import dev.golemcore.brain.domain.llm.LlmEmbeddingResponse;
@@ -74,19 +75,7 @@ class WikiIndexingServiceTest {
     void shouldPopulateEmbeddingIndexWhenEmbeddingModelIsConfigured() {
         documentCatalog.documents = List.of(document("docs/guide", "guide-revision"));
         fullTextIndex.indexedRevisions = Map.of();
-        llmSettingsRepository.settings = LlmSettings.builder()
-                .providers(Map.of("openai", LlmProviderConfig.builder()
-                        .apiKey(Secret.of("secret"))
-                        .apiType(LlmApiType.OPENAI)
-                        .build()))
-                .models(List.of(LlmModelConfig.builder()
-                        .id("embedding-model")
-                        .provider("openai")
-                        .modelId("text-embedding-3-small")
-                        .kind(LlmModelKind.EMBEDDING)
-                        .enabled(true)
-                        .build()))
-                .build();
+        llmSettingsRepository.settings = embeddingSettings();
 
         service.synchronizeSpace("space-1");
 
@@ -119,6 +108,23 @@ class WikiIndexingServiceTest {
     }
 
     @Test
+    void shouldFallbackToFullTextWhenSemanticSearchIsNotConfigured() {
+        fullTextIndex.searchHits = List.of(WikiSearchHit.builder()
+                .path("docs/guide")
+                .title("Guide")
+                .excerpt("Guide body")
+                .kind(WikiNodeKind.PAGE)
+                .build());
+
+        WikiSemanticSearchResult result = service.semanticSearch("space-1", "guide");
+
+        assertEquals("lexical-fallback", result.getMode());
+        assertFalse(result.isSemanticReady());
+        assertEquals("embedding-model-not-configured", result.getFallbackReason());
+        assertEquals("docs/guide", result.getFallbackHits().getFirst().getPath());
+    }
+
+    @Test
     void shouldReportIndexStatus() {
         documentCatalog.documents = List.of(document("root", "root-revision"));
         fullTextIndex.indexedRevisions = Map.of("root", "root-revision");
@@ -127,7 +133,24 @@ class WikiIndexingServiceTest {
 
         assertTrue(status.isReady());
         assertFalse(status.isEmbeddingsReady());
-        assertEquals(1, status.getIndexedDocuments());
+        assertEquals(1, status.getFullTextIndexedDocuments());
+        assertEquals(0, status.getStaleDocuments());
+    }
+
+    private LlmSettings embeddingSettings() {
+        return LlmSettings.builder()
+                .providers(Map.of("openai", LlmProviderConfig.builder()
+                        .apiKey(Secret.of("secret"))
+                        .apiType(LlmApiType.OPENAI)
+                        .build()))
+                .models(List.of(LlmModelConfig.builder()
+                        .id("embedding-model")
+                        .provider("openai")
+                        .modelId("text-embedding-3-small")
+                        .kind(LlmModelKind.EMBEDDING)
+                        .enabled(true)
+                        .build()))
+                .build();
     }
 
     private WikiIndexedDocument document(String path, String revision) {
@@ -159,7 +182,7 @@ class WikiIndexingServiceTest {
         private List<String> deletedPaths = List.of();
 
         @Override
-        public void applyChanges(WikiDocumentChangeSet changeSet) {
+        public void applyChanges(String spaceId, WikiDocumentChangeSet changeSet) {
             upsertedPaths = changeSet.getUpserts().stream().map(WikiIndexedDocument::getPath).toList();
             deletedPaths = changeSet.getDeletedPaths();
             indexedRevisions = changeSet.getUpserts().stream()
@@ -193,7 +216,7 @@ class WikiIndexingServiceTest {
         private Map<String, String> indexedRevisions = Map.of();
 
         @Override
-        public void applyChanges(WikiDocumentChangeSet changeSet) {
+        public void applyChanges(String spaceId, WikiDocumentChangeSet changeSet) {
             upsertedPaths = changeSet.getEmbeddingUpserts().stream()
                     .map(WikiEmbeddingDocument::getDocument)
                     .map(WikiIndexedDocument::getPath)

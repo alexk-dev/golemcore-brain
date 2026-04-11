@@ -8,7 +8,6 @@ import dev.golemcore.brain.application.space.SpaceContextHolder;
 import dev.golemcore.brain.domain.WikiAsset;
 import dev.golemcore.brain.domain.WikiAssetContent;
 import dev.golemcore.brain.domain.WikiConfigResponse;
-import dev.golemcore.brain.domain.WikiEmbeddingSearchHit;
 import dev.golemcore.brain.domain.WikiImportAction;
 import dev.golemcore.brain.domain.WikiImportApplyResponse;
 import dev.golemcore.brain.domain.WikiImportItem;
@@ -27,6 +26,7 @@ import dev.golemcore.brain.domain.WikiPageHistoryVersion;
 import dev.golemcore.brain.domain.WikiPathLookupResult;
 import dev.golemcore.brain.domain.WikiPathLookupSegment;
 import dev.golemcore.brain.domain.WikiSearchHit;
+import dev.golemcore.brain.domain.WikiSemanticSearchResult;
 import dev.golemcore.brain.domain.WikiSearchStatus;
 import dev.golemcore.brain.domain.WikiTreeNode;
 import java.io.IOException;
@@ -213,15 +213,23 @@ public class WikiApplicationService {
         return WikiSearchStatus.builder()
                 .mode(status.getMode())
                 .ready(status.isReady())
-                .indexedDocuments(status.getIndexedDocuments())
-                .embeddingDocuments(status.getEmbeddingDocuments())
+                .indexedDocuments(status.getFullTextIndexedDocuments())
+                .fullTextIndexedDocuments(status.getFullTextIndexedDocuments())
+                .embeddingDocuments(status.getEmbeddingIndexedDocuments())
+                .embeddingIndexedDocuments(status.getEmbeddingIndexedDocuments())
+                .staleDocuments(status.getStaleDocuments())
                 .embeddingsReady(status.isEmbeddingsReady())
+                .lastIndexingError(status.getLastIndexingError())
+                .embeddingModelId(status.getEmbeddingModelId())
+                .lastFullRebuildAt(status.getLastFullRebuildAt() == null
+                        ? null
+                        : DATE_TIME_FORMATTER.format(status.getLastFullRebuildAt()))
                 .lastUpdatedAt(DATE_TIME_FORMATTER.format(lastUpdatedAt))
                 .build();
     }
 
-    public List<WikiEmbeddingSearchHit> semanticSearch(String query) {
-        return wikiIndexingService.embeddingSearch(requireSpaceId(), query);
+    public WikiSemanticSearchResult semanticSearch(String query) {
+        return wikiIndexingService.semanticSearch(requireSpaceId(), query);
     }
 
     public WikiImportPlanResponse planMarkdownImport(InputStream inputStream) {
