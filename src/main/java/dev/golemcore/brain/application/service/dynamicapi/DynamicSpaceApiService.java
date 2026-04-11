@@ -3,6 +3,7 @@ package dev.golemcore.brain.application.service.dynamicapi;
 import dev.golemcore.brain.application.exception.WikiNotFoundException;
 import dev.golemcore.brain.application.port.out.DynamicSpaceApiRepository;
 import dev.golemcore.brain.application.port.out.DynamicSpaceApiToolPort;
+import dev.golemcore.brain.application.port.out.JsonCodecPort;
 import dev.golemcore.brain.application.port.out.LlmChatPort;
 import dev.golemcore.brain.application.port.out.LlmSettingsRepository;
 import dev.golemcore.brain.application.port.out.SpaceRepository;
@@ -36,10 +37,7 @@ import java.util.regex.Pattern;
 import lombok.Builder;
 import lombok.RequiredArgsConstructor;
 import lombok.Value;
-import org.springframework.stereotype.Service;
-import tools.jackson.databind.ObjectMapper;
 
-@Service
 @RequiredArgsConstructor
 public class DynamicSpaceApiService {
 
@@ -56,7 +54,7 @@ public class DynamicSpaceApiService {
     private final LlmSettingsRepository llmSettingsRepository;
     private final LlmChatPort llmChatPort;
     private final DynamicSpaceApiToolPort dynamicSpaceApiToolPort;
-    private final ObjectMapper objectMapper;
+    private final JsonCodecPort jsonCodecPort;
 
     public List<DynamicSpaceApiConfig> listApis(AuthContext authContext, String spaceSlug) {
         Space space = requireSpaceAccess(authContext, spaceSlug, UserRole.ADMIN);
@@ -265,7 +263,7 @@ public class DynamicSpaceApiService {
     private Object parseJsonResult(String content) {
         String normalized = stripJsonFence(content.trim());
         try {
-            return objectMapper.readValue(normalized, Object.class);
+            return jsonCodecPort.read(normalized);
         } catch (RuntimeException exception) {
             return Map.of("text", content);
         }
@@ -285,7 +283,7 @@ public class DynamicSpaceApiService {
 
     private String writeJson(Object value) {
         try {
-            return objectMapper.writeValueAsString(value);
+            return jsonCodecPort.write(value);
         } catch (RuntimeException exception) {
             throw new IllegalStateException("Failed to serialize dynamic API payload", exception);
         }

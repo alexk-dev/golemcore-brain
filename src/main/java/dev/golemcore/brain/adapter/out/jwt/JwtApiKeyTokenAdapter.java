@@ -1,9 +1,12 @@
-package dev.golemcore.brain.application.service.auth;
+package dev.golemcore.brain.adapter.out.jwt;
 
+import dev.golemcore.brain.application.port.out.ApiKeyTokenPort;
+import dev.golemcore.brain.application.service.auth.AuthUnauthorizedException;
 import dev.golemcore.brain.config.WikiProperties;
 import dev.golemcore.brain.domain.apikey.ApiKey;
 import dev.golemcore.brain.domain.auth.UserRole;
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtBuilder;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -15,16 +18,17 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import javax.crypto.SecretKey;
 import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Component;
 
-@Service
+@Component
 @RequiredArgsConstructor
-public class JwtService {
+public class JwtApiKeyTokenAdapter implements ApiKeyTokenPort {
 
     private final WikiProperties wikiProperties;
 
+    @Override
     public String issue(ApiKey apiKey) {
-        var builder = Jwts.builder()
+        JwtBuilder builder = Jwts.builder()
                 .id(apiKey.getId())
                 .issuer(wikiProperties.getJwt().getIssuer())
                 .subject(apiKey.getSubject())
@@ -38,7 +42,8 @@ public class JwtService {
         return builder.signWith(signingKey()).compact();
     }
 
-    public ParsedToken parse(String token) {
+    @Override
+    public ApiKeyTokenPort.ParsedApiKeyToken parse(String token) {
         try {
             Claims claims = Jwts.parser()
                     .verifyWith(signingKey())
@@ -53,7 +58,8 @@ public class JwtService {
                     ? Set.of()
                     : roles.stream().map(UserRole::valueOf).collect(Collectors.toUnmodifiableSet());
             Instant expiresAt = claims.getExpiration() == null ? null : claims.getExpiration().toInstant();
-            return new ParsedToken(claims.getId(), claims.getSubject(), spaceId, parsedRoles, expiresAt);
+            return new ApiKeyTokenPort.ParsedApiKeyToken(claims.getId(), claims.getSubject(), spaceId, parsedRoles,
+                    expiresAt);
         } catch (JwtException | IllegalArgumentException exception) {
             throw new AuthUnauthorizedException("Invalid JWT: " + exception.getMessage());
         }
@@ -67,11 +73,4 @@ public class JwtService {
         return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
-    public record ParsedToken(
-            String jti,
-            String subject,
-            String spaceId,
-            Set<UserRole> roles,
-            Instant expiresAt) {
-    }
 }

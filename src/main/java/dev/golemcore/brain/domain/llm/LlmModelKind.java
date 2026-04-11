@@ -1,7 +1,5 @@
 package dev.golemcore.brain.domain.llm;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonValue;
 import java.util.Locale;
 
 public enum LlmModelKind {
@@ -13,12 +11,10 @@ public enum LlmModelKind {
         this.value = value;
     }
 
-    @JsonValue
     public String getValue() {
         return value;
     }
 
-    @JsonCreator(mode = JsonCreator.Mode.DELEGATING)
     public static LlmModelKind fromJson(String source) {
         if (source == null || source.isBlank()) {
             return null;

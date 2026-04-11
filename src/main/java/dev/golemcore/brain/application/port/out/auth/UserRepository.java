@@ -16,5 +16,7 @@ public interface UserRepository {
 
     WikiUser save(WikiUser user);
 
+    WikiUser createAdminIfMissing(String username, String email, String passwordHash);
+
     void delete(String userId);
 }

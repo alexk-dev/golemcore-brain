@@ -4,9 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
-import org.springframework.stereotype.Component;
 
-@Component
 public class PasswordHasher {
 
     public String hash(String password) {

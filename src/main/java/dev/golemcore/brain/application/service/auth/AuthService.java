@@ -1,9 +1,8 @@
 package dev.golemcore.brain.application.service.auth;
 
-import dev.golemcore.brain.adapter.out.filesystem.auth.FileUserRepository;
+import dev.golemcore.brain.application.port.out.BrainSettingsPort;
 import dev.golemcore.brain.application.port.out.auth.SessionRepository;
 import dev.golemcore.brain.application.port.out.auth.UserRepository;
-import dev.golemcore.brain.config.WikiProperties;
 import dev.golemcore.brain.domain.auth.AuthConfigResponse;
 import dev.golemcore.brain.domain.auth.AuthContext;
 import dev.golemcore.brain.domain.auth.AuthResponse;
@@ -12,43 +11,37 @@ import dev.golemcore.brain.domain.auth.SpaceMembership;
 import dev.golemcore.brain.domain.auth.UserRole;
 import dev.golemcore.brain.domain.auth.UserSession;
 import dev.golemcore.brain.domain.auth.WikiUser;
-import jakarta.annotation.PostConstruct;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
 
-@Service
 @RequiredArgsConstructor
 public class AuthService {
 
     public static final String SESSION_COOKIE_NAME = "BRAIN_SESSION";
 
-    private final WikiProperties wikiProperties;
+    private final BrainSettingsPort brainSettingsPort;
     private final UserRepository userRepository;
     private final SessionRepository sessionRepository;
     private final PasswordHasher passwordHasher;
     private final SecureRandom secureRandom = new SecureRandom();
 
-    @PostConstruct
     public void initialize() {
         userRepository.initialize();
-        if (userRepository instanceof FileUserRepository fileUserRepository) {
-            fileUserRepository.createAdminIfMissing(
-                    wikiProperties.getAdminUsername(),
-                    wikiProperties.getAdminEmail(),
-                    passwordHasher.hash(wikiProperties.getAdminPassword()));
-        }
+        userRepository.createAdminIfMissing(
+                brainSettingsPort.getAdminUsername(),
+                brainSettingsPort.getAdminEmail(),
+                passwordHasher.hash(brainSettingsPort.getAdminPassword()));
     }
 
     public AuthConfigResponse getConfig(Optional<String> sessionToken) {
         AuthContext authContext = resolveContext(sessionToken);
         return AuthConfigResponse.builder()
-                .authDisabled(wikiProperties.isAuthDisabled())
-                .publicAccess(wikiProperties.isPublicAccess())
+                .authDisabled(brainSettingsPort.isAuthDisabled())
+                .publicAccess(brainSettingsPort.isPublicAccess())
                 .user(authContext.getUser())
                 .build();
     }
@@ -100,7 +93,7 @@ public class AuthService {
 
     public AuthContext requireAuthenticated(Optional<String> sessionToken) {
         AuthContext authContext = resolveContext(sessionToken);
-        if (!authContext.isAuthenticated() && !wikiProperties.isAuthDisabled()) {
+        if (!authContext.isAuthenticated() && !brainSettingsPort.isAuthDisabled()) {
             throw new AuthUnauthorizedException("Authentication required");
         }
         return authContext;
@@ -126,10 +119,10 @@ public class AuthService {
     }
 
     public AuthContext resolveContext(Optional<String> sessionToken) {
-        if (wikiProperties.isAuthDisabled()) {
+        if (brainSettingsPort.isAuthDisabled()) {
             return AuthContext.builder()
                     .authDisabled(true)
-                    .publicAccess(wikiProperties.isPublicAccess())
+                    .publicAccess(brainSettingsPort.isPublicAccess())
                     .authenticated(false)
                     .user(null)
                     .memberships(List.of())
@@ -146,7 +139,7 @@ public class AuthService {
                 .orElseThrow(() -> new AuthUnauthorizedException("User for session not found"));
         return AuthContext.builder()
                 .authDisabled(false)
-                .publicAccess(wikiProperties.isPublicAccess())
+                .publicAccess(brainSettingsPort.isPublicAccess())
                 .authenticated(true)
                 .user(toPublicView(user))
                 .memberships(user.getMemberships())
@@ -164,7 +157,7 @@ public class AuthService {
         }
         return AuthContext.builder()
                 .authDisabled(false)
-                .publicAccess(wikiProperties.isPublicAccess())
+                .publicAccess(brainSettingsPort.isPublicAccess())
                 .authenticated(true)
                 .apiKey(true)
                 .pinnedSpaceId(pinnedSpaceId)
@@ -176,7 +169,7 @@ public class AuthService {
     private AuthContext anonymousContext() {
         return AuthContext.builder()
                 .authDisabled(false)
-                .publicAccess(wikiProperties.isPublicAccess())
+                .publicAccess(brainSettingsPort.isPublicAccess())
                 .authenticated(false)
                 .user(null)
                 .memberships(List.of())
@@ -190,7 +183,7 @@ public class AuthService {
         return UserSession.builder()
                 .token(token)
                 .userId(userId)
-                .expiresAt(Instant.now().plusSeconds(wikiProperties.getSessionTtlSeconds()))
+                .expiresAt(Instant.now().plusSeconds(brainSettingsPort.getSessionTtlSeconds()))
                 .build();
     }
 

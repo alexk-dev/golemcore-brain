@@ -1,9 +1,9 @@
 package dev.golemcore.brain.web;
 
+import dev.golemcore.brain.application.port.out.ApiKeyTokenPort;
 import dev.golemcore.brain.application.service.apikey.ApiKeyService;
 import dev.golemcore.brain.application.service.auth.AuthService;
 import dev.golemcore.brain.application.service.auth.AuthUnauthorizedException;
-import dev.golemcore.brain.application.service.auth.JwtService;
 import dev.golemcore.brain.domain.apikey.ApiKey;
 import dev.golemcore.brain.domain.auth.AuthContext;
 import jakarta.servlet.FilterChain;
@@ -24,7 +24,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     public static final String AUTH_CONTEXT_ATTRIBUTE = "brain.authContext";
 
-    private final JwtService jwtService;
+    private final ApiKeyTokenPort apiKeyTokenPort;
     private final ApiKeyService apiKeyService;
     private final AuthService authService;
 
@@ -35,7 +35,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (header != null && header.startsWith("Bearer ")) {
             String token = header.substring("Bearer ".length()).trim();
             try {
-                JwtService.ParsedToken parsed = jwtService.parse(token);
+                ApiKeyTokenPort.ParsedApiKeyToken parsed = apiKeyTokenPort.parse(token);
                 ApiKey apiKey = apiKeyService.findActive(parsed.jti());
                 if (apiKey == null) {
                     sendUnauthorized(response, "API key revoked or expired");

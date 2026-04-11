@@ -30,7 +30,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
-import tools.jackson.databind.json.JsonMapper;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -56,7 +55,7 @@ class DynamicSpaceApiServiceTest {
                 new FixedLlmSettingsRepository(),
                 chatPort,
                 toolPort,
-                new JsonMapper());
+                new SimpleJsonCodecPort());
 
         DynamicSpaceApiConfig api = service.createApi(adminContext(), "docs", DynamicSpaceApiService.SaveCommand
                 .builder()
@@ -92,6 +91,24 @@ class DynamicSpaceApiServiceTest {
                 .authenticated(true)
                 .memberships(List.of(SpaceMembership.builder().spaceId(SPACE_ID).role(UserRole.VIEWER).build()))
                 .build();
+    }
+
+    private static class SimpleJsonCodecPort implements dev.golemcore.brain.application.port.out.JsonCodecPort {
+        @Override
+        public String write(Object value) {
+            if (value instanceof Map<?, ?> map) {
+                return map.toString();
+            }
+            return String.valueOf(value);
+        }
+
+        @Override
+        public Object read(String content) {
+            if ("{\"answer\":\"Roadmap is in product/roadmap.md\"}".equals(content)) {
+                return Map.of("answer", "Roadmap is in product/roadmap.md");
+            }
+            return Map.of("text", content);
+        }
     }
 
     private static class SingleSpaceRepository implements SpaceRepository {

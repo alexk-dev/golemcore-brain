@@ -1,8 +1,8 @@
 package dev.golemcore.brain.application.service;
 
 import dev.golemcore.brain.application.exception.WikiNotFoundException;
+import dev.golemcore.brain.application.port.out.BrainSettingsPort;
 import dev.golemcore.brain.application.port.out.WikiRepository;
-import dev.golemcore.brain.config.WikiProperties;
 import dev.golemcore.brain.domain.WikiAsset;
 import dev.golemcore.brain.domain.WikiAssetContent;
 import dev.golemcore.brain.domain.WikiConfigResponse;
@@ -25,7 +25,6 @@ import dev.golemcore.brain.domain.WikiSearchDocument;
 import dev.golemcore.brain.domain.WikiSearchHit;
 import dev.golemcore.brain.domain.WikiSearchStatus;
 import dev.golemcore.brain.domain.WikiTreeNode;
-import jakarta.annotation.PostConstruct;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -48,25 +47,22 @@ import java.util.zip.ZipInputStream;
 import lombok.Builder;
 import lombok.RequiredArgsConstructor;
 import lombok.Value;
-import org.springframework.stereotype.Service;
 
-@Service
 @RequiredArgsConstructor
 public class WikiApplicationService {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ISO_INSTANT;
 
     private final WikiRepository wikiRepository;
-    private final WikiProperties wikiProperties;
+    private final BrainSettingsPort brainSettingsPort;
 
-    @PostConstruct
     public void initialize() {
         wikiRepository.initialize();
     }
 
     public WikiConfigResponse getConfig() {
         return WikiConfigResponse.builder()
-                .siteTitle(wikiProperties.getSiteTitle())
+                .siteTitle(brainSettingsPort.getSiteTitle())
                 .rootPath("")
                 .publicAccess(true)
                 .authDisabled(true)
@@ -422,29 +418,16 @@ public class WikiApplicationService {
             Set<String> sectionPaths = new LinkedHashSet<>();
             String normalizedTargetRootPath = normalizePath(Optional.ofNullable(targetRootPath).orElse(""));
             ZipInputStream zipInputStream = new ZipInputStream(inputStream, StandardCharsets.UTF_8);
-            ZipEntry zipEntry;
-            while ((zipEntry = zipInputStream.getNextEntry()) != null) {
-                if (zipEntry.isDirectory() || !zipEntry.getName().endsWith(".md")) {
-                    continue;
-                }
-                String normalizedEntryPath = normalizeArchiveEntryPath(zipEntry.getName());
-                if (normalizedEntryPath.isBlank()) {
-                    continue;
-                }
-                String markdown = new String(zipInputStream.readAllBytes(), StandardCharsets.UTF_8);
-                ImportEntry entry = toImportEntry(normalizedEntryPath, markdown, normalizedTargetRootPath);
-                entryByPath.put(entry.getPath(), entry);
-                if (entry.getKind() == WikiNodeKind.SECTION) {
-                    sectionPaths.add(entry.getPath());
-                }
-                String parentPath = entry.getParentPath();
-                while (parentPath != null && !parentPath.isBlank()) {
-                    if (!normalizedTargetRootPath.isBlank() && parentPath.equals(normalizedTargetRootPath)) {
-                        break;
+            ZipEntry zipEntry = zipInputStream.getNextEntry();
+            while (zipEntry != null) {
+                if (!zipEntry.isDirectory() && zipEntry.getName().endsWith(".md")) {
+                    ImportEntry entry = readImportEntry(zipInputStream, zipEntry, normalizedTargetRootPath);
+                    if (entry != null) {
+                        entryByPath.put(entry.getPath(), entry);
+                        collectSectionPaths(entry, normalizedTargetRootPath, sectionPaths);
                     }
-                    sectionPaths.add(parentPath);
-                    parentPath = parentPath.contains("/") ? parentPath.substring(0, parentPath.lastIndexOf('/')) : "";
                 }
+                zipEntry = zipInputStream.getNextEntry();
             }
 
             for (String sectionPath : sectionPaths) {
@@ -477,6 +460,35 @@ public class WikiApplicationService {
                     .toList();
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to read markdown import archive", exception);
+        }
+    }
+
+    private ImportEntry readImportEntry(
+            ZipInputStream zipInputStream,
+            ZipEntry zipEntry,
+            String normalizedTargetRootPath) throws IOException {
+        String normalizedEntryPath = normalizeArchiveEntryPath(zipEntry.getName());
+        if (normalizedEntryPath.isBlank()) {
+            return null;
+        }
+        String markdown = new String(zipInputStream.readAllBytes(), StandardCharsets.UTF_8);
+        return toImportEntry(normalizedEntryPath, markdown, normalizedTargetRootPath);
+    }
+
+    private void collectSectionPaths(
+            ImportEntry entry,
+            String normalizedTargetRootPath,
+            Set<String> sectionPaths) {
+        if (entry.getKind() == WikiNodeKind.SECTION) {
+            sectionPaths.add(entry.getPath());
+        }
+        String parentPath = entry.getParentPath();
+        while (parentPath != null && !parentPath.isBlank()) {
+            if (!normalizedTargetRootPath.isBlank() && parentPath.equals(normalizedTargetRootPath)) {
+                break;
+            }
+            sectionPaths.add(parentPath);
+            parentPath = parentPath.contains("/") ? parentPath.substring(0, parentPath.lastIndexOf('/')) : "";
         }
     }
 
@@ -792,7 +804,7 @@ public class WikiApplicationService {
                 .trim()
                 .replaceAll("^/+", "")
                 .replaceAll("/+$", "");
-        if (normalized.equals(".")) {
+        if (".".equals(normalized)) {
             return "";
         }
         if (normalized.contains("..")) {
@@ -804,7 +816,7 @@ public class WikiApplicationService {
     private String humanizePath(String path) {
         String normalized = normalizePath(path);
         if (normalized.isBlank()) {
-            return wikiProperties.getSiteTitle();
+            return brainSettingsPort.getSiteTitle();
         }
         String slug = normalized.contains("/") ? normalized.substring(normalized.lastIndexOf('/') + 1) : normalized;
         return Arrays.stream(slug.split("-"))
