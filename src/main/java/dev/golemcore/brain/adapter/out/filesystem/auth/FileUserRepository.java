@@ -2,6 +2,7 @@ package dev.golemcore.brain.adapter.out.filesystem.auth;
 
 import dev.golemcore.brain.application.port.out.auth.UserRepository;
 import dev.golemcore.brain.config.WikiProperties;
+import dev.golemcore.brain.domain.auth.SpaceMembership;
 import dev.golemcore.brain.domain.auth.UserRole;
 import dev.golemcore.brain.domain.auth.WikiUser;
 import jakarta.annotation.PostConstruct;
@@ -11,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -23,6 +25,7 @@ import org.springframework.stereotype.Component;
 public class FileUserRepository implements UserRepository {
 
     private static final String USERS_FILE_NAME = "users.jsonl";
+    private static final String NO_MEMBERSHIPS = "-";
 
     private final WikiProperties wikiProperties;
 
@@ -92,7 +95,17 @@ public class FileUserRepository implements UserRepository {
     public WikiUser createAdminIfMissing(String username, String email, String passwordHash) {
         Optional<WikiUser> existingUser = findByUsernameOrEmail(username);
         if (existingUser.isPresent()) {
-            return existingUser.get();
+            WikiUser user = existingUser.get();
+            if (!user.isGlobalAdmin()) {
+                WikiUser updated = user.toBuilder()
+                        .clearMemberships()
+                        .membership(SpaceMembership.builder().spaceId(null).role(UserRole.ADMIN).build())
+                        .role(UserRole.ADMIN)
+                        .build();
+                save(updated);
+                return updated;
+            }
+            return user;
         }
         WikiUser admin = WikiUser.builder()
                 .id(UUID.randomUUID().toString())
@@ -100,6 +113,7 @@ public class FileUserRepository implements UserRepository {
                 .email(email)
                 .passwordHash(passwordHash)
                 .role(UserRole.ADMIN)
+                .membership(SpaceMembership.builder().spaceId(null).role(UserRole.ADMIN).build())
                 .build();
         save(admin);
         return admin;
@@ -125,16 +139,21 @@ public class FileUserRepository implements UserRepository {
 
     private WikiUser parseLine(String line) {
         String[] parts = line.split("\\|", -1);
-        if (parts.length != 5) {
+        if (parts.length != 5 && parts.length != 6) {
             throw new IllegalStateException("Invalid user record: " + line);
         }
-        return WikiUser.builder()
+        UserRole role = UserRole.valueOf(parts[4]);
+        List<SpaceMembership> memberships = parts.length == 6 ? parseMemberships(parts[5]) : List.of();
+        WikiUser.WikiUserBuilder builder = WikiUser.builder()
                 .id(parts[0])
                 .username(parts[1])
                 .email(parts[2])
                 .passwordHash(parts[3])
-                .role(UserRole.valueOf(parts[4]))
-                .build();
+                .role(role);
+        for (SpaceMembership membership : memberships) {
+            builder.membership(membership);
+        }
+        return builder.build();
     }
 
     private String formatLine(WikiUser user) {
@@ -144,7 +163,46 @@ public class FileUserRepository implements UserRepository {
                 user.getUsername(),
                 user.getEmail(),
                 user.getPasswordHash(),
-                user.getRole().name());
+                user.getRole().name(),
+                formatMemberships(user.getMemberships()));
+    }
+
+    private List<SpaceMembership> parseMemberships(String raw) {
+        if (raw == null || raw.isBlank() || NO_MEMBERSHIPS.equals(raw)) {
+            return List.of();
+        }
+        return Arrays.stream(raw.split(";"))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(entry -> {
+                    String[] parts = entry.split(":", 2);
+                    if (parts.length != 2) {
+                        throw new IllegalStateException("Invalid membership token: " + entry);
+                    }
+                    String spaceId = "*".equals(parts[0]) || parts[0].isBlank() ? null : parts[0];
+                    return SpaceMembership.builder()
+                            .spaceId(spaceId)
+                            .role(UserRole.valueOf(parts[1]))
+                            .build();
+                })
+                .toList();
+    }
+
+    private String formatMemberships(List<SpaceMembership> memberships) {
+        if (memberships == null || memberships.isEmpty()) {
+            return NO_MEMBERSHIPS;
+        }
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < memberships.size(); i++) {
+            SpaceMembership membership = memberships.get(i);
+            if (i > 0) {
+                builder.append(';');
+            }
+            builder.append(membership.isGlobal() ? "*" : membership.getSpaceId())
+                    .append(':')
+                    .append(membership.getRole().name());
+        }
+        return builder.toString();
     }
 
     private Path getUsersFilePath() {

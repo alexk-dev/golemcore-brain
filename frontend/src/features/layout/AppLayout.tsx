@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
 import { Sidebar } from '../sidebar/Sidebar'
+import { SpaceSwitcher } from '../spaces/SpaceSwitcher'
 import { Toolbar } from '../toolbar/Toolbar'
 import type { WikiNodeKind, WikiTreeNode } from '../../types'
 
@@ -105,6 +106,7 @@ export function AppLayout({
           </div>
           <div className="app-layout__editor-toolbar-container">
             <Toolbar />
+            <SpaceSwitcher className="action-button-secondary hidden md:inline-flex" />
             {currentUsername ? (
               <>
                 <span className="action-button-secondary hidden lg:inline-flex">
@@ -124,6 +126,16 @@ export function AppLayout({
                 {canManageUsers ? (
                   <Link to="/users" className="action-button-secondary hidden lg:inline-flex">
                     Users
+                  </Link>
+                ) : null}
+                {canManageUsers ? (
+                  <Link to="/spaces" className="action-button-secondary hidden lg:inline-flex">
+                    Spaces
+                  </Link>
+                ) : null}
+                {canManageUsers ? (
+                  <Link to="/api-keys" className="action-button-secondary hidden lg:inline-flex">
+                    API Keys
                   </Link>
                 ) : null}
                 <button type="button" className="action-button-secondary" onClick={onLogout} aria-label="Logout" title="Logout">

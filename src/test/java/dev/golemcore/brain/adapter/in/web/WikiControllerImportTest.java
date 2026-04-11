@@ -88,7 +88,7 @@ class WikiControllerImportTest {
                         }
                         """.getBytes(StandardCharsets.UTF_8));
 
-        mockMvc.perform(multipart("/api/import/markdown/plan")
+        mockMvc.perform(multipart("/api/spaces/default/import/markdown/plan")
                         .file(archive)
                         .file(previewOptions))
                 .andExpect(status().isOk())
@@ -99,7 +99,7 @@ class WikiControllerImportTest {
                 .andExpect(jsonPath("$.items[1].path", is("knowledge/guides/setup")))
                 .andExpect(jsonPath("$.items[1].kind", is("PAGE")));
 
-        mockMvc.perform(multipart("/api/import/markdown/apply")
+        mockMvc.perform(multipart("/api/spaces/default/import/markdown/apply")
                         .file(archive)
                         .file(previewOptions))
                 .andExpect(status().isOk())
@@ -108,11 +108,11 @@ class WikiControllerImportTest {
                 .andExpect(jsonPath("$.updatedCount", is(0)))
                 .andExpect(jsonPath("$.importedRootPath", is("knowledge/guides")));
 
-        mockMvc.perform(get("/api/pages/by-path").param("path", "knowledge/guides/setup"))
+        mockMvc.perform(get("/api/spaces/default/pages/by-path").param("path", "knowledge/guides/setup"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title", is("Setup")));
 
-        mockMvc.perform(multipart("/api/import/markdown/apply")
+        mockMvc.perform(multipart("/api/spaces/default/import/markdown/apply")
                         .file(archive)
                         .file(applyOptions))
                 .andExpect(status().isOk())

@@ -1,11 +1,15 @@
 import type {
+  ApiKey,
   AuthConfig,
   ConvertPagePayload,
   CopyPagePayload,
+  CreateApiKeyPayload,
   CreatePagePayload,
+  IssuedApiKey,
   MovePagePayload,
   PublicUserView,
   MarkdownImportOptions,
+  Space,
   UpdatePagePayload,
   UpdateUserPayload,
   UserRole,
@@ -55,6 +59,21 @@ export class PageConflictError extends ApiError {
     this.currentRevision = body.currentRevision
     this.currentPage = body.currentPage as WikiPage
   }
+}
+
+let currentSpaceSlug = 'default'
+
+export function setCurrentSpaceSlug(slug: string) {
+  currentSpaceSlug = slug
+}
+
+export function getCurrentSpaceSlug(): string {
+  return currentSpaceSlug
+}
+
+function spaceUrl(suffix: string): string {
+  const normalized = suffix.startsWith('/') ? suffix : `/${suffix}`
+  return `/api/spaces/${encodeURIComponent(currentSpaceSlug)}${normalized}`
 }
 
 async function readJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
@@ -135,38 +154,83 @@ export function getConfig(): Promise<WikiConfig> {
   return readJson<WikiConfig>('/api/config')
 }
 
+export function listSpaces(): Promise<Space[]> {
+  return readJson<Space[]>('/api/spaces')
+}
+
+export function createSpace(slug: string, name: string): Promise<Space> {
+  return readJson<Space>('/api/spaces', {
+    method: 'POST',
+    body: JSON.stringify({ slug, name }),
+  })
+}
+
+export function deleteSpace(slug: string): Promise<void> {
+  return readJson<void>(`/api/spaces/${encodeURIComponent(slug)}`, {
+    method: 'DELETE',
+  })
+}
+
+export function listGlobalApiKeys(): Promise<ApiKey[]> {
+  return readJson<ApiKey[]>('/api/api-keys')
+}
+
+export function createGlobalApiKey(payload: CreateApiKeyPayload): Promise<IssuedApiKey> {
+  return readJson<IssuedApiKey>('/api/api-keys', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function listSpaceApiKeys(slug: string): Promise<ApiKey[]> {
+  return readJson<ApiKey[]>(`/api/spaces/${encodeURIComponent(slug)}/api-keys`)
+}
+
+export function createSpaceApiKey(slug: string, payload: CreateApiKeyPayload): Promise<IssuedApiKey> {
+  return readJson<IssuedApiKey>(`/api/spaces/${encodeURIComponent(slug)}/api-keys`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function revokeApiKey(keyId: string): Promise<void> {
+  return readJson<void>(`/api/api-keys/${encodeURIComponent(keyId)}`, {
+    method: 'DELETE',
+  })
+}
+
 export function getTree(): Promise<WikiTreeNode> {
-  return readJson<WikiTreeNode>('/api/tree')
+  return readJson<WikiTreeNode>(spaceUrl('/tree'))
 }
 
 export function getPage(path: string): Promise<WikiPage> {
-  return readJson<WikiPage>(`/api/page?path=${encodeURIComponent(path)}`)
+  return readJson<WikiPage>(spaceUrl(`/page?path=${encodeURIComponent(path)}`))
 }
 
 export function getPageByPath(path: string): Promise<WikiPage> {
-  return readJson<WikiPage>(`/api/pages/by-path?path=${encodeURIComponent(path)}`)
+  return readJson<WikiPage>(spaceUrl(`/pages/by-path?path=${encodeURIComponent(path)}`))
 }
 
 export function getPageHistory(path: string): Promise<WikiPageHistoryEntry[]> {
-  return readJson<WikiPageHistoryEntry[]>(`/api/page/history?path=${encodeURIComponent(path)}`)
+  return readJson<WikiPageHistoryEntry[]>(spaceUrl(`/page/history?path=${encodeURIComponent(path)}`))
 }
 
 export function getPageHistoryVersion(path: string, versionId: string): Promise<WikiPageHistoryVersion> {
-  return readJson<WikiPageHistoryVersion>(`/api/page/history/version?path=${encodeURIComponent(path)}&versionId=${encodeURIComponent(versionId)}`)
+  return readJson<WikiPageHistoryVersion>(spaceUrl(`/page/history/version?path=${encodeURIComponent(path)}&versionId=${encodeURIComponent(versionId)}`))
 }
 
 export function restorePageHistory(path: string, versionId: string): Promise<WikiPage> {
-  return readJson<WikiPage>(`/api/page/history/restore?path=${encodeURIComponent(path)}&versionId=${encodeURIComponent(versionId)}`, {
+  return readJson<WikiPage>(spaceUrl(`/page/history/restore?path=${encodeURIComponent(path)}&versionId=${encodeURIComponent(versionId)}`), {
     method: 'POST',
   })
 }
 
 export function searchPages(query: string): Promise<WikiSearchHit[]> {
-  return readJson<WikiSearchHit[]>(`/api/search?q=${encodeURIComponent(query)}`)
+  return readJson<WikiSearchHit[]>(spaceUrl(`/search?q=${encodeURIComponent(query)}`))
 }
 
 export function getSearchStatus(): Promise<WikiSearchStatus> {
-  return readJson<WikiSearchStatus>('/api/search/status')
+  return readJson<WikiSearchStatus>(spaceUrl('/search/status'))
 }
 
 function appendImportOptions(formData: FormData, options?: MarkdownImportOptions) {
@@ -183,7 +247,7 @@ export function planMarkdownImport(file: File, options?: MarkdownImportOptions):
   const formData = new FormData()
   formData.append('file', file)
   appendImportOptions(formData, options)
-  return readJson<WikiImportPlanResponse>('/api/import/markdown/plan', {
+  return readJson<WikiImportPlanResponse>(spaceUrl('/import/markdown/plan'), {
     method: 'POST',
     body: formData,
   })
@@ -193,97 +257,97 @@ export function applyMarkdownImport(file: File, options?: MarkdownImportOptions)
   const formData = new FormData()
   formData.append('file', file)
   appendImportOptions(formData, options)
-  return readJson<WikiImportApplyResponse>('/api/import/markdown/apply', {
+  return readJson<WikiImportApplyResponse>(spaceUrl('/import/markdown/apply'), {
     method: 'POST',
     body: formData,
   })
 }
 
 export function createPage(payload: CreatePagePayload): Promise<WikiPage> {
-  return readJson<WikiPage>('/api/pages', {
+  return readJson<WikiPage>(spaceUrl('/pages'), {
     method: 'POST',
     body: JSON.stringify(payload),
   })
 }
 
 export function ensurePage(path: string, targetTitle?: string): Promise<WikiPage> {
-  return readJson<WikiPage>('/api/pages/ensure', {
+  return readJson<WikiPage>(spaceUrl('/pages/ensure'), {
     method: 'POST',
     body: JSON.stringify({ path, targetTitle }),
   })
 }
 
 export function lookupPath(path: string): Promise<WikiPathLookupResult> {
-  return readJson<WikiPathLookupResult>(`/api/pages/lookup?path=${encodeURIComponent(path)}`)
+  return readJson<WikiPathLookupResult>(spaceUrl(`/pages/lookup?path=${encodeURIComponent(path)}`))
 }
 
 export function updatePage(path: string, payload: UpdatePagePayload): Promise<WikiPage> {
-  return readJson<WikiPage>(`/api/page?path=${encodeURIComponent(path)}`, {
+  return readJson<WikiPage>(spaceUrl(`/page?path=${encodeURIComponent(path)}`), {
     method: 'PUT',
     body: JSON.stringify(payload),
   })
 }
 
 export function deletePage(path: string): Promise<void> {
-  return readJson<void>(`/api/page?path=${encodeURIComponent(path)}`, {
+  return readJson<void>(spaceUrl(`/page?path=${encodeURIComponent(path)}`), {
     method: 'DELETE',
   })
 }
 
 export function movePage(path: string, payload: MovePagePayload): Promise<WikiPage> {
-  return readJson<WikiPage>(`/api/page/move?path=${encodeURIComponent(path)}`, {
+  return readJson<WikiPage>(spaceUrl(`/page/move?path=${encodeURIComponent(path)}`), {
     method: 'POST',
     body: JSON.stringify(payload),
   })
 }
 
 export function copyPage(path: string, payload: CopyPagePayload): Promise<WikiPage> {
-  return readJson<WikiPage>(`/api/page/copy?path=${encodeURIComponent(path)}`, {
+  return readJson<WikiPage>(spaceUrl(`/page/copy?path=${encodeURIComponent(path)}`), {
     method: 'POST',
     body: JSON.stringify(payload),
   })
 }
 
 export function convertPage(path: string, payload: ConvertPagePayload): Promise<WikiPage> {
-  return readJson<WikiPage>(`/api/page/convert?path=${encodeURIComponent(path)}`, {
+  return readJson<WikiPage>(spaceUrl(`/page/convert?path=${encodeURIComponent(path)}`), {
     method: 'POST',
     body: JSON.stringify(payload),
   })
 }
 
 export function sortSection(path: string, orderedSlugs: string[]): Promise<void> {
-  return readJson<void>(`/api/section/sort?path=${encodeURIComponent(path)}`, {
+  return readJson<void>(spaceUrl(`/section/sort?path=${encodeURIComponent(path)}`), {
     method: 'PUT',
     body: JSON.stringify({ orderedSlugs }),
   })
 }
 
 export function getLinkStatus(path: string): Promise<WikiLinkStatus> {
-  return readJson<WikiLinkStatus>(`/api/links?path=${encodeURIComponent(path)}`)
+  return readJson<WikiLinkStatus>(spaceUrl(`/links?path=${encodeURIComponent(path)}`))
 }
 
 export function listAssets(path: string): Promise<WikiAsset[]> {
-  return readJson<WikiAsset[]>(`/api/pages/assets?path=${encodeURIComponent(path)}`)
+  return readJson<WikiAsset[]>(spaceUrl(`/pages/assets?path=${encodeURIComponent(path)}`))
 }
 
 export function uploadAsset(path: string, file: File): Promise<WikiAsset> {
   const formData = new FormData()
   formData.append('file', file)
-  return readJson<WikiAsset>(`/api/pages/assets?path=${encodeURIComponent(path)}`, {
+  return readJson<WikiAsset>(spaceUrl(`/pages/assets?path=${encodeURIComponent(path)}`), {
     method: 'POST',
     body: formData,
   })
 }
 
 export function renameAsset(path: string, oldName: string, newName: string): Promise<WikiAsset> {
-  return readJson<WikiAsset>(`/api/pages/assets/rename?path=${encodeURIComponent(path)}`, {
+  return readJson<WikiAsset>(spaceUrl(`/pages/assets/rename?path=${encodeURIComponent(path)}`), {
     method: 'PUT',
     body: JSON.stringify({ oldName, newName }),
   })
 }
 
 export function deleteAsset(path: string, name: string): Promise<void> {
-  return readJson<void>(`/api/pages/assets?path=${encodeURIComponent(path)}&name=${encodeURIComponent(name)}`, {
+  return readJson<void>(spaceUrl(`/pages/assets?path=${encodeURIComponent(path)}&name=${encodeURIComponent(name)}`), {
     method: 'DELETE',
   })
 }

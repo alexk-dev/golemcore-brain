@@ -2,8 +2,11 @@ package dev.golemcore.brain.adapter.out.filesystem;
 
 import dev.golemcore.brain.application.exception.WikiNotFoundException;
 import dev.golemcore.brain.application.exception.WikiEditConflictException;
+import dev.golemcore.brain.application.port.out.SpaceRepository;
 import dev.golemcore.brain.application.port.out.WikiRepository;
+import dev.golemcore.brain.application.space.SpaceContextHolder;
 import dev.golemcore.brain.config.WikiProperties;
+import dev.golemcore.brain.domain.space.Space;
 import dev.golemcore.brain.domain.WikiAsset;
 import dev.golemcore.brain.domain.WikiAssetContent;
 import dev.golemcore.brain.domain.WikiNodeKind;
@@ -56,12 +59,28 @@ public class FileSystemWikiRepository implements WikiRepository {
     private static final String HISTORY_DIRECTORY_NAME = ".history";
     private static final DateTimeFormatter HISTORY_TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS");
 
+    private static final String SPACES_DIR = "spaces";
+
     private final WikiProperties wikiProperties;
+    private final SpaceRepository spaceRepository;
 
     @PostConstruct
     @Override
     public void initialize() {
-        Path root = wikiProperties.getStorageRoot();
+        Path spacesRoot = wikiProperties.getStorageRoot().resolve(SPACES_DIR);
+        try {
+            Files.createDirectories(spacesRoot);
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to initialize wiki spaces root", exception);
+        }
+        for (Space space : spaceRepository.listSpaces()) {
+            initializeSpace(space.getId());
+        }
+    }
+
+    @Override
+    public void initializeSpace(String spaceId) {
+        Path root = wikiProperties.getStorageRoot().resolve(SPACES_DIR).resolve(spaceId);
         try {
             Files.createDirectories(root);
             if (!Files.exists(root.resolve(INDEX_FILE_NAME))) {
@@ -79,8 +98,12 @@ public class FileSystemWikiRepository implements WikiRepository {
                 seedDemoContent(root);
             }
         } catch (IOException exception) {
-            throw new IllegalStateException("Failed to initialize wiki storage", exception);
+            throw new IllegalStateException("Failed to initialize space " + spaceId, exception);
         }
+    }
+
+    private Path spaceRoot() {
+        return wikiProperties.getStorageRoot().resolve(SPACES_DIR).resolve(SpaceContextHolder.require());
     }
 
     @Override
@@ -90,12 +113,12 @@ public class FileSystemWikiRepository implements WikiRepository {
             return Optional.of(getRootReference());
         }
 
-        Path sectionPath = wikiProperties.getStorageRoot().resolve(normalizedPath);
+        Path sectionPath = spaceRoot().resolve(normalizedPath);
         if (Files.isDirectory(sectionPath) && Files.exists(sectionPath.resolve(INDEX_FILE_NAME))) {
             return Optional.of(buildSectionReference(sectionPath));
         }
 
-        Path pagePath = wikiProperties.getStorageRoot().resolve(normalizedPath + MARKDOWN_EXTENSION);
+        Path pagePath = spaceRoot().resolve(normalizedPath + MARKDOWN_EXTENSION);
         if (Files.isRegularFile(pagePath)) {
             return Optional.of(buildPageReference(pagePath));
         }
@@ -110,9 +133,9 @@ public class FileSystemWikiRepository implements WikiRepository {
                 .parentPath(null)
                 .slug("")
                 .kind(WikiNodeKind.ROOT)
-                .nodePath(wikiProperties.getStorageRoot())
+                .nodePath(spaceRoot())
                 .parentDirectory(null)
-                .markdownPath(wikiProperties.getStorageRoot().resolve(INDEX_FILE_NAME))
+                .markdownPath(spaceRoot().resolve(INDEX_FILE_NAME))
                 .build();
     }
 
@@ -571,7 +594,7 @@ public class FileSystemWikiRepository implements WikiRepository {
     }
 
     private WikiNodeReference buildSectionReference(Path sectionPath) {
-        Path relativePath = wikiProperties.getStorageRoot().relativize(sectionPath);
+        Path relativePath = spaceRoot().relativize(sectionPath);
         String path = normalizePath(relativePath.toString());
         String parentPath = path.contains("/") ? path.substring(0, path.lastIndexOf('/')) : "";
         return WikiNodeReference.builder()
@@ -587,7 +610,7 @@ public class FileSystemWikiRepository implements WikiRepository {
     }
 
     private WikiNodeReference buildPageReference(Path pagePath) {
-        Path relativePath = wikiProperties.getStorageRoot().relativize(pagePath);
+        Path relativePath = spaceRoot().relativize(pagePath);
         String slug = pagePath.getFileName().toString().replace(MARKDOWN_EXTENSION, "");
         Path parentPath = relativePath.getParent();
         String normalizedParentPath = parentPath == null ? "" : normalizePath(parentPath.toString());

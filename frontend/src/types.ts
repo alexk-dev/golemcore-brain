@@ -206,3 +206,32 @@ export interface AssetDialogState {
   open: boolean
   pagePath: string
 }
+
+export interface Space {
+  id: string
+  slug: string
+  name: string
+  createdAt: string
+}
+
+export interface ApiKey {
+  id: string
+  name: string
+  subject: string
+  spaceId: string | null
+  roles: UserRole[]
+  createdAt: string
+  expiresAt: string | null
+  revoked: boolean
+}
+
+export interface IssuedApiKey {
+  apiKey: ApiKey
+  token: string
+}
+
+export interface CreateApiKeyPayload {
+  name: string
+  roles?: UserRole[]
+  expiresAt?: string | null
+}
