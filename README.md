@@ -41,6 +41,28 @@ java -jar target/golemcore-brain-0.1.0-SNAPSHOT.jar
 
 The app starts on `http://localhost:8080` by default.
 
+## Configuration
+
+The default profile can read the initial admin account from environment variables:
+
+```bash
+BRAIN_ADMIN_USERNAME=admin \
+BRAIN_ADMIN_PASSWORD=change-me \
+java -jar target/golemcore-brain-0.1.0-SNAPSHOT.jar
+```
+
+For production, enable the `prod` profile and provide the required secret values:
+
+```bash
+SPRING_PROFILES_ACTIVE=prod \
+BRAIN_ADMIN_USERNAME=admin \
+BRAIN_ADMIN_PASSWORD=change-me \
+BRAIN_JWT_SECRET=change-me-change-me-change-me-change-me \
+java -jar target/golemcore-brain-0.1.0-SNAPSHOT.jar
+```
+
+Optional production settings include `BRAIN_ADMIN_EMAIL`, `BRAIN_STORAGE_ROOT`, `BRAIN_SITE_TITLE`, `BRAIN_SESSION_TTL_SECONDS`, `BRAIN_JWT_ISSUER`, `BRAIN_DEFAULT_SPACE_SLUG`, and `BRAIN_DEFAULT_SPACE_NAME`.
+
 ### Frontend dev mode
 
 ```bash
