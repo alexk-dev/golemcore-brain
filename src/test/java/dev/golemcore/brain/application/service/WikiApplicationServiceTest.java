@@ -93,7 +93,7 @@ class WikiApplicationServiceTest {
 
         assertFalse(service.search("nonexistent-query").iterator().hasNext());
         assertTrue(
-                service.search("release").stream().anyMatch(hit -> hit.getPath().equals("operations/release-guide")));
+                service.search("release").stream().anyMatch(hit -> "operations/release-guide".equals(hit.getPath())));
 
         WikiPage copiedPage = service.copyPage(WikiApplicationService.CopyPageCommand.builder()
                 .path("operations/release-guide")
@@ -114,7 +114,7 @@ class WikiApplicationServiceTest {
                 .orderedSlugs(List.of("release-guide-clone", "release-guide"))
                 .build());
         WikiTreeNode operationsTree = service.getTree().getChildren().stream()
-                .filter(node -> node.getPath().equals("operations"))
+                .filter(node -> "operations".equals(node.getPath()))
                 .findFirst()
                 .orElseThrow();
         assertEquals("release-guide-clone", operationsTree.getChildren().getFirst().getSlug());

@@ -1,6 +1,5 @@
 package dev.golemcore.brain.web;
 
-import dev.golemcore.brain.application.exception.WikiNotFoundException;
 import dev.golemcore.brain.application.port.out.SpaceRepository;
 import dev.golemcore.brain.application.space.SpaceContextHolder;
 import dev.golemcore.brain.domain.space.Space;

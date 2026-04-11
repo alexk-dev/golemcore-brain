@@ -11,6 +11,6 @@ public class WikiImportPlanResponse {
     int createCount;
     int updateCount;
     int skipCount;
-    java.util.List<String> warnings;
+    List<String> warnings;
     List<WikiImportItem> items;
 }

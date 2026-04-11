@@ -1,5 +1,6 @@
 package dev.golemcore.brain.config;
 
+import dev.golemcore.brain.application.port.out.BrainSettingsPort;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import lombok.Data;
@@ -7,7 +8,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @Data
 @ConfigurationProperties(prefix = "brain")
-public class WikiProperties {
+public class WikiProperties implements BrainSettingsPort {
 
     private Path storageRoot = Paths.get("data", "wiki");
     private String siteTitle = "GolemCore Brain";

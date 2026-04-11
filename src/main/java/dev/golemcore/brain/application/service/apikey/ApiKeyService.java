@@ -2,9 +2,9 @@ package dev.golemcore.brain.application.service.apikey;
 
 import dev.golemcore.brain.application.exception.WikiNotFoundException;
 import dev.golemcore.brain.application.port.out.ApiKeyRepository;
+import dev.golemcore.brain.application.port.out.ApiKeyTokenPort;
 import dev.golemcore.brain.application.port.out.SpaceRepository;
 import dev.golemcore.brain.application.service.auth.AuthAccessDeniedException;
-import dev.golemcore.brain.application.service.auth.JwtService;
 import dev.golemcore.brain.domain.apikey.ApiKey;
 import dev.golemcore.brain.domain.auth.AuthContext;
 import dev.golemcore.brain.domain.auth.UserRole;
@@ -16,15 +16,13 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
 
-@Service
 @RequiredArgsConstructor
 public class ApiKeyService {
 
     private final ApiKeyRepository apiKeyRepository;
     private final SpaceRepository spaceRepository;
-    private final JwtService jwtService;
+    private final ApiKeyTokenPort apiKeyTokenPort;
 
     public IssuedApiKey issueGlobal(AuthContext authContext, String name, Set<UserRole> roles, Instant expiresAt) {
         requireGlobalAdmin(authContext);
@@ -102,7 +100,7 @@ public class ApiKeyService {
                 .revoked(false)
                 .build();
         apiKeyRepository.save(apiKey);
-        String token = jwtService.issue(apiKey);
+        String token = apiKeyTokenPort.issue(apiKey);
         return new IssuedApiKey(apiKey, token);
     }
 

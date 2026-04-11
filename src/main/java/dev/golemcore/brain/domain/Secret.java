@@ -1,7 +1,5 @@
 package dev.golemcore.brain.domain;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.Map;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -12,7 +10,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class Secret {
 
     private String value;
@@ -23,7 +20,6 @@ public class Secret {
     @Builder.Default
     private Boolean present = false;
 
-    @JsonCreator(mode = JsonCreator.Mode.DELEGATING)
     public static Secret fromJson(Object source) {
         if (source == null) {
             return null;

@@ -92,6 +92,7 @@ public class FileUserRepository implements UserRepository {
         writeUsers(users);
     }
 
+    @Override
     public WikiUser createAdminIfMissing(String username, String email, String passwordHash) {
         Optional<WikiUser> existingUser = findByUsernameOrEmail(username);
         if (existingUser.isPresent()) {

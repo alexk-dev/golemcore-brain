@@ -1,6 +1,5 @@
 package dev.golemcore.brain.domain.llm;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import dev.golemcore.brain.domain.Secret;
 import java.time.Instant;
 import lombok.AllArgsConstructor;
@@ -12,7 +11,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class LlmProviderConfig {
     private Secret apiKey;
     private String baseUrl;

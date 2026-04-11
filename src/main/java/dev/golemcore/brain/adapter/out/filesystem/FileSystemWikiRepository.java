@@ -151,7 +151,7 @@ public class FileSystemWikiRepository implements WikiRepository {
                 }
                 if (Files.isRegularFile(candidate)
                         && candidate.getFileName().toString().endsWith(MARKDOWN_EXTENSION)
-                        && !candidate.getFileName().toString().equals(INDEX_FILE_NAME)) {
+                        && !INDEX_FILE_NAME.equals(candidate.getFileName().toString())) {
                     references.add(buildPageReference(candidate));
                 }
             }
@@ -868,7 +868,7 @@ public class FileSystemWikiRepository implements WikiRepository {
                 }
                 if (Files.isRegularFile(candidate)
                         && fileName.endsWith(MARKDOWN_EXTENSION)
-                        && !fileName.equals(INDEX_FILE_NAME)) {
+                        && !INDEX_FILE_NAME.equals(fileName)) {
                     rewriteAssetReferencesForReference(buildPageReference(candidate), oldRootPath, newRootPath);
                 }
             }
@@ -984,7 +984,7 @@ public class FileSystemWikiRepository implements WikiRepository {
 
     private List<String> parseStringArray(String rawJson) {
         String trimmed = rawJson == null ? "" : rawJson.trim();
-        if (trimmed.isBlank() || trimmed.equals("[]")) {
+        if (trimmed.isBlank() || "[]".equals(trimmed)) {
             return List.of();
         }
         if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) {
@@ -1056,7 +1056,7 @@ public class FileSystemWikiRepository implements WikiRepository {
     }
 
     private String deriveTitle(Path markdownPath) {
-        if (markdownPath.getFileName().toString().equals(INDEX_FILE_NAME) && markdownPath.getParent() != null) {
+        if (INDEX_FILE_NAME.equals(markdownPath.getFileName().toString()) && markdownPath.getParent() != null) {
             return humanizeSlug(markdownPath.getParent().getFileName().toString());
         }
         String fileName = markdownPath.getFileName().toString();
@@ -1090,7 +1090,7 @@ public class FileSystemWikiRepository implements WikiRepository {
                 .trim()
                 .replaceAll("^/+", "")
                 .replaceAll("/+$", "");
-        if (normalized.equals(".")) {
+        if (".".equals(normalized)) {
             return "";
         }
         if (normalized.contains("..")) {
