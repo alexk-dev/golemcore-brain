@@ -221,6 +221,38 @@
     @apply flex flex-1 flex-col items-stretch overflow-auto;
   }
 
+  .user-menu__content {
+    @apply z-50 min-w-56 rounded-2xl border border-surface-border bg-surface p-2 shadow-2xl outline-none;
+  }
+
+  .user-menu__header {
+    @apply px-3 py-2;
+  }
+
+  .user-menu__header-label {
+    @apply text-xs text-muted;
+  }
+
+  .user-menu__header-name {
+    @apply truncate text-sm font-medium text-foreground;
+  }
+
+  .user-menu__label {
+    @apply px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted;
+  }
+
+  .user-menu__separator {
+    @apply my-1 h-px bg-surface-border;
+  }
+
+  .user-menu__item {
+    @apply flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-sm text-foreground outline-none transition hover:bg-surface-alt focus:bg-surface-alt data-[highlighted]:bg-surface-alt;
+  }
+
+  .user-menu__item--danger {
+    @apply text-danger hover:bg-danger/10 focus:bg-danger/10 data-[highlighted]:bg-danger/10;
+  }
+
   .app-layout__chromeless-main {
     @apply flex min-h-screen flex-col items-stretch overflow-auto;
   }

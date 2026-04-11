@@ -1,4 +1,4 @@
-import { Menu, UserRound } from 'lucide-react'
+import { Menu } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
@@ -6,6 +6,7 @@ import { Sidebar } from '../sidebar/Sidebar'
 import { SpaceSwitcher } from '../spaces/SpaceSwitcher'
 import { Toolbar } from '../toolbar/Toolbar'
 import type { WikiNodeKind, WikiTreeNode } from '../../types'
+import { UserMenu } from './UserMenu'
 
 interface AppLayoutProps {
   children: ReactNode
@@ -106,43 +107,19 @@ export function AppLayout({
           </div>
           <div className="app-layout__editor-toolbar-container">
             <Toolbar />
+            {canCreate ? (
+              <Link to="/import" className="action-button-secondary hidden md:inline-flex">
+                Import
+              </Link>
+            ) : null}
             <SpaceSwitcher className="action-button-secondary hidden md:inline-flex" />
             {currentUsername ? (
-              <>
-                <span className="action-button-secondary hidden lg:inline-flex">
-                  <UserRound size={16} />
-                  {currentUsername}
-                </span>
-                {canCreate ? (
-                  <Link to="/import" className="action-button-secondary hidden lg:inline-flex">
-                    Import
-                  </Link>
-                ) : null}
-                {canAccessAccount ? (
-                  <Link to="/account" className="action-button-secondary hidden md:inline-flex">
-                    Account
-                  </Link>
-                ) : null}
-                {canManageUsers ? (
-                  <Link to="/users" className="action-button-secondary hidden lg:inline-flex">
-                    Users
-                  </Link>
-                ) : null}
-                {canManageUsers ? (
-                  <Link to="/spaces" className="action-button-secondary hidden lg:inline-flex">
-                    Spaces
-                  </Link>
-                ) : null}
-                {canManageUsers ? (
-                  <Link to="/api-keys" className="action-button-secondary hidden lg:inline-flex">
-                    API Keys
-                  </Link>
-                ) : null}
-                <button type="button" className="action-button-secondary" onClick={onLogout} aria-label="Logout" title="Logout">
-                  <span className="hidden sm:inline">Logout</span>
-                  <span className="sm:hidden" aria-hidden="true">⎋</span>
-                </button>
-              </>
+              <UserMenu
+                username={currentUsername}
+                canAccessAccount={canAccessAccount}
+                canManageUsers={canManageUsers}
+                onLogout={onLogout}
+              />
             ) : (
               <Link to="/login" className="action-button-secondary">
                 Login

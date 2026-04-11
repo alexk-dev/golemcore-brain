@@ -1,46 +1,54 @@
 import { useEffect, useState } from 'react'
-import type { FormEvent } from 'react'
 import { toast } from 'sonner'
+
 import { createSpace, deleteSpace } from '../../lib/api'
 import { useSpaceStore } from '../../stores/space'
+import { useUiStore } from '../../stores/ui'
+import { CreateSpaceDialog } from './CreateSpaceDialog'
+import { DeleteSpaceDialog } from './DeleteSpaceDialog'
 
 export function SpacesPage() {
+  const currentUser = useUiStore((state) => state.currentUser)
+  const authDisabled = useUiStore((state) => state.authDisabled)
+  const isAdmin = authDisabled || currentUser?.role === 'ADMIN'
+
   const spaces = useSpaceStore((state) => state.spaces)
   const reloadSpaces = useSpaceStore((state) => state.reloadSpaces)
-  const [slug, setSlug] = useState('')
-  const [name, setName] = useState('')
-  const [submitting, setSubmitting] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
   useEffect(() => {
-    void reloadSpaces().catch((error: Error) => toast.error(error.message))
-  }, [reloadSpaces])
-
-  const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (!slug.trim()) {
-      toast.error('Slug is required')
-      return
+    if (isAdmin) {
+      void reloadSpaces().catch((error: Error) => toast.error(error.message))
     }
-    setSubmitting(true)
+  }, [isAdmin, reloadSpaces])
+
+  if (!isAdmin) {
+    return (
+      <div className="shell-form-page">
+        <div className="shell-form-page__card--wide surface-card p-6">
+          <h2 className="mb-2 text-xl font-semibold">Admin access required</h2>
+          <p className="text-sm text-muted">You must be signed in as an administrator to manage spaces.</p>
+        </div>
+      </div>
+    )
+  }
+
+  const handleCreate = async (slug: string, name: string) => {
     try {
-      await createSpace(slug.trim(), name.trim())
+      await createSpace(slug, name)
       toast.success('Space created')
-      setSlug('')
-      setName('')
       await reloadSpaces()
     } catch (error) {
       toast.error((error as Error).message)
-    } finally {
-      setSubmitting(false)
+      throw error
     }
   }
 
-  const handleDelete = async (targetSlug: string) => {
-    if (!window.confirm(`Delete space "${targetSlug}"? All files in it will remain on disk but become inaccessible.`)) {
-      return
-    }
+  const handleDelete = async () => {
+    if (!deleteTarget) return
     try {
-      await deleteSpace(targetSlug)
+      await deleteSpace(deleteTarget)
       toast.success('Space deleted')
       await reloadSpaces()
     } catch (error) {
@@ -49,79 +57,70 @@ export function SpacesPage() {
   }
 
   return (
-    <div className="shell-form-page">
-      <div className="shell-form-page__container">
-        <h1 className="shell-form-page__title">Spaces</h1>
-        <p className="shell-form-page__subtitle">
-          Each space is an isolated workspace of files. Create a space to group related content.
-        </p>
-
-        <form className="shell-form" onSubmit={handleCreate}>
-          <h2 className="shell-form__heading">Create a new space</h2>
-          <label className="shell-form__label">
-            Slug
-            <input
-              className="shell-form__input"
-              type="text"
-              value={slug}
-              placeholder="product-docs"
-              onChange={(event) => setSlug(event.target.value)}
-              required
-              pattern="[a-z0-9][a-z0-9-]{0,62}"
-              title="Lowercase letters, numbers, and dashes"
-            />
-          </label>
-          <label className="shell-form__label">
-            Name
-            <input
-              className="shell-form__input"
-              type="text"
-              value={name}
-              placeholder="Product Docs"
-              onChange={(event) => setName(event.target.value)}
-            />
-          </label>
-          <button className="action-button-primary" type="submit" disabled={submitting}>
-            {submitting ? 'Creating…' : 'Create space'}
+    <div className="page-viewer">
+      <div className="surface-card p-6">
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="mb-1 text-2xl font-semibold">Spaces</h1>
+            <p className="text-sm text-muted">
+              Each space is an isolated workspace of files. Create a space to group related content.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="action-button-primary"
+            onClick={() => setCreateOpen(true)}
+          >
+            Create space
           </button>
-        </form>
-
-        <div className="shell-form__section">
-          <h2 className="shell-form__heading">Existing spaces</h2>
-          {spaces.length === 0 ? (
-            <p>No spaces yet.</p>
-          ) : (
-            <table className="shell-form__table">
-              <thead>
-                <tr>
-                  <th>Slug</th>
-                  <th>Name</th>
-                  <th>Created</th>
-                  <th aria-label="Actions" />
-                </tr>
-              </thead>
-              <tbody>
-                {spaces.map((space) => (
-                  <tr key={space.id}>
-                    <td><code>{space.slug}</code></td>
-                    <td>{space.name}</td>
-                    <td>{new Date(space.createdAt).toLocaleString()}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="action-button-secondary"
-                        onClick={() => void handleDelete(space.slug)}
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
         </div>
+
+        <div className="mb-3 text-lg font-medium">Existing spaces</div>
+        {spaces.length === 0 ? (
+          <div className="text-sm text-muted">No spaces yet.</div>
+        ) : (
+          <div className="space-y-3">
+            {spaces.map((space) => (
+              <div
+                key={space.id}
+                className="rounded-2xl border border-surface-border bg-surface-alt/60 px-4 py-3"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="font-medium">{space.name || space.slug}</div>
+                    <div className="text-sm text-muted">
+                      <code>{space.slug}</code> · created {new Date(space.createdAt).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className="action-button-secondary"
+                      onClick={() => setDeleteTarget(space.slug)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+
+      <CreateSpaceDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onSubmit={handleCreate}
+      />
+      <DeleteSpaceDialog
+        open={deleteTarget !== null}
+        slug={deleteTarget ?? ''}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null)
+        }}
+        onConfirm={handleDelete}
+      />
     </div>
   )
 }
