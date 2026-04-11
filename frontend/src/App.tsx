@@ -15,11 +15,20 @@ function App() {
   const authDisabled = useUiStore((state) => state.authDisabled)
   const publicAccess = useUiStore((state) => state.publicAccess)
   const currentUser = useUiStore((state) => state.currentUser)
+  const authResolved = useUiStore((state) => state.authResolved)
   const canEdit = authDisabled || currentUser?.role === 'ADMIN' || currentUser?.role === 'EDITOR'
   const canView = authDisabled || publicAccess || currentUser !== null
   const canManageUsers = authDisabled || currentUser?.role === 'ADMIN'
   const canAccessAccount = authDisabled || currentUser !== null
   const needsLoginForEdit = !authDisabled && currentUser === null
+
+  if (!authResolved) {
+    return (
+      <WikiShell>
+        <div className="shell-form-page" aria-busy="true" />
+      </WikiShell>
+    )
+  }
 
   return (
     <WikiShell>

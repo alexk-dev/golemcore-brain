@@ -29,8 +29,8 @@ export function LoginPage() {
   }
 
   return (
-    <div className="page-editor__error">
-      <div className="surface-card mx-auto max-w-md p-6">
+    <div className="shell-form-page">
+      <div className="shell-form-page__card surface-card p-6">
         <h1 className="mb-4 text-2xl font-semibold">Login</h1>
         <form className="space-y-4" onSubmit={handleSubmit}>
           <label className="field">

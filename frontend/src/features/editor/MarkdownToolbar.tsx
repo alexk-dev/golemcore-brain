@@ -1,4 +1,4 @@
-import { Bold, Code, Eye, EyeOff, Image, Italic, Link, Redo, Strikethrough, Table, Undo } from 'lucide-react'
+import { Bold, Code, Eye, EyeOff, FileSearch, Image, Italic, Link, Redo, Strikethrough, Table, Undo } from 'lucide-react'
 import type { RefObject } from 'react'
 import type { EditorView } from '@codemirror/view'
 import { redo, undo } from '@codemirror/commands'
@@ -8,6 +8,7 @@ interface MarkdownToolbarProps {
   previewVisible: boolean
   onTogglePreview: () => void
   onOpenAssetManager: () => void
+  onOpenWikiLinkPicker: () => void
 }
 
 function insertText(view: EditorView | null, text: string) {
@@ -42,6 +43,7 @@ export function MarkdownToolbar({
   previewVisible,
   onTogglePreview,
   onOpenAssetManager,
+  onOpenWikiLinkPicker,
 }: MarkdownToolbarProps) {
   return (
     <div className="markdown-toolbar">
@@ -54,8 +56,11 @@ export function MarkdownToolbar({
       <button type="button" className="markdown-toolbar__button" onClick={() => wrapSelection(editorViewRef.current, '~~')} title="Strikethrough" aria-label="Strikethrough">
         <Strikethrough className="markdown-toolbar__icon" />
       </button>
-      <button type="button" className="markdown-toolbar__button" onClick={() => wrapSelection(editorViewRef.current, '[', '](https://example.com)')} title="Link" aria-label="Link">
+      <button type="button" className="markdown-toolbar__button" onClick={() => wrapSelection(editorViewRef.current, '[', '](https://example.com)')} title="External link" aria-label="External link">
         <Link className="markdown-toolbar__icon" />
+      </button>
+      <button type="button" className="markdown-toolbar__button" onClick={onOpenWikiLinkPicker} title="Link to wiki page (Ctrl+K)" aria-label="Link to wiki page">
+        <FileSearch className="markdown-toolbar__icon" />
       </button>
       <div className="markdown-toolbar__separator" />
       <button type="button" className="markdown-toolbar__button markdown-toolbar__button--desktop-only" onClick={() => insertText(editorViewRef.current, '# ')} title="Heading 1 (Ctrl+Alt+1)" aria-label="Heading 1">

@@ -14,6 +14,7 @@ interface AppLayoutProps {
   openPaths: string[]
   sidebarVisible: boolean
   onToggleSidebar: () => void
+  hideHeader?: boolean
   onNavigate: (path: string) => void
   onToggleNode: (path: string) => void
   onCreate: (parentPath: string, kind: 'PAGE' | 'SECTION') => void
@@ -45,6 +46,7 @@ export function AppLayout({
   openPaths,
   sidebarVisible,
   onToggleSidebar,
+  hideHeader = false,
   onNavigate,
   onToggleNode,
   onCreate,
@@ -67,6 +69,14 @@ export function AppLayout({
   editorDirty = false,
   onLogout,
 }: AppLayoutProps) {
+  if (hideHeader) {
+    return (
+      <div className="min-h-screen bg-background text-foreground">
+        <main className="app-layout__chromeless-main custom-scrollbar">{children}</main>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="app-layout__header">
@@ -97,27 +107,28 @@ export function AppLayout({
             <Toolbar />
             {currentUsername ? (
               <>
-                <span className="action-button-secondary">
+                <span className="action-button-secondary hidden lg:inline-flex">
                   <UserRound size={16} />
                   {currentUsername}
                 </span>
                 {canCreate ? (
-                  <Link to="/import" className="action-button-secondary">
+                  <Link to="/import" className="action-button-secondary hidden lg:inline-flex">
                     Import
                   </Link>
                 ) : null}
                 {canAccessAccount ? (
-                  <Link to="/account" className="action-button-secondary">
+                  <Link to="/account" className="action-button-secondary hidden md:inline-flex">
                     Account
                   </Link>
                 ) : null}
                 {canManageUsers ? (
-                  <Link to="/users" className="action-button-secondary">
+                  <Link to="/users" className="action-button-secondary hidden lg:inline-flex">
                     Users
                   </Link>
                 ) : null}
-                <button type="button" className="action-button-secondary" onClick={onLogout}>
-                  Logout
+                <button type="button" className="action-button-secondary" onClick={onLogout} aria-label="Logout" title="Logout">
+                  <span className="hidden sm:inline">Logout</span>
+                  <span className="sm:hidden" aria-hidden="true">⎋</span>
                 </button>
               </>
             ) : (
@@ -131,7 +142,14 @@ export function AppLayout({
       <div className="app-layout__header-spacer" />
       <div className="app-layout__content-wrapper">
         {sidebarVisible ? (
-          <div className="app-layout__sidebar-container" id="sidebar-container">
+          <>
+            <button
+              type="button"
+              className="app-layout__sidebar-backdrop"
+              aria-label="Close sidebar"
+              onClick={onToggleSidebar}
+            />
+            <div className="app-layout__sidebar-container app-layout__sidebar-container--overlay" id="sidebar-container">
             <Sidebar
               tree={tree}
               activePath={activePath}
@@ -151,7 +169,8 @@ export function AppLayout({
               onCollapseAll={onCollapseAll}
               onOpenSearch={onOpenSearch}
             />
-          </div>
+            </div>
+          </>
         ) : null}
         <main className="app-layout__main-content-area custom-scrollbar" id="scroll-container">
           {children}

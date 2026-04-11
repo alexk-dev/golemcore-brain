@@ -9,6 +9,7 @@ interface UiState {
   authDisabled: boolean
   publicAccess: boolean
   currentUser: PublicUserView | null
+  authResolved: boolean
   setDarkMode: (value: boolean) => void
   toggleDarkMode: () => void
   setSidebarVisible: (value: boolean) => void
@@ -23,12 +24,15 @@ export const useUiStore = create<UiState>((set) => ({
   isDark: typeof window !== 'undefined'
     ? window.matchMedia('(prefers-color-scheme: dark)').matches
     : false,
-  sidebarVisible: true,
+  sidebarVisible: typeof window !== 'undefined'
+    ? window.matchMedia('(min-width: 768px)').matches
+    : true,
   searchOpen: false,
   quickSwitcherOpen: false,
   authDisabled: false,
   publicAccess: false,
   currentUser: null,
+  authResolved: false,
   setDarkMode: (value) => set({ isDark: value }),
   toggleDarkMode: () => set((state) => ({ isDark: !state.isDark })),
   setSidebarVisible: (value) => set({ sidebarVisible: value }),
@@ -39,6 +43,7 @@ export const useUiStore = create<UiState>((set) => ({
     authDisabled: config.authDisabled,
     publicAccess: config.publicAccess,
     currentUser: config.user,
+    authResolved: true,
   }),
   setCurrentUser: (user) => set({ currentUser: user }),
 }))
