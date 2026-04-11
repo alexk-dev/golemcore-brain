@@ -62,37 +62,44 @@ public class WikiController {
     }
 
     @GetMapping("/page")
-    public WikiPage getPage(@PathVariable String slug, @RequestParam(name = "path", defaultValue = "") String path, HttpServletRequest request) {
+    public WikiPage getPage(@PathVariable String slug, @RequestParam(name = "path", defaultValue = "") String path,
+            HttpServletRequest request) {
         requireView(request);
         return wikiApplicationService.getPage(path);
     }
 
     @GetMapping("/pages/by-path")
-    public WikiPage getPageByPath(@PathVariable String slug, @RequestParam(name = "path", defaultValue = "") String path, HttpServletRequest request) {
+    public WikiPage getPageByPath(@PathVariable String slug,
+            @RequestParam(name = "path", defaultValue = "") String path, HttpServletRequest request) {
         requireView(request);
         return wikiApplicationService.getPage(path);
     }
 
     @GetMapping("/page/history")
-    public List<WikiPageHistoryEntry> getPageHistory(@PathVariable String slug, @RequestParam(name = "path") String path, HttpServletRequest request) {
+    public List<WikiPageHistoryEntry> getPageHistory(@PathVariable String slug,
+            @RequestParam(name = "path") String path, HttpServletRequest request) {
         requireView(request);
         return wikiApplicationService.getPageHistory(path);
     }
 
     @GetMapping("/page/history/version")
-    public WikiPageHistoryVersion getPageHistoryVersion(@PathVariable String slug, @RequestParam(name = "path") String path, @RequestParam(name = "versionId") String versionId, HttpServletRequest request) {
+    public WikiPageHistoryVersion getPageHistoryVersion(@PathVariable String slug,
+            @RequestParam(name = "path") String path, @RequestParam(name = "versionId") String versionId,
+            HttpServletRequest request) {
         requireView(request);
         return wikiApplicationService.getPageHistoryVersion(path, versionId);
     }
 
     @PostMapping("/page/history/restore")
-    public WikiPage restorePageHistory(@PathVariable String slug, @RequestParam(name = "path") String path, @RequestParam(name = "versionId") String versionId, HttpServletRequest request) {
+    public WikiPage restorePageHistory(@PathVariable String slug, @RequestParam(name = "path") String path,
+            @RequestParam(name = "versionId") String versionId, HttpServletRequest request) {
         AuthContext context = requireEdit(request);
         return wikiApplicationService.restorePageHistory(path, versionId, resolveActor(context));
     }
 
     @PostMapping("/pages")
-    public WikiPage createPage(@PathVariable String slug, @Valid @RequestBody CreatePagePayload payload, HttpServletRequest request) {
+    public WikiPage createPage(@PathVariable String slug, @Valid @RequestBody CreatePagePayload payload,
+            HttpServletRequest request) {
         requireEdit(request);
         return wikiApplicationService.createPage(WikiApplicationService.CreatePageCommand.builder()
                 .parentPath(payload.getParentPath())
@@ -104,19 +111,22 @@ public class WikiController {
     }
 
     @PostMapping("/pages/ensure")
-    public WikiPage ensurePage(@PathVariable String slug, @Valid @RequestBody EnsurePagePayload payload, HttpServletRequest request) {
+    public WikiPage ensurePage(@PathVariable String slug, @Valid @RequestBody EnsurePagePayload payload,
+            HttpServletRequest request) {
         requireEdit(request);
         return wikiApplicationService.ensurePage(payload.getPath(), payload.getTargetTitle());
     }
 
     @GetMapping("/pages/lookup")
-    public WikiPathLookupResult lookupPath(@PathVariable String slug, @RequestParam(name = "path") String path, HttpServletRequest request) {
+    public WikiPathLookupResult lookupPath(@PathVariable String slug, @RequestParam(name = "path") String path,
+            HttpServletRequest request) {
         requireView(request);
         return wikiApplicationService.lookupPath(path);
     }
 
     @PutMapping("/page")
-    public WikiPage updatePage(@PathVariable String slug, @RequestParam(name = "path") String path, @Valid @RequestBody UpdatePagePayload payload, HttpServletRequest request) {
+    public WikiPage updatePage(@PathVariable String slug, @RequestParam(name = "path") String path,
+            @Valid @RequestBody UpdatePagePayload payload, HttpServletRequest request) {
         AuthContext context = requireEdit(request);
         return wikiApplicationService.updatePage(WikiApplicationService.UpdatePageCommand.builder()
                 .path(path)
@@ -129,13 +139,15 @@ public class WikiController {
     }
 
     @DeleteMapping("/page")
-    public void deletePage(@PathVariable String slug, @RequestParam(name = "path") String path, HttpServletRequest request) {
+    public void deletePage(@PathVariable String slug, @RequestParam(name = "path") String path,
+            HttpServletRequest request) {
         requireEdit(request);
         wikiApplicationService.deletePage(path);
     }
 
     @PostMapping("/page/move")
-    public WikiPage movePage(@PathVariable String slug, @RequestParam(name = "path") String path, @Valid @RequestBody MovePagePayload payload, HttpServletRequest request) {
+    public WikiPage movePage(@PathVariable String slug, @RequestParam(name = "path") String path,
+            @Valid @RequestBody MovePagePayload payload, HttpServletRequest request) {
         requireEdit(request);
         return wikiApplicationService.movePage(WikiApplicationService.MovePageCommand.builder()
                 .path(path)
@@ -146,7 +158,8 @@ public class WikiController {
     }
 
     @PostMapping("/page/copy")
-    public WikiPage copyPage(@PathVariable String slug, @RequestParam(name = "path") String path, @Valid @RequestBody CopyPagePayload payload, HttpServletRequest request) {
+    public WikiPage copyPage(@PathVariable String slug, @RequestParam(name = "path") String path,
+            @Valid @RequestBody CopyPagePayload payload, HttpServletRequest request) {
         requireEdit(request);
         return wikiApplicationService.copyPage(WikiApplicationService.CopyPageCommand.builder()
                 .path(path)
@@ -157,7 +170,8 @@ public class WikiController {
     }
 
     @PostMapping("/page/convert")
-    public WikiPage convertPage(@PathVariable String slug, @RequestParam(name = "path") String path, @Valid @RequestBody ConvertPagePayload payload, HttpServletRequest request) {
+    public WikiPage convertPage(@PathVariable String slug, @RequestParam(name = "path") String path,
+            @Valid @RequestBody ConvertPagePayload payload, HttpServletRequest request) {
         requireEdit(request);
         return wikiApplicationService.convertPage(WikiApplicationService.ConvertPageCommand.builder()
                 .path(path)
@@ -166,7 +180,8 @@ public class WikiController {
     }
 
     @PutMapping("/section/sort")
-    public void sortChildren(@PathVariable String slug, @RequestParam(name = "path") String path, @Valid @RequestBody SortChildrenPayload payload, HttpServletRequest request) {
+    public void sortChildren(@PathVariable String slug, @RequestParam(name = "path") String path,
+            @Valid @RequestBody SortChildrenPayload payload, HttpServletRequest request) {
         requireEdit(request);
         wikiApplicationService.sortChildren(WikiApplicationService.SortChildrenCommand.builder()
                 .path(path)
@@ -175,7 +190,8 @@ public class WikiController {
     }
 
     @GetMapping("/search")
-    public List<WikiSearchHit> search(@PathVariable String slug, @RequestParam(name = "q", defaultValue = "") String query, HttpServletRequest request) {
+    public List<WikiSearchHit> search(@PathVariable String slug,
+            @RequestParam(name = "q", defaultValue = "") String query, HttpServletRequest request) {
         requireView(request);
         return wikiApplicationService.search(query);
     }
@@ -194,9 +210,10 @@ public class WikiController {
             HttpServletRequest request) throws IOException {
         requireEdit(request);
         MarkdownImportOptionsPayload resolvedOptions = options == null ? new MarkdownImportOptionsPayload() : options;
-        return wikiApplicationService.planMarkdownImport(file.getInputStream(), WikiApplicationService.ImportPlanCommand.builder()
-                .targetRootPath(resolvedOptions.getTargetRootPath())
-                .build());
+        return wikiApplicationService.planMarkdownImport(file.getInputStream(),
+                WikiApplicationService.ImportPlanCommand.builder()
+                        .targetRootPath(resolvedOptions.getTargetRootPath())
+                        .build());
     }
 
     @PostMapping(value = "/import/markdown/apply", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -207,51 +224,60 @@ public class WikiController {
             HttpServletRequest request) throws IOException {
         AuthContext context = requireEdit(request);
         MarkdownImportOptionsPayload resolvedOptions = options == null ? new MarkdownImportOptionsPayload() : options;
-        return wikiApplicationService.applyMarkdownImport(file.getInputStream(), WikiApplicationService.ImportApplyCommand.builder()
-                .targetRootPath(resolvedOptions.getTargetRootPath())
-                .items(resolvedOptions.getItems().stream()
-                        .map(item -> WikiApplicationService.ImportSelectionCommand.builder()
-                                .sourcePath(item.getSourcePath())
-                                .selected(item.isSelected())
-                                .policy(item.getPolicy())
-                                .build())
-                        .toList())
-                .actor(resolveActor(context))
-                .build());
+        return wikiApplicationService.applyMarkdownImport(file.getInputStream(),
+                WikiApplicationService.ImportApplyCommand.builder()
+                        .targetRootPath(resolvedOptions.getTargetRootPath())
+                        .items(resolvedOptions.getItems().stream()
+                                .map(item -> WikiApplicationService.ImportSelectionCommand.builder()
+                                        .sourcePath(item.getSourcePath())
+                                        .selected(item.isSelected())
+                                        .policy(item.getPolicy())
+                                        .build())
+                                .toList())
+                        .actor(resolveActor(context))
+                        .build());
     }
 
     @GetMapping("/links")
-    public WikiLinkStatus getLinkStatus(@PathVariable String slug, @RequestParam(name = "path") String path, HttpServletRequest request) {
+    public WikiLinkStatus getLinkStatus(@PathVariable String slug, @RequestParam(name = "path") String path,
+            HttpServletRequest request) {
         requireView(request);
         return wikiApplicationService.getLinkStatus(path);
     }
 
     @GetMapping("/pages/assets")
-    public List<WikiAsset> listAssets(@PathVariable String slug, @RequestParam(name = "path") String path, HttpServletRequest request) {
+    public List<WikiAsset> listAssets(@PathVariable String slug, @RequestParam(name = "path") String path,
+            HttpServletRequest request) {
         requireEdit(request);
         return wikiApplicationService.listAssets(path);
     }
 
     @PostMapping(value = "/pages/assets", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public WikiAsset uploadAsset(@PathVariable String slug, @RequestParam(name = "path") String path, @RequestPart("file") MultipartFile file, HttpServletRequest request) throws IOException {
+    public WikiAsset uploadAsset(@PathVariable String slug, @RequestParam(name = "path") String path,
+            @RequestPart("file") MultipartFile file, HttpServletRequest request) throws IOException {
         requireEdit(request);
-        return wikiApplicationService.uploadAsset(path, file.getOriginalFilename(), file.getContentType(), file.getInputStream());
+        return wikiApplicationService.uploadAsset(path, file.getOriginalFilename(), file.getContentType(),
+                file.getInputStream());
     }
 
     @PutMapping("/pages/assets/rename")
-    public WikiAsset renameAsset(@PathVariable String slug, @RequestParam(name = "path") String path, @Valid @RequestBody RenameAssetPayload payload, HttpServletRequest request) {
+    public WikiAsset renameAsset(@PathVariable String slug, @RequestParam(name = "path") String path,
+            @Valid @RequestBody RenameAssetPayload payload, HttpServletRequest request) {
         requireEdit(request);
         return wikiApplicationService.renameAsset(path, payload.getOldName(), payload.getNewName());
     }
 
     @DeleteMapping("/pages/assets")
-    public void deleteAsset(@PathVariable String slug, @RequestParam(name = "path") String path, @RequestParam(name = "name") String name, HttpServletRequest request) {
+    public void deleteAsset(@PathVariable String slug, @RequestParam(name = "path") String path,
+            @RequestParam(name = "name") String name, HttpServletRequest request) {
         requireEdit(request);
         wikiApplicationService.deleteAsset(path, name);
     }
 
     @GetMapping("/assets")
-    public ResponseEntity<InputStreamResource> getAsset(@PathVariable String slug, @RequestParam(name = "path") String path, @RequestParam(name = "name") String name, HttpServletRequest request) {
+    public ResponseEntity<InputStreamResource> getAsset(@PathVariable String slug,
+            @RequestParam(name = "path") String path, @RequestParam(name = "name") String name,
+            HttpServletRequest request) {
         requireView(request);
         WikiAssetContent assetContent = wikiApplicationService.openAsset(path, name);
         return ResponseEntity.ok()
@@ -272,7 +298,8 @@ public class WikiController {
     }
 
     private String resolveActor(AuthContext context) {
-        if (context.getUser() == null || context.getUser().getUsername() == null || context.getUser().getUsername().isBlank()) {
+        if (context.getUser() == null || context.getUser().getUsername() == null
+                || context.getUser().getUsername().isBlank()) {
             return "Local editor";
         }
         return context.getUser().getUsername();

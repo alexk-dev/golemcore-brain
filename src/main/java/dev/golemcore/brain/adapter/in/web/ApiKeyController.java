@@ -61,7 +61,8 @@ public class ApiKeyController {
             HttpServletRequest request) {
         AuthContext context = authContextResolver.requireAuthenticated(request);
         IssuedApiKey issued = apiKeyService.issueForSpace(
-                context, slug, payload.getName(), resolveRoles(payload.getRoles()), resolveExpiresAt(payload.getExpiresAt()));
+                context, slug, payload.getName(), resolveRoles(payload.getRoles()),
+                resolveExpiresAt(payload.getExpiresAt()));
         return ResponseEntity.status(201).body(IssuedApiKeyResponse.of(issued));
     }
 

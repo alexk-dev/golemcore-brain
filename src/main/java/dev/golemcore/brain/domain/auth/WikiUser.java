@@ -13,7 +13,10 @@ public class WikiUser {
     String username;
     String email;
     String passwordHash;
-    /** Legacy single-role field kept for compatibility; use memberships for authorization. */
+    /**
+     * Legacy single-role field kept for compatibility; use memberships for
+     * authorization.
+     */
     UserRole role;
     @Singular
     List<SpaceMembership> memberships;
@@ -36,9 +39,9 @@ public class WikiUser {
 
     private static int rank(UserRole role) {
         return switch (role) {
-            case ADMIN -> 3;
-            case EDITOR -> 2;
-            case VIEWER -> 1;
+        case ADMIN -> 3;
+        case EDITOR -> 2;
+        case VIEWER -> 1;
         };
     }
 }

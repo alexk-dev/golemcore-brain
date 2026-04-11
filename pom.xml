@@ -17,10 +17,26 @@
     <name>golemcore-brain</name>
     <description>File-backed lightweight wiki for markdown knowledge bases.</description>
 
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
     <properties>
         <java.version>25</java.version>
         <frontend-maven-plugin.version>1.15.4</frontend-maven-plugin.version>
         <maven-resources-plugin.version>3.3.1</maven-resources-plugin.version>
+        <spotbugs.version>4.9.8.2</spotbugs.version>
+        <pmd.version>3.28.0</pmd.version>
+        <jacoco.version>0.8.14</jacoco.version>
+        <jib.version>3.5.1</jib.version>
+        <jib.target.image>ghcr.io/${env.GITHUB_REPOSITORY}</jib.target.image>
+        <jib.from.image>eclipse-temurin:25-jre-alpine</jib.from.image>
+        <jib.platform.arch>amd64</jib.platform.arch>
+        <skip.frontend>false</skip.frontend>
     </properties>
 
     <dependencies>
@@ -100,6 +116,7 @@
                 <version>${frontend-maven-plugin.version}</version>
                 <configuration>
                     <workingDirectory>frontend</workingDirectory>
+                    <skip>${skip.frontend}</skip>
                 </configuration>
                 <executions>
                     <execution>
@@ -147,6 +164,7 @@
                             <goal>copy-resources</goal>
                         </goals>
                         <configuration>
+                            <skip>${skip.frontend}</skip>
                             <outputDirectory>${project.build.outputDirectory}/static</outputDirectory>
                             <resources>
                                 <resource>
@@ -158,6 +176,138 @@
                     </execution>
                 </executions>
             </plugin>
+            <plugin>
+                <groupId>com.github.spotbugs</groupId>
+                <artifactId>spotbugs-maven-plugin</artifactId>
+                <version>${spotbugs.version}</version>
+                <configuration>
+                    <effort>Max</effort>
+                    <threshold>Medium</threshold>
+                    <failOnError>true</failOnError>
+                    <excludeFilterFile>misc/spotbugs-exclude.xml</excludeFilterFile>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-pmd-plugin</artifactId>
+                <version>${pmd.version}</version>
+                <configuration>
+                    <failOnViolation>false</failOnViolation>
+                    <printFailingErrors>true</printFailingErrors>
+                    <includeTests>true</includeTests>
+                    <rulesets>
+                        <ruleset>misc/pmd-ruleset.xml</ruleset>
+                    </rulesets>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>net.revelc.code.formatter</groupId>
+                <artifactId>formatter-maven-plugin</artifactId>
+                <version>2.29.0</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>format</goal>
+                            <goal>validate</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <encoding>UTF-8</encoding>
+                    <lineEnding>LF</lineEnding>
+                    <configFile>${project.basedir}/misc/formatter_eclipse.xml</configFile>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>${jacoco.version}</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>com.google.cloud.tools</groupId>
+                <artifactId>jib-maven-plugin</artifactId>
+                <version>${jib.version}</version>
+                <configuration>
+                    <from>
+                        <image>${jib.from.image}</image>
+                        <platforms>
+                            <platform>
+                                <architecture>${jib.platform.arch}</architecture>
+                                <os>linux</os>
+                            </platform>
+                        </platforms>
+                    </from>
+                    <to>
+                        <image>${jib.target.image}</image>
+                    </to>
+                    <container>
+                        <ports>
+                            <port>8080</port>
+                        </ports>
+                        <creationTime>USE_CURRENT_TIMESTAMP</creationTime>
+                    </container>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>strict</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.github.spotbugs</groupId>
+                        <artifactId>spotbugs-maven-plugin</artifactId>
+                        <configuration>
+                            <effort>Max</effort>
+                            <threshold>Low</threshold>
+                            <failOnError>true</failOnError>
+                            <excludeFilterFile>misc/spotbugs-exclude.xml</excludeFilterFile>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>check</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-pmd-plugin</artifactId>
+                        <configuration>
+                            <failOnViolation>true</failOnViolation>
+                            <printFailingErrors>true</printFailingErrors>
+                            <includeTests>true</includeTests>
+                            <rulesets>
+                                <ruleset>misc/pmd-ruleset.xml</ruleset>
+                            </rulesets>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>check</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

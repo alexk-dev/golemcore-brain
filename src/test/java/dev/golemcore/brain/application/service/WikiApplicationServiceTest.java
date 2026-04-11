@@ -79,7 +79,8 @@ class WikiApplicationServiceTest {
                 .path("operations/deployments")
                 .title("Release guide")
                 .slug("release-guide")
-                .content("Updated release checklist with [Checklist](../shared/checklist) and [Missing](../shared/missing)")
+                .content(
+                        "Updated release checklist with [Checklist](../shared/checklist) and [Missing](../shared/missing)")
                 .build());
         assertEquals("operations/release-guide", updatedPage.getPath());
 
@@ -91,7 +92,8 @@ class WikiApplicationServiceTest {
         assertEquals(2, lookupResult.getSegments().size());
 
         assertFalse(service.search("nonexistent-query").iterator().hasNext());
-        assertTrue(service.search("release").stream().anyMatch(hit -> hit.getPath().equals("operations/release-guide")));
+        assertTrue(
+                service.search("release").stream().anyMatch(hit -> hit.getPath().equals("operations/release-guide")));
 
         WikiPage copiedPage = service.copyPage(WikiApplicationService.CopyPageCommand.builder()
                 .path("operations/release-guide")
@@ -136,7 +138,8 @@ class WikiApplicationServiceTest {
                 .slug("release-guide")
                 .content("![notes.txt](" + uploadedAsset.getPath() + ")")
                 .build());
-        WikiAsset renamedAsset = service.renameAsset("operations/release-guide", uploadedAsset.getName(), "renamed-notes.txt");
+        WikiAsset renamedAsset = service.renameAsset("operations/release-guide", uploadedAsset.getName(),
+                "renamed-notes.txt");
         assertEquals("renamed-notes.txt", renamedAsset.getName());
         assertTrue(service.getPage("operations/release-guide").getContent().contains(renamedAsset.getPath()));
         assertFalse(service.getPage("operations/release-guide").getContent().contains(uploadedAsset.getPath()));
@@ -147,7 +150,8 @@ class WikiApplicationServiceTest {
                 .targetSlug("release-guide-assets-copy")
                 .build());
         assertEquals(1, service.listAssets(assetCopy.getPath()).size());
-        assertTrue(service.getPage(assetCopy.getPath()).getContent().contains("/api/assets?path=release-guide-assets-copy&name=renamed-notes.txt"));
+        assertTrue(service.getPage(assetCopy.getPath()).getContent()
+                .contains("/api/assets?path=release-guide-assets-copy&name=renamed-notes.txt"));
 
         WikiPage assetMove = service.movePage(WikiApplicationService.MovePageCommand.builder()
                 .path(assetCopy.getPath())
@@ -155,7 +159,8 @@ class WikiApplicationServiceTest {
                 .targetSlug("release-guide-assets-moved")
                 .build());
         assertEquals(1, service.listAssets(assetMove.getPath()).size());
-        assertTrue(service.getPage(assetMove.getPath()).getContent().contains("/api/assets?path=operations/release-guide-assets-moved&name=renamed-notes.txt"));
+        assertTrue(service.getPage(assetMove.getPath()).getContent()
+                .contains("/api/assets?path=operations/release-guide-assets-moved&name=renamed-notes.txt"));
 
         WikiAssetContent assetContent = service.openAsset("operations/release-guide", renamedAsset.getName());
         assertEquals("renamed-notes.txt", assetContent.getName());
@@ -217,7 +222,8 @@ class WikiApplicationServiceTest {
         FileSystemWikiRepository repository = new FileSystemWikiRepository(properties, spaceRepository);
         repository.initialize();
         WikiApplicationService service = new WikiApplicationService(repository, properties);
-        assertTrue(Files.exists(properties.getStorageRoot().resolve("spaces").resolve(defaultSpace.getId()).resolve("index.md")));
+        assertTrue(Files.exists(
+                properties.getStorageRoot().resolve("spaces").resolve(defaultSpace.getId()).resolve("index.md")));
         return service;
     }
 }

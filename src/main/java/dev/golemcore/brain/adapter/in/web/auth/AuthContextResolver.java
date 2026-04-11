@@ -11,8 +11,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 /**
- * Unified entry point for resolving the current request's AuthContext, preferring a JWT-based
- * context set by {@link JwtAuthenticationFilter} and falling back to session cookies.
+ * Unified entry point for resolving the current request's AuthContext,
+ * preferring a JWT-based context set by {@link JwtAuthenticationFilter} and
+ * falling back to session cookies.
  */
 @Component
 @RequiredArgsConstructor

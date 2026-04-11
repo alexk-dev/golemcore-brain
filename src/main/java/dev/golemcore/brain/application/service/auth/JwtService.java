@@ -72,5 +72,6 @@ public class JwtService {
             String subject,
             String spaceId,
             Set<UserRole> roles,
-            Instant expiresAt) {}
+            Instant expiresAt) {
+    }
 }

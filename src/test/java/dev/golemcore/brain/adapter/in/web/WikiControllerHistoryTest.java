@@ -42,56 +42,57 @@ class WikiControllerHistoryTest {
     @Test
     void shouldListAndRestorePageHistory() throws Exception {
         mockMvc.perform(post("/api/spaces/default/pages")
-                        .contentType("application/json")
-                        .content("""
-                                {
-                                  "parentPath": "",
-                                  "title": "Operations",
-                                  "slug": "operations",
-                                  "content": "Ops section",
-                                  "kind": "SECTION"
-                                }
-                                """))
+                .contentType("application/json")
+                .content("""
+                        {
+                          "parentPath": "",
+                          "title": "Operations",
+                          "slug": "operations",
+                          "content": "Ops section",
+                          "kind": "SECTION"
+                        }
+                        """))
                 .andExpect(status().isOk());
 
         mockMvc.perform(post("/api/spaces/default/pages")
-                        .contentType("application/json")
-                        .content("""
-                                {
-                                  "parentPath": "operations",
-                                  "title": "Runbook v1",
-                                  "slug": "runbook",
-                                  "content": "Version one",
-                                  "kind": "PAGE"
-                                }
-                                """))
+                .contentType("application/json")
+                .content("""
+                        {
+                          "parentPath": "operations",
+                          "title": "Runbook v1",
+                          "slug": "runbook",
+                          "content": "Version one",
+                          "kind": "PAGE"
+                        }
+                        """))
                 .andExpect(status().isOk());
 
         mockMvc.perform(put("/api/spaces/default/page")
-                        .param("path", "operations/runbook")
-                        .contentType("application/json")
-                        .content("""
-                                {
-                                  "title": "Runbook v2",
-                                  "slug": "runbook",
-                                  "content": "Version two"
-                                }
-                                """))
+                .param("path", "operations/runbook")
+                .contentType("application/json")
+                .content("""
+                        {
+                          "title": "Runbook v2",
+                          "slug": "runbook",
+                          "content": "Version two"
+                        }
+                        """))
                 .andExpect(status().isOk());
 
         mockMvc.perform(put("/api/spaces/default/page")
-                        .param("path", "operations/runbook")
-                        .contentType("application/json")
-                        .content("""
-                                {
-                                  "title": "Runbook v3",
-                                  "slug": "runbook",
-                                  "content": "Version three"
-                                }
-                                """))
+                .param("path", "operations/runbook")
+                .contentType("application/json")
+                .content("""
+                        {
+                          "title": "Runbook v3",
+                          "slug": "runbook",
+                          "content": "Version three"
+                        }
+                        """))
                 .andExpect(status().isOk());
 
-        MvcResult historyResult = mockMvc.perform(get("/api/spaces/default/page/history").param("path", "operations/runbook"))
+        MvcResult historyResult = mockMvc
+                .perform(get("/api/spaces/default/page/history").param("path", "operations/runbook"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(2)))
                 .andExpect(jsonPath("$[0].title", is("Runbook v2")))
@@ -103,8 +104,8 @@ class WikiControllerHistoryTest {
         String versionId = extractFirstVersionId(historyResult.getResponse().getContentAsString());
 
         mockMvc.perform(get("/api/spaces/default/page/history/version")
-                        .param("path", "operations/runbook")
-                        .param("versionId", versionId))
+                .param("path", "operations/runbook")
+                .param("versionId", versionId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title", is("Runbook v2")))
                 .andExpect(jsonPath("$.content", is("Version two")))
@@ -112,8 +113,8 @@ class WikiControllerHistoryTest {
                 .andExpect(jsonPath("$.reason", is("Manual save")));
 
         mockMvc.perform(post("/api/spaces/default/page/history/restore")
-                        .param("path", "operations/runbook")
-                        .param("versionId", versionId))
+                .param("path", "operations/runbook")
+                .param("versionId", versionId))
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/spaces/default/pages/by-path").param("path", "operations/runbook"))

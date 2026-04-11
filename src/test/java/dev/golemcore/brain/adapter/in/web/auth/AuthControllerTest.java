@@ -52,16 +52,16 @@ class AuthControllerTest {
         Cookie adminSession = login("admin", "admin");
 
         MvcResult createResult = mockMvc.perform(post("/api/auth/users")
-                        .cookie(adminSession)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "username": "editor",
-                                  "email": "editor@example.com",
-                                  "password": "editor-pass",
-                                  "role": "EDITOR"
-                                }
-                                """))
+                .cookie(adminSession)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "username": "editor",
+                          "email": "editor@example.com",
+                          "password": "editor-pass",
+                          "role": "EDITOR"
+                        }
+                        """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.username", is("editor")))
                 .andExpect(jsonPath("$.email", is("editor@example.com")))
@@ -70,16 +70,16 @@ class AuthControllerTest {
         String userId = extractJsonValue(createResult, "id");
 
         mockMvc.perform(put("/api/auth/users/{userId}", userId)
-                        .cookie(adminSession)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "username": "editor-updated",
-                                  "email": "updated@example.com",
-                                  "password": "updated-pass",
-                                  "role": "VIEWER"
-                                }
-                                """))
+                .cookie(adminSession)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "username": "editor-updated",
+                          "email": "updated@example.com",
+                          "password": "updated-pass",
+                          "role": "VIEWER"
+                        }
+                        """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.username", is("editor-updated")))
                 .andExpect(jsonPath("$.email", is("updated@example.com")))
@@ -88,17 +88,17 @@ class AuthControllerTest {
         login("updated@example.com", "updated-pass");
 
         mockMvc.perform(delete("/api/auth/users/{userId}", userId)
-                        .cookie(adminSession))
+                .cookie(adminSession))
                 .andExpect(status().isOk());
 
         mockMvc.perform(post("/api/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "identifier": "updated@example.com",
-                                  "password": "updated-pass"
-                                }
-                                """))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "identifier": "updated@example.com",
+                          "password": "updated-pass"
+                        }
+                        """))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -108,21 +108,21 @@ class AuthControllerTest {
         String adminUserId = getSingleUserId(adminSession);
 
         mockMvc.perform(put("/api/auth/users/{userId}", adminUserId)
-                        .cookie(adminSession)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "username": "admin",
-                                  "email": "admin@example.com",
-                                  "password": "",
-                                  "role": "EDITOR"
-                                }
-                                """))
+                .cookie(adminSession)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "username": "admin",
+                          "email": "admin@example.com",
+                          "password": "",
+                          "role": "EDITOR"
+                        }
+                        """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error", is("You cannot remove your own admin role")));
 
         mockMvc.perform(delete("/api/auth/users/{userId}", adminUserId)
-                        .cookie(adminSession))
+                .cookie(adminSession))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error", is("You cannot delete your own user")));
     }
@@ -132,14 +132,14 @@ class AuthControllerTest {
         Cookie adminSession = login("admin", "admin");
 
         mockMvc.perform(post("/api/auth/password")
-                        .cookie(adminSession)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "currentPassword": "admin",
-                                  "newPassword": "new-admin-pass"
-                                }
-                                """))
+                .cookie(adminSession)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "currentPassword": "admin",
+                          "newPassword": "new-admin-pass"
+                        }
+                        """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message", is("Password changed")));
 
@@ -147,13 +147,13 @@ class AuthControllerTest {
                 .andExpect(status().isForbidden());
 
         mockMvc.perform(post("/api/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "identifier": "admin",
-                                  "password": "admin"
-                                }
-                                """))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "identifier": "admin",
+                          "password": "admin"
+                        }
+                        """))
                 .andExpect(status().isUnauthorized());
 
         login("admin", "new-admin-pass");
@@ -161,13 +161,13 @@ class AuthControllerTest {
 
     private Cookie login(String identifier, String password) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "identifier": "%s",
-                                  "password": "%s"
-                                }
-                                """.formatted(identifier, password)))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "identifier": "%s",
+                          "password": "%s"
+                        }
+                        """.formatted(identifier, password)))
                 .andExpect(status().isOk())
                 .andReturn();
         Cookie sessionCookie = result.getResponse().getCookie(AuthService.SESSION_COOKIE_NAME);

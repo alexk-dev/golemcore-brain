@@ -31,7 +31,8 @@ public class ApiKeyService {
         return issue(authContext, name, null, normalizeRoles(roles), expiresAt);
     }
 
-    public IssuedApiKey issueForSpace(AuthContext authContext, String spaceSlug, String name, Set<UserRole> roles, Instant expiresAt) {
+    public IssuedApiKey issueForSpace(AuthContext authContext, String spaceSlug, String name, Set<UserRole> roles,
+            Instant expiresAt) {
         Space space = spaceRepository.findBySlug(spaceSlug)
                 .orElseThrow(() -> new WikiNotFoundException("Space not found: " + spaceSlug));
         if (!authContext.canAccessSpace(space.getId(), UserRole.ADMIN)) {
@@ -85,7 +86,8 @@ public class ApiKeyService {
         return apiKey;
     }
 
-    private IssuedApiKey issue(AuthContext authContext, String name, String spaceId, Set<UserRole> roles, Instant expiresAt) {
+    private IssuedApiKey issue(AuthContext authContext, String name, String spaceId, Set<UserRole> roles,
+            Instant expiresAt) {
         String subject = authContext.getUser() != null
                 ? "user:" + authContext.getUser().getId()
                 : "service:anonymous";
@@ -117,5 +119,6 @@ public class ApiKeyService {
         }
     }
 
-    public record IssuedApiKey(ApiKey apiKey, String token) {}
+    public record IssuedApiKey(ApiKey apiKey, String token) {
+    }
 }

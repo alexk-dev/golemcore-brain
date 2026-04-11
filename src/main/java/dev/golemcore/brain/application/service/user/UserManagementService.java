@@ -25,7 +25,8 @@ public class UserManagementService {
         return authService.listUsers(sessionToken);
     }
 
-    public PublicUserView createUser(Optional<String> sessionToken, String username, String email, String password, UserRole role) {
+    public PublicUserView createUser(Optional<String> sessionToken, String username, String email, String password,
+            UserRole role) {
         authService.requireUserManagement(sessionToken);
         assertUniqueIdentity(username, email, null);
         WikiUser user = WikiUser.builder()
