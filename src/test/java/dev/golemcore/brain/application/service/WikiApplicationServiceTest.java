@@ -2,23 +2,33 @@ package dev.golemcore.brain.application.service;
 
 import dev.golemcore.brain.adapter.out.filesystem.FileSystemWikiRepository;
 import dev.golemcore.brain.adapter.out.filesystem.space.FileSpaceRepository;
+import dev.golemcore.brain.adapter.out.index.lucene.LuceneWikiFullTextIndexAdapter;
+import dev.golemcore.brain.adapter.out.index.sqlite.SqliteWikiEmbeddingIndexAdapter;
 import dev.golemcore.brain.application.exception.WikiNotFoundException;
+import dev.golemcore.brain.application.port.out.LlmEmbeddingPort;
+import dev.golemcore.brain.application.port.out.LlmSettingsRepository;
+import dev.golemcore.brain.application.service.index.WikiIndexingService;
 import dev.golemcore.brain.application.space.SpaceContextHolder;
 import dev.golemcore.brain.config.WikiProperties;
-import dev.golemcore.brain.domain.space.Space;
-import org.junit.jupiter.api.AfterEach;
 import dev.golemcore.brain.domain.WikiAsset;
 import dev.golemcore.brain.domain.WikiAssetContent;
 import dev.golemcore.brain.domain.WikiLinkStatus;
 import dev.golemcore.brain.domain.WikiNodeKind;
 import dev.golemcore.brain.domain.WikiPage;
 import dev.golemcore.brain.domain.WikiPathLookupResult;
+import dev.golemcore.brain.domain.WikiIndexedDocument;
 import dev.golemcore.brain.domain.WikiTreeNode;
+import dev.golemcore.brain.domain.llm.LlmEmbeddingRequest;
+import dev.golemcore.brain.domain.llm.LlmEmbeddingResponse;
+import dev.golemcore.brain.domain.llm.LlmSettings;
+import dev.golemcore.brain.domain.space.Space;
 import java.io.ByteArrayInputStream;
+import java.time.Instant;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -206,6 +216,43 @@ class WikiApplicationServiceTest {
     }
 
     @Test
+    void shouldListIndexedDocumentsForRequestedSpaceOnly() {
+        WikiProperties properties = new WikiProperties();
+        properties.setStorageRoot(tempDir.resolve("wiki"));
+        properties.setSeedDemoContent(false);
+        FileSpaceRepository spaceRepository = new FileSpaceRepository(properties);
+        spaceRepository.initialize();
+        Space defaultSpace = spaceRepository.findBySlug(properties.getDefaultSpaceSlug()).orElseThrow();
+        Space extraSpace = Space.builder()
+                .id("extra-space")
+                .slug("extra")
+                .name("Extra")
+                .createdAt(Instant.parse("2026-04-11T00:00:00Z"))
+                .build();
+        spaceRepository.save(extraSpace);
+        FileSystemWikiRepository repository = new FileSystemWikiRepository(properties, spaceRepository);
+        repository.initialize();
+
+        SpaceContextHolder.set(defaultSpace.getId());
+        repository.createPage("", "Default Only", "shared", "default body", WikiNodeKind.PAGE);
+        SpaceContextHolder.set(extraSpace.getId());
+        repository.createPage("", "Extra Only", "shared", "extra body", WikiNodeKind.PAGE);
+
+        List<String> defaultTitles = repository.listDocuments(defaultSpace.getId()).stream()
+                .map(WikiIndexedDocument::getTitle)
+                .toList();
+        List<String> extraTitles = repository.listDocuments(extraSpace.getId()).stream()
+                .map(WikiIndexedDocument::getTitle)
+                .toList();
+
+        assertTrue(defaultTitles.contains("Default Only"));
+        assertFalse(defaultTitles.contains("Extra Only"));
+        assertTrue(extraTitles.contains("Extra Only"));
+        assertFalse(extraTitles.contains("Default Only"));
+        assertEquals(extraSpace.getId(), SpaceContextHolder.get());
+    }
+
+    @Test
     void shouldRejectPathTraversal() {
         WikiApplicationService service = createService();
         assertThrows(IllegalArgumentException.class, () -> service.getPage("../etc/passwd"));
@@ -221,9 +268,44 @@ class WikiApplicationServiceTest {
         SpaceContextHolder.set(defaultSpace.getId());
         FileSystemWikiRepository repository = new FileSystemWikiRepository(properties, spaceRepository);
         repository.initialize();
-        WikiApplicationService service = new WikiApplicationService(repository, properties);
+        WikiIndexingService indexingService = new WikiIndexingService(
+                repository,
+                new LuceneWikiFullTextIndexAdapter(properties),
+                new SqliteWikiEmbeddingIndexAdapter(properties),
+                new InMemoryLlmSettingsRepository(),
+                new NoopEmbeddingPort());
+        WikiApplicationService service = new WikiApplicationService(repository, properties, indexingService);
         assertTrue(Files.exists(
                 properties.getStorageRoot().resolve("spaces").resolve(defaultSpace.getId()).resolve("index.md")));
         return service;
+    }
+
+    private static class NoopEmbeddingPort implements LlmEmbeddingPort {
+
+        @Override
+        public LlmEmbeddingResponse embed(LlmEmbeddingRequest request) {
+            return LlmEmbeddingResponse.builder()
+                    .embeddings(List.of())
+                    .build();
+        }
+    }
+
+    private static class InMemoryLlmSettingsRepository implements LlmSettingsRepository {
+        private LlmSettings settings = LlmSettings.builder().build();
+
+        @Override
+        public void initialize() {
+        }
+
+        @Override
+        public LlmSettings load() {
+            return settings;
+        }
+
+        @Override
+        public LlmSettings save(LlmSettings settings) {
+            this.settings = settings;
+            return settings;
+        }
     }
 }

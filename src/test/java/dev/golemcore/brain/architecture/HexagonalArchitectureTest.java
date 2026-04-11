@@ -65,6 +65,25 @@ class HexagonalArchitectureTest {
                 + String.join("\n", violations));
     }
 
+    @Test
+    void shouldRequireSpaceIdOnIndexPortPublicMethods() throws IOException {
+        List<String> violations = new ArrayList<>();
+        for (Path sourceFile : javaFiles(MAIN_SOURCES.resolve("dev/golemcore/brain/application/port/out"))) {
+            String fileName = sourceFile.getFileName().toString();
+            if (!fileName.endsWith("IndexPort.java")) {
+                continue;
+            }
+            for (String methodSignature : publicMethodSignatures(sourceFile)) {
+                if (!methodSignature.contains("String spaceId")) {
+                    violations.add(sourceFile + " exposes a space-less index method: " + methodSignature);
+                }
+            }
+        }
+
+        assertTrue(violations.isEmpty(), () -> "Index ports must require spaceId on every public method:\n"
+                + String.join("\n", violations));
+    }
+
     private static List<Path> javaFiles(Path root) throws IOException {
         try (java.util.stream.Stream<Path> stream = Files.walk(root)) {
             return stream.filter(path -> path.toString().endsWith(".java")).sorted().toList();
@@ -79,6 +98,18 @@ class HexagonalArchitectureTest {
     private static boolean isSpringAssemblySource(Path sourceFile) {
         String normalized = sourceFile.toString().replace('\\', '/');
         return !normalized.contains("/application/") && !normalized.contains("/domain/");
+    }
+
+    private static List<String> publicMethodSignatures(Path sourceFile) throws IOException {
+        return Files.readAllLines(sourceFile).stream()
+                .map(String::trim)
+                .filter(line -> line.endsWith(";"))
+                .filter(line -> line.contains("("))
+                .filter(line -> !line.startsWith("package "))
+                .filter(line -> !line.startsWith("import "))
+                .filter(line -> !line.startsWith("public interface "))
+                .filter(line -> !line.startsWith("}"))
+                .toList();
     }
 
     private static List<String> importsOf(Path sourceFile) throws IOException {

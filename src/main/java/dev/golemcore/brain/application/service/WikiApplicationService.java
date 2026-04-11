@@ -3,12 +3,16 @@ package dev.golemcore.brain.application.service;
 import dev.golemcore.brain.application.exception.WikiNotFoundException;
 import dev.golemcore.brain.application.port.out.BrainSettingsPort;
 import dev.golemcore.brain.application.port.out.WikiRepository;
+import dev.golemcore.brain.application.service.index.WikiIndexingService;
+import dev.golemcore.brain.application.space.SpaceContextHolder;
 import dev.golemcore.brain.domain.WikiAsset;
 import dev.golemcore.brain.domain.WikiAssetContent;
 import dev.golemcore.brain.domain.WikiConfigResponse;
 import dev.golemcore.brain.domain.WikiImportAction;
 import dev.golemcore.brain.domain.WikiImportApplyResponse;
 import dev.golemcore.brain.domain.WikiImportItem;
+import dev.golemcore.brain.domain.WikiIndexStatus;
+import dev.golemcore.brain.domain.WikiIndexedDocument;
 import dev.golemcore.brain.domain.WikiImportPolicy;
 import dev.golemcore.brain.domain.WikiImportPlanResponse;
 import dev.golemcore.brain.domain.WikiLinkStatus;
@@ -21,8 +25,8 @@ import dev.golemcore.brain.domain.WikiPageHistoryEntry;
 import dev.golemcore.brain.domain.WikiPageHistoryVersion;
 import dev.golemcore.brain.domain.WikiPathLookupResult;
 import dev.golemcore.brain.domain.WikiPathLookupSegment;
-import dev.golemcore.brain.domain.WikiSearchDocument;
 import dev.golemcore.brain.domain.WikiSearchHit;
+import dev.golemcore.brain.domain.WikiSemanticSearchResult;
 import dev.golemcore.brain.domain.WikiSearchStatus;
 import dev.golemcore.brain.domain.WikiTreeNode;
 import java.io.IOException;
@@ -55,6 +59,7 @@ public class WikiApplicationService {
 
     private final WikiRepository wikiRepository;
     private final BrainSettingsPort brainSettingsPort;
+    private final WikiIndexingService wikiIndexingService;
 
     public void initialize() {
         wikiRepository.initialize();
@@ -91,12 +96,14 @@ public class WikiApplicationService {
 
     public WikiPage restorePageHistory(String path, String versionId, String actor) {
         WikiPageHistoryVersion version = wikiRepository.readPageHistoryVersion(path, versionId);
-        return toPageDocument(wikiRepository.restorePageVersion(
+        WikiPageDocument document = wikiRepository.restorePageVersion(
                 path,
                 versionId,
                 actor,
                 "Version restored",
-                "Rolled back to \"" + version.getTitle() + "\"."));
+                "Rolled back to \"" + version.getTitle() + "\".");
+        recordUpsert(document);
+        return toPageDocument(document);
     }
 
     public WikiPage createPage(CreatePageCommand command) {
@@ -106,6 +113,7 @@ public class WikiApplicationService {
                 command.getSlug(),
                 command.getContent(),
                 command.getKind());
+        recordUpsert(document);
         return getPage(document.getPath());
     }
 
@@ -133,6 +141,7 @@ public class WikiApplicationService {
         WikiNodeReference nodeReference = wikiRepository.findReference(command.getPath())
                 .orElseThrow(() -> new WikiNotFoundException("Page not found: " + normalizePath(command.getPath())));
         WikiPageDocument currentDocument = wikiRepository.readDocument(nodeReference);
+        List<String> previousPaths = pathsForSubtree(command.getPath());
         WikiPageDocument document = wikiRepository.updatePage(
                 command.getPath(),
                 command.getTitle(),
@@ -143,19 +152,30 @@ public class WikiApplicationService {
                 Optional.ofNullable(command.getHistoryReason()).orElse("Manual save"),
                 Optional.ofNullable(command.getHistorySummary())
                         .orElse(summarizeManualSave(currentDocument, nodeReference, command)));
+        if (normalizePath(command.getPath()).equals(document.getPath())) {
+            recordUpsert(document);
+        } else {
+            recordDeletes(previousPaths);
+            recordUpserts(documentsForSubtree(document.getPath()));
+        }
         return getPage(document.getPath());
     }
 
     public void deletePage(String path) {
+        List<String> deletedPaths = pathsForSubtree(path);
         wikiRepository.deletePage(path);
+        recordDeletes(deletedPaths);
     }
 
     public WikiPage movePage(MovePageCommand command) {
+        List<String> previousPaths = pathsForSubtree(command.getPath());
         WikiPageDocument document = wikiRepository.movePage(
                 command.getPath(),
                 command.getTargetParentPath(),
                 command.getTargetSlug(),
                 command.getBeforeSlug());
+        recordDeletes(previousPaths);
+        recordUpserts(documentsForSubtree(document.getPath()));
         return getPage(document.getPath());
     }
 
@@ -165,11 +185,13 @@ public class WikiApplicationService {
                 command.getTargetParentPath(),
                 command.getTargetSlug(),
                 command.getBeforeSlug());
+        recordUpserts(documentsForSubtree(document.getPath()));
         return getPage(document.getPath());
     }
 
     public WikiPage convertPage(ConvertPageCommand command) {
         WikiPageDocument document = wikiRepository.convertPage(command.getPath(), command.getTargetKind());
+        recordUpsert(document);
         return getPage(document.getPath());
     }
 
@@ -182,35 +204,32 @@ public class WikiApplicationService {
         if (normalizedQuery.isBlank()) {
             return List.of();
         }
-        return wikiRepository.flatten().stream()
-                .map(this::toSearchDocument)
-                .filter(document -> document.matches(normalizedQuery))
-                .sorted((left, right) -> String.CASE_INSENSITIVE_ORDER.compare(left.getTitle(), right.getTitle()))
-                .limit(50)
-                .map(document -> WikiSearchHit.builder()
-                        .id(document.getId())
-                        .path(document.getPath())
-                        .title(document.getTitle())
-                        .excerpt(document.buildExcerpt(normalizedQuery))
-                        .parentPath(document.getParentPath())
-                        .kind(document.getKind())
-                        .build())
-                .toList();
+        return wikiIndexingService.search(requireSpaceId(), normalizedQuery);
     }
 
     public WikiSearchStatus getSearchStatus() {
-        List<WikiNodeReference> references = wikiRepository.flatten();
-        Instant lastUpdatedAt = references.stream()
-                .map(wikiRepository::readDocument)
-                .map(WikiPageDocument::getUpdatedAt)
-                .max(Instant::compareTo)
-                .orElse(Instant.now());
+        WikiIndexStatus status = wikiIndexingService.getStatus(requireSpaceId());
+        Instant lastUpdatedAt = Optional.ofNullable(status.getLastUpdatedAt()).orElse(Instant.now());
         return WikiSearchStatus.builder()
-                .mode("live-scan")
-                .ready(true)
-                .indexedDocuments(references.size())
+                .mode(status.getMode())
+                .ready(status.isReady())
+                .indexedDocuments(status.getFullTextIndexedDocuments())
+                .fullTextIndexedDocuments(status.getFullTextIndexedDocuments())
+                .embeddingDocuments(status.getEmbeddingIndexedDocuments())
+                .embeddingIndexedDocuments(status.getEmbeddingIndexedDocuments())
+                .staleDocuments(status.getStaleDocuments())
+                .embeddingsReady(status.isEmbeddingsReady())
+                .lastIndexingError(status.getLastIndexingError())
+                .embeddingModelId(status.getEmbeddingModelId())
+                .lastFullRebuildAt(status.getLastFullRebuildAt() == null
+                        ? null
+                        : DATE_TIME_FORMATTER.format(status.getLastFullRebuildAt()))
                 .lastUpdatedAt(DATE_TIME_FORMATTER.format(lastUpdatedAt))
                 .build();
+    }
+
+    public WikiSemanticSearchResult semanticSearch(String query) {
+        return wikiIndexingService.semanticSearch(requireSpaceId(), query);
     }
 
     public WikiImportPlanResponse planMarkdownImport(InputStream inputStream) {
@@ -401,7 +420,11 @@ public class WikiApplicationService {
     }
 
     public WikiAsset renameAsset(String path, String oldName, String newName) {
-        return wikiRepository.renameAsset(path, oldName, newName);
+        WikiAsset asset = wikiRepository.renameAsset(path, oldName, newName);
+        WikiNodeReference nodeReference = wikiRepository.findReference(path)
+                .orElseThrow(() -> new WikiNotFoundException("Page not found: " + normalizePath(path)));
+        recordUpsert(wikiRepository.readDocument(nodeReference));
+        return asset;
     }
 
     public void deleteAsset(String path, String assetName) {
@@ -758,16 +781,50 @@ public class WikiApplicationService {
                 .build();
     }
 
-    private WikiSearchDocument toSearchDocument(WikiNodeReference nodeReference) {
-        WikiPageDocument document = wikiRepository.readDocument(nodeReference);
-        return WikiSearchDocument.builder()
-                .id(nodeReference.getId())
-                .path(nodeReference.getPath())
+    private void recordUpsert(WikiPageDocument document) {
+        wikiIndexingService.recordUpsert(requireSpaceId(), toIndexedDocument(document));
+    }
+
+    private void recordUpserts(List<WikiIndexedDocument> documents) {
+        wikiIndexingService.recordUpserts(requireSpaceId(), documents);
+    }
+
+    private void recordDeletes(List<String> paths) {
+        wikiIndexingService.recordDeletes(requireSpaceId(), paths);
+    }
+
+    private List<String> pathsForSubtree(String path) {
+        String normalizedPath = normalizePath(path);
+        return wikiRepository.flatten().stream()
+                .map(WikiNodeReference::getPath)
+                .filter(candidatePath -> candidatePath.equals(normalizedPath)
+                        || (!normalizedPath.isBlank() && candidatePath.startsWith(normalizedPath + "/")))
+                .toList();
+    }
+
+    private List<WikiIndexedDocument> documentsForSubtree(String path) {
+        String normalizedPath = normalizePath(path);
+        return wikiRepository.listDocuments(requireSpaceId()).stream()
+                .filter(document -> document.getPath().equals(normalizedPath)
+                        || (!normalizedPath.isBlank() && document.getPath().startsWith(normalizedPath + "/")))
+                .toList();
+    }
+
+    private WikiIndexedDocument toIndexedDocument(WikiPageDocument document) {
+        return WikiIndexedDocument.builder()
+                .id(document.getId())
+                .path(document.getPath())
                 .parentPath(document.getParentPath())
                 .title(document.getTitle())
                 .body(document.getBody())
                 .kind(document.getKind())
+                .updatedAt(document.getUpdatedAt())
+                .revision(document.getRevision())
                 .build();
+    }
+
+    private String requireSpaceId() {
+        return SpaceContextHolder.require();
     }
 
     private List<ResolvedLink> extractResolvedLinks(String currentPath, String markdown) {

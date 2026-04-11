@@ -144,6 +144,15 @@ function SearchDialogBody({
         <div className="rounded-2xl border border-surface-border bg-surface-alt/60 px-4 py-3 text-sm text-muted">
           <div>Search mode: {searchStatus.mode}</div>
           <div>{searchStatus.indexedDocuments} documents indexed</div>
+          {searchStatus.embeddingIndexedDocuments !== undefined || searchStatus.embeddingDocuments !== undefined ? (
+            <div>{searchStatus.embeddingIndexedDocuments ?? searchStatus.embeddingDocuments} embeddings indexed</div>
+          ) : null}
+          {searchStatus.staleDocuments !== undefined && searchStatus.staleDocuments > 0 ? (
+            <div>{searchStatus.staleDocuments} stale documents</div>
+          ) : null}
+          {searchStatus.embeddingModelId ? <div>Embedding model: {searchStatus.embeddingModelId}</div> : null}
+          {searchStatus.embeddingsReady === false ? <div>Semantic index is not ready</div> : null}
+          {searchStatus.lastIndexingError ? <div>Last indexing error: {searchStatus.lastIndexingError}</div> : null}
         </div>
       ) : null}
 

@@ -2,6 +2,7 @@ package dev.golemcore.brain.application.port.out;
 
 import dev.golemcore.brain.domain.WikiAsset;
 import dev.golemcore.brain.domain.WikiAssetContent;
+import dev.golemcore.brain.domain.WikiIndexedDocument;
 import dev.golemcore.brain.domain.WikiNodeReference;
 import dev.golemcore.brain.domain.WikiPageDocument;
 import dev.golemcore.brain.domain.WikiPageHistoryEntry;
@@ -9,7 +10,7 @@ import java.io.InputStream;
 import java.util.List;
 import java.util.Optional;
 
-public interface WikiRepository {
+public interface WikiRepository extends WikiDocumentCatalogPort {
 
     void initialize();
 
@@ -44,6 +45,9 @@ public interface WikiRepository {
     void sortChildren(String path, List<String> orderedSlugs);
 
     List<WikiNodeReference> flatten();
+
+    @Override
+    List<WikiIndexedDocument> listDocuments(String spaceId);
 
     List<WikiPageHistoryEntry> listPageHistory(String path);
 

@@ -1,7 +1,8 @@
 # GolemCore Brain
 
 GolemCore Brain is a lightweight wiki application backed by markdown files on disk.
-It combines a modern React frontend with a Spring Boot 4 backend and keeps content portable without a database.
+It combines a modern React frontend with a Spring Boot 4 backend and keeps content portable without a primary content database.
+Derived search indexes use Lucene and SQLite and can be rebuilt from markdown content.
 
 ## Features
 
@@ -9,7 +10,8 @@ It combines a modern React frontend with a Spring Boot 4 backend and keeps conte
 - markdown viewing and editing in a split workflow
 - filesystem-backed storage using `.md` files and `.order.json`
 - create, rename, move, copy, delete, and reorder content
-- live search across page titles and bodies
+- Lucene-backed search across page titles and bodies
+- SQLite-backed embedding index for semantic search workflows
 - dark mode and responsive layout
 - SPA frontend bundled into the Spring Boot application
 
@@ -88,6 +90,9 @@ Example structure:
 
 ```text
 data/wiki/
+  .indexes/
+    lucene/
+    embeddings/
   index.md
   .order.json
   guides/
@@ -102,6 +107,7 @@ Rules:
 - a section is a directory with `index.md`
 - a page is a standalone `.md` file
 - sibling ordering is stored in `.order.json`
+- `.indexes/` contains derived Lucene and SQLite search data and can be regenerated
 
 ## API overview
 
@@ -115,3 +121,4 @@ Rules:
 - `POST /api/page/copy?path=...`
 - `PUT /api/section/sort?path=...`
 - `GET /api/search?q=...`
+- `POST /api/spaces/{slug}/search/semantic`

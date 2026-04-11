@@ -147,7 +147,7 @@ class WikiControllerTest {
 
         mockMvc.perform(get("/api/spaces/default/search/status"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.mode", is("live-scan")))
+                .andExpect(jsonPath("$.mode", is("lucene+sqlite-embeddings")))
                 .andExpect(jsonPath("$.ready", is(true)))
                 .andExpect(jsonPath("$.indexedDocuments", greaterThan(0)))
                 .andExpect(jsonPath("$.lastUpdatedAt").exists());
