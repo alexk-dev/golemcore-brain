@@ -1,19 +1,20 @@
 package dev.golemcore.brain.adapter.out.filesystem;
 
-import dev.golemcore.brain.application.exception.WikiNotFoundException;
 import dev.golemcore.brain.application.exception.WikiEditConflictException;
+import dev.golemcore.brain.application.exception.WikiNotFoundException;
 import dev.golemcore.brain.application.port.out.SpaceRepository;
 import dev.golemcore.brain.application.port.out.WikiRepository;
 import dev.golemcore.brain.application.space.SpaceContextHolder;
 import dev.golemcore.brain.config.WikiProperties;
-import dev.golemcore.brain.domain.space.Space;
 import dev.golemcore.brain.domain.WikiAsset;
 import dev.golemcore.brain.domain.WikiAssetContent;
+import dev.golemcore.brain.domain.WikiIndexedDocument;
 import dev.golemcore.brain.domain.WikiNodeKind;
 import dev.golemcore.brain.domain.WikiNodeReference;
 import dev.golemcore.brain.domain.WikiPageDocument;
 import dev.golemcore.brain.domain.WikiPageHistoryEntry;
 import dev.golemcore.brain.domain.WikiPageHistoryVersion;
+import dev.golemcore.brain.domain.space.Space;
 import jakarta.annotation.PostConstruct;
 import java.io.IOException;
 import java.io.InputStream;
@@ -39,10 +40,10 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
-import java.util.UUID;
-import java.util.stream.Collectors;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -389,6 +390,11 @@ public class FileSystemWikiRepository implements WikiRepository {
     }
 
     @Override
+    public List<WikiIndexedDocument> listDocuments() {
+        return flatten().stream().map(this::toIndexedDocument).toList();
+    }
+
+    @Override
     public List<WikiPageHistoryEntry> listPageHistory(String path) {
         WikiNodeReference nodeReference = findReference(path)
                 .orElseThrow(() -> new WikiNotFoundException("Page not found: " + normalizePath(path)));
@@ -602,6 +608,20 @@ public class FileSystemWikiRepository implements WikiRepository {
                 flattenRecursively(childReference, references);
             }
         }
+    }
+
+    private WikiIndexedDocument toIndexedDocument(WikiNodeReference nodeReference) {
+        WikiPageDocument document = readDocument(nodeReference);
+        return WikiIndexedDocument.builder()
+                .id(document.getId())
+                .path(document.getPath())
+                .parentPath(document.getParentPath())
+                .title(document.getTitle())
+                .body(document.getBody())
+                .kind(document.getKind())
+                .updatedAt(document.getUpdatedAt())
+                .revision(document.getRevision())
+                .build();
     }
 
     private WikiNodeReference requireSectionReference(String path) {

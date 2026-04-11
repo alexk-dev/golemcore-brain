@@ -82,6 +82,8 @@ export interface WikiSearchStatus {
   mode: string
   ready: boolean
   indexedDocuments: number
+  embeddingDocuments?: number
+  embeddingsReady?: boolean
   lastUpdatedAt: string
 }
 

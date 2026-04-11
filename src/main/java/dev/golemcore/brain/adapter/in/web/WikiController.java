@@ -8,11 +8,13 @@ import dev.golemcore.brain.adapter.in.web.dto.EnsurePagePayload;
 import dev.golemcore.brain.adapter.in.web.dto.MarkdownImportOptionsPayload;
 import dev.golemcore.brain.adapter.in.web.dto.MovePagePayload;
 import dev.golemcore.brain.adapter.in.web.dto.RenameAssetPayload;
+import dev.golemcore.brain.adapter.in.web.dto.SemanticSearchPayload;
 import dev.golemcore.brain.adapter.in.web.dto.SortChildrenPayload;
 import dev.golemcore.brain.adapter.in.web.dto.UpdatePagePayload;
 import dev.golemcore.brain.application.service.WikiApplicationService;
 import dev.golemcore.brain.domain.WikiAsset;
 import dev.golemcore.brain.domain.WikiAssetContent;
+import dev.golemcore.brain.domain.WikiEmbeddingSearchHit;
 import dev.golemcore.brain.domain.WikiImportApplyResponse;
 import dev.golemcore.brain.domain.WikiImportPlanResponse;
 import dev.golemcore.brain.domain.WikiLinkStatus;
@@ -200,6 +202,13 @@ public class WikiController {
     public WikiSearchStatus getSearchStatus(@PathVariable String slug, HttpServletRequest request) {
         requireView(request);
         return wikiApplicationService.getSearchStatus();
+    }
+
+    @PostMapping("/search/semantic")
+    public List<WikiEmbeddingSearchHit> semanticSearch(@PathVariable String slug,
+            @Valid @RequestBody SemanticSearchPayload payload, HttpServletRequest request) {
+        requireView(request);
+        return wikiApplicationService.semanticSearch(payload.getQuery());
     }
 
     @PostMapping(value = "/import/markdown/plan", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

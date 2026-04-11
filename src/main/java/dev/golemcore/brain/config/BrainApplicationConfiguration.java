@@ -7,9 +7,12 @@ import dev.golemcore.brain.application.port.out.DynamicSpaceApiRepository;
 import dev.golemcore.brain.application.port.out.DynamicSpaceApiToolPort;
 import dev.golemcore.brain.application.port.out.JsonCodecPort;
 import dev.golemcore.brain.application.port.out.LlmChatPort;
+import dev.golemcore.brain.application.port.out.LlmEmbeddingPort;
 import dev.golemcore.brain.application.port.out.LlmProviderCheckPort;
 import dev.golemcore.brain.application.port.out.LlmSettingsRepository;
 import dev.golemcore.brain.application.port.out.SpaceRepository;
+import dev.golemcore.brain.application.port.out.WikiEmbeddingIndexPort;
+import dev.golemcore.brain.application.port.out.WikiFullTextIndexPort;
 import dev.golemcore.brain.application.port.out.WikiRepository;
 import dev.golemcore.brain.application.port.out.auth.SessionRepository;
 import dev.golemcore.brain.application.port.out.auth.UserRepository;
@@ -18,6 +21,7 @@ import dev.golemcore.brain.application.service.apikey.ApiKeyService;
 import dev.golemcore.brain.application.service.auth.AuthService;
 import dev.golemcore.brain.application.service.auth.PasswordHasher;
 import dev.golemcore.brain.application.service.dynamicapi.DynamicSpaceApiService;
+import dev.golemcore.brain.application.service.index.WikiIndexingService;
 import dev.golemcore.brain.application.service.llm.LlmSettingsService;
 import dev.golemcore.brain.application.service.space.SpaceService;
 import dev.golemcore.brain.application.service.user.UserManagementService;
@@ -44,8 +48,24 @@ public class BrainApplicationConfiguration {
     @Bean(initMethod = "initialize")
     public WikiApplicationService wikiApplicationService(
             WikiRepository wikiRepository,
-            BrainSettingsPort brainSettingsPort) {
-        return new WikiApplicationService(wikiRepository, brainSettingsPort);
+            BrainSettingsPort brainSettingsPort,
+            WikiIndexingService wikiIndexingService) {
+        return new WikiApplicationService(wikiRepository, brainSettingsPort, wikiIndexingService);
+    }
+
+    @Bean
+    public WikiIndexingService wikiIndexingService(
+            WikiRepository wikiRepository,
+            WikiFullTextIndexPort wikiFullTextIndexPort,
+            WikiEmbeddingIndexPort wikiEmbeddingIndexPort,
+            LlmSettingsRepository llmSettingsRepository,
+            LlmEmbeddingPort llmEmbeddingPort) {
+        return new WikiIndexingService(
+                wikiRepository,
+                wikiFullTextIndexPort,
+                wikiEmbeddingIndexPort,
+                llmSettingsRepository,
+                llmEmbeddingPort);
     }
 
     @Bean

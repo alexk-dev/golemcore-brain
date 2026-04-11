@@ -144,6 +144,9 @@ function SearchDialogBody({
         <div className="rounded-2xl border border-surface-border bg-surface-alt/60 px-4 py-3 text-sm text-muted">
           <div>Search mode: {searchStatus.mode}</div>
           <div>{searchStatus.indexedDocuments} documents indexed</div>
+          {searchStatus.embeddingDocuments !== undefined ? (
+            <div>{searchStatus.embeddingDocuments} embeddings indexed</div>
+          ) : null}
         </div>
       ) : null}
 

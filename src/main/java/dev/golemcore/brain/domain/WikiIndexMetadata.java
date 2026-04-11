@@ -1,15 +1,15 @@
 package dev.golemcore.brain.domain;
 
+import java.time.Instant;
 import lombok.Builder;
 import lombok.Value;
 
 @Value
 @Builder
-public class WikiSearchStatus {
-    String mode;
+public class WikiIndexMetadata {
+    int documentCount;
+    int embeddingDocumentCount;
+    Instant lastUpdatedAt;
     boolean ready;
-    int indexedDocuments;
-    int embeddingDocuments;
     boolean embeddingsReady;
-    String lastUpdatedAt;
 }
