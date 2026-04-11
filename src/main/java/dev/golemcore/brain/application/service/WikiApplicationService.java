@@ -796,7 +796,7 @@ public class WikiApplicationService {
 
     private List<WikiIndexedDocument> documentsForSubtree(String path) {
         String normalizedPath = normalizePath(path);
-        return wikiRepository.listDocuments().stream()
+        return wikiRepository.listDocuments(requireSpaceId()).stream()
                 .filter(document -> document.getPath().equals(normalizedPath)
                         || (!normalizedPath.isBlank() && document.getPath().startsWith(normalizedPath + "/")))
                 .toList();

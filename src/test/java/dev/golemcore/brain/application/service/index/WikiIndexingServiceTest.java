@@ -147,7 +147,7 @@ class WikiIndexingServiceTest {
         private List<WikiIndexedDocument> documents = List.of();
 
         @Override
-        public List<WikiIndexedDocument> listDocuments() {
+        public List<WikiIndexedDocument> listDocuments(String spaceId) {
             return documents;
         }
     }

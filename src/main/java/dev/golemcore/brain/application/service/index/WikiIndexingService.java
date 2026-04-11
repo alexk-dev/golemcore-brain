@@ -44,7 +44,7 @@ public class WikiIndexingService {
     private final LlmEmbeddingPort llmEmbeddingPort;
 
     public void synchronizeSpace(String spaceId) {
-        List<WikiIndexedDocument> documents = wikiDocumentCatalogPort.listDocuments();
+        List<WikiIndexedDocument> documents = wikiDocumentCatalogPort.listDocuments(spaceId);
         List<String> actualPaths = documents.stream().map(WikiIndexedDocument::getPath).toList();
         Map<String, String> indexedRevisions = wikiFullTextIndexPort.listIndexedRevisions(spaceId);
         List<String> deletedPaths = pathsMissingFrom(new ArrayList<>(indexedRevisions.keySet()), actualPaths);
@@ -99,7 +99,7 @@ public class WikiIndexingService {
     public void rebuildSpace(String spaceId) {
         applyChanges(WikiDocumentChangeSet.builder()
                 .spaceId(spaceId)
-                .upserts(wikiDocumentCatalogPort.listDocuments())
+                .upserts(wikiDocumentCatalogPort.listDocuments(spaceId))
                 .embeddingUpserts(List.of())
                 .deletedPaths(List.of())
                 .fullRebuild(true)
@@ -275,7 +275,7 @@ public class WikiIndexingService {
     }
 
     private WikiIndexMetadata metadata(String spaceId) {
-        List<WikiIndexedDocument> documents = wikiDocumentCatalogPort.listDocuments();
+        List<WikiIndexedDocument> documents = wikiDocumentCatalogPort.listDocuments(spaceId);
         Instant lastUpdatedAt = documents.stream()
                 .map(WikiIndexedDocument::getUpdatedAt)
                 .max(Instant::compareTo)

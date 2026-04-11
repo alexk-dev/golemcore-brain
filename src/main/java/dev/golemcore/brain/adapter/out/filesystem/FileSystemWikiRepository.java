@@ -390,8 +390,8 @@ public class FileSystemWikiRepository implements WikiRepository {
     }
 
     @Override
-    public List<WikiIndexedDocument> listDocuments() {
-        return flatten().stream().map(this::toIndexedDocument).toList();
+    public List<WikiIndexedDocument> listDocuments(String spaceId) {
+        return withSpace(spaceId, () -> flatten().stream().map(this::toIndexedDocument).toList());
     }
 
     @Override
@@ -608,6 +608,24 @@ public class FileSystemWikiRepository implements WikiRepository {
                 flattenRecursively(childReference, references);
             }
         }
+    }
+
+    private <T> T withSpace(String spaceId, java.util.function.Supplier<T> supplier) {
+        String previousSpaceId = SpaceContextHolder.get();
+        SpaceContextHolder.set(spaceId);
+        try {
+            return supplier.get();
+        } finally {
+            restorePreviousSpace(previousSpaceId);
+        }
+    }
+
+    private void restorePreviousSpace(String previousSpaceId) {
+        if (previousSpaceId == null || previousSpaceId.isBlank()) {
+            SpaceContextHolder.clear();
+            return;
+        }
+        SpaceContextHolder.set(previousSpaceId);
     }
 
     private WikiIndexedDocument toIndexedDocument(WikiNodeReference nodeReference) {

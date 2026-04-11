@@ -60,6 +60,33 @@ class LuceneWikiFullTextIndexAdapterTest {
         assertTrue(adapter.search("space-1", "incident", 10).isEmpty());
     }
 
+    @Test
+    void shouldKeepSpaceIndexesIsolatedWhenPathsOverlap() {
+        WikiProperties properties = new WikiProperties();
+        properties.setStorageRoot(tempDir);
+        LuceneWikiFullTextIndexAdapter adapter = new LuceneWikiFullTextIndexAdapter(properties);
+
+        adapter.applyChanges(WikiDocumentChangeSet.builder()
+                .spaceId("space-a")
+                .upserts(List.of(document("docs/guide", "Alpha guide", "alpha-only token", "revision-a")))
+                .deletedPaths(List.of())
+                .fullRebuild(false)
+                .build());
+        adapter.applyChanges(WikiDocumentChangeSet.builder()
+                .spaceId("space-b")
+                .upserts(List.of(document("docs/guide", "Beta guide", "beta-only token", "revision-b")))
+                .deletedPaths(List.of())
+                .fullRebuild(false)
+                .build());
+
+        assertEquals(1, adapter.search("space-a", "alpha", 10).size());
+        assertTrue(adapter.search("space-a", "beta", 10).isEmpty());
+        assertEquals(1, adapter.search("space-b", "beta", 10).size());
+        assertTrue(adapter.search("space-b", "alpha", 10).isEmpty());
+        assertEquals(Map.of("docs/guide", "revision-a"), adapter.listIndexedRevisions("space-a"));
+        assertEquals(Map.of("docs/guide", "revision-b"), adapter.listIndexedRevisions("space-b"));
+    }
+
     private WikiIndexedDocument document(String path, String title, String body, String revision) {
         return WikiIndexedDocument.builder()
                 .id(path)

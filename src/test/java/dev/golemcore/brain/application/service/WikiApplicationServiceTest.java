@@ -16,12 +16,14 @@ import dev.golemcore.brain.domain.WikiLinkStatus;
 import dev.golemcore.brain.domain.WikiNodeKind;
 import dev.golemcore.brain.domain.WikiPage;
 import dev.golemcore.brain.domain.WikiPathLookupResult;
+import dev.golemcore.brain.domain.WikiIndexedDocument;
 import dev.golemcore.brain.domain.WikiTreeNode;
 import dev.golemcore.brain.domain.llm.LlmEmbeddingRequest;
 import dev.golemcore.brain.domain.llm.LlmEmbeddingResponse;
 import dev.golemcore.brain.domain.llm.LlmSettings;
 import dev.golemcore.brain.domain.space.Space;
 import java.io.ByteArrayInputStream;
+import java.time.Instant;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -211,6 +213,43 @@ class WikiApplicationServiceTest {
         assertEquals(WikiNodeKind.PAGE, page.getKind());
         assertEquals(1, service.listAssets("scratch").size());
         assertEquals("diagram.png", service.openAsset("scratch", "diagram.png").getName());
+    }
+
+    @Test
+    void shouldListIndexedDocumentsForRequestedSpaceOnly() {
+        WikiProperties properties = new WikiProperties();
+        properties.setStorageRoot(tempDir.resolve("wiki"));
+        properties.setSeedDemoContent(false);
+        FileSpaceRepository spaceRepository = new FileSpaceRepository(properties);
+        spaceRepository.initialize();
+        Space defaultSpace = spaceRepository.findBySlug(properties.getDefaultSpaceSlug()).orElseThrow();
+        Space extraSpace = Space.builder()
+                .id("extra-space")
+                .slug("extra")
+                .name("Extra")
+                .createdAt(Instant.parse("2026-04-11T00:00:00Z"))
+                .build();
+        spaceRepository.save(extraSpace);
+        FileSystemWikiRepository repository = new FileSystemWikiRepository(properties, spaceRepository);
+        repository.initialize();
+
+        SpaceContextHolder.set(defaultSpace.getId());
+        repository.createPage("", "Default Only", "shared", "default body", WikiNodeKind.PAGE);
+        SpaceContextHolder.set(extraSpace.getId());
+        repository.createPage("", "Extra Only", "shared", "extra body", WikiNodeKind.PAGE);
+
+        List<String> defaultTitles = repository.listDocuments(defaultSpace.getId()).stream()
+                .map(WikiIndexedDocument::getTitle)
+                .toList();
+        List<String> extraTitles = repository.listDocuments(extraSpace.getId()).stream()
+                .map(WikiIndexedDocument::getTitle)
+                .toList();
+
+        assertTrue(defaultTitles.contains("Default Only"));
+        assertFalse(defaultTitles.contains("Extra Only"));
+        assertTrue(extraTitles.contains("Extra Only"));
+        assertFalse(extraTitles.contains("Default Only"));
+        assertEquals(extraSpace.getId(), SpaceContextHolder.get());
     }
 
     @Test

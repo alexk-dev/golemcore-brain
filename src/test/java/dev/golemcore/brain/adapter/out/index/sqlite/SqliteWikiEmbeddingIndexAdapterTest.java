@@ -9,6 +9,7 @@ import dev.golemcore.brain.domain.WikiNodeKind;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -58,7 +59,45 @@ class SqliteWikiEmbeddingIndexAdapterTest {
         assertTrue(adapter.listIndexedPaths("space-1").contains("docs/beta"));
     }
 
+    @Test
+    void shouldKeepSpaceEmbeddingsIsolatedWhenPathsOverlap() {
+        WikiProperties properties = new WikiProperties();
+        properties.setStorageRoot(tempDir);
+        SqliteWikiEmbeddingIndexAdapter adapter = new SqliteWikiEmbeddingIndexAdapter(properties);
+
+        adapter.applyChanges(WikiDocumentChangeSet.builder()
+                .spaceId("space-a")
+                .embeddingUpserts(List.of(embedding("docs/guide", "Alpha", "revision-a", List.of(1.0d, 0.0d))))
+                .deletedPaths(List.of())
+                .fullRebuild(false)
+                .build());
+        adapter.applyChanges(WikiDocumentChangeSet.builder()
+                .spaceId("space-b")
+                .embeddingUpserts(List.of(embedding("docs/guide", "Beta", "revision-b", List.of(0.0d, 1.0d))))
+                .deletedPaths(List.of())
+                .fullRebuild(false)
+                .build());
+
+        assertEquals("docs/guide", adapter.search("space-a", List.of(1.0d, 0.0d), 1).getFirst().getPath());
+        assertEquals("docs/guide", adapter.search("space-b", List.of(0.0d, 1.0d), 1).getFirst().getPath());
+        assertEquals(Map.of("docs/guide", "revision-a"), adapter.listIndexedRevisions("space-a"));
+        assertEquals(Map.of("docs/guide", "revision-b"), adapter.listIndexedRevisions("space-b"));
+
+        adapter.applyChanges(WikiDocumentChangeSet.builder()
+                .spaceId("space-a")
+                .deletedPaths(List.of("docs/guide"))
+                .fullRebuild(false)
+                .build());
+
+        assertEquals(0, adapter.count("space-a"));
+        assertEquals(1, adapter.count("space-b"));
+    }
+
     private WikiEmbeddingDocument embedding(String path, String title, List<Double> vector) {
+        return embedding(path, title, title, vector);
+    }
+
+    private WikiEmbeddingDocument embedding(String path, String title, String revision, List<Double> vector) {
         return WikiEmbeddingDocument.builder()
                 .document(WikiIndexedDocument.builder()
                         .id(path)
@@ -68,7 +107,7 @@ class SqliteWikiEmbeddingIndexAdapterTest {
                         .body("body for " + title)
                         .kind(WikiNodeKind.PAGE)
                         .updatedAt(Instant.parse("2026-04-11T00:00:00Z"))
-                        .revision(title)
+                        .revision(revision)
                         .build())
                 .vector(vector)
                 .build();

@@ -47,7 +47,7 @@ public interface WikiRepository extends WikiDocumentCatalogPort {
     List<WikiNodeReference> flatten();
 
     @Override
-    List<WikiIndexedDocument> listDocuments();
+    List<WikiIndexedDocument> listDocuments(String spaceId);
 
     List<WikiPageHistoryEntry> listPageHistory(String path);
 
