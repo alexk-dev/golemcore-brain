@@ -106,7 +106,14 @@ export function UserManagementPage() {
   }
 
   if (!isAdmin) {
-    return <div className="page-editor__error">Admin access is required.</div>
+    return (
+      <div className="shell-form-page">
+        <div className="shell-form-page__card--wide surface-card p-6">
+          <h2 className="mb-2 text-xl font-semibold">Admin access required</h2>
+          <p className="text-sm text-muted">You must be signed in as an administrator to manage users.</p>
+        </div>
+      </div>
+    )
   }
 
   return (

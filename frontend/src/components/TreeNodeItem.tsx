@@ -89,6 +89,8 @@ export function TreeNodeItem({
           type="button"
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
           onClick={handleNavigate}
+          title={node.title}
+          aria-label={node.title}
         >
           {node.kind === 'PAGE' ? null : isOpen ? (
             <FolderOpen size={16} className="shrink-0" />

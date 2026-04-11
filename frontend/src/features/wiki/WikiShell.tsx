@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { FileSearch, Moon, Pencil, Search, Sun } from 'lucide-react'
+import { FileSearch, Pencil, Search } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -90,6 +90,7 @@ export function WikiShell({ children }: WikiShellProps) {
   const rawRoutePath = useMemo(() => normalizeWikiPath(location.pathname), [location.pathname])
   const isEditorRoute = rawRoutePath === 'e' || rawRoutePath.startsWith('e/')
   const currentPath = isEditorRoute ? rawRoutePath.replace(/^e\/?/, '') : rawRoutePath
+  const isLoginRoute = currentPath === 'login'
   const currentPage: WikiPage | null = isEditorRoute ? editorPage : viewerPage
   const createTargetParentPath =
     currentPage?.kind === 'SECTION' ? currentPage.path : currentPage?.parentPath ?? ''
@@ -125,15 +126,25 @@ export function WikiShell({ children }: WikiShellProps) {
     [getPageById, openNodeIdSet],
   )
 
+  const setSidebarVisible = useUiStore((state) => state.setSidebarVisible)
+
+  const maybeCollapseOnMobile = useCallback(() => {
+    if (typeof window !== 'undefined' && window.innerWidth > 0 && window.innerWidth < 768) {
+      setSidebarVisible(false)
+    }
+  }, [setSidebarVisible])
+
   const handleNavigate = useCallback((path: string) => {
     openAncestorsForPath(path)
     navigate(pathToRoute(path))
-  }, [navigate, openAncestorsForPath])
+    maybeCollapseOnMobile()
+  }, [maybeCollapseOnMobile, navigate, openAncestorsForPath])
 
   const handleEdit = useCallback((path: string) => {
     openAncestorsForPath(path)
     navigate(editorPathToRoute(path))
-  }, [navigate, openAncestorsForPath])
+    maybeCollapseOnMobile()
+  }, [maybeCollapseOnMobile, navigate, openAncestorsForPath])
 
   const handleLogout = async () => {
     await logout()
@@ -251,13 +262,6 @@ export function WikiShell({ children }: WikiShellProps) {
       onRun: () => setSearchOpen(true),
     },
     {
-      id: 'toggle-theme',
-      label: isDark ? 'Light mode' : 'Dark mode',
-      title: isDark ? 'Light mode' : 'Dark mode',
-      icon: isDark ? <Sun size={16} /> : <Moon size={16} />,
-      onRun: () => setDarkMode(!isDark),
-    },
-    {
       id: 'toggle-sidebar',
       label: 'Toggle sidebar',
       title: 'Toggle sidebar',
@@ -266,7 +270,7 @@ export function WikiShell({ children }: WikiShellProps) {
       hidden: true,
       onRun: toggleSidebar,
     },
-  ], [canEditCurrentPage, currentPage?.path, currentPath, handleEdit, isDark, setDarkMode, setQuickSwitcherOpen, setSearchOpen, toggleSidebar])
+  ], [canEditCurrentPage, currentPage?.path, currentPath, handleEdit, setQuickSwitcherOpen, setSearchOpen, toggleSidebar])
 
   useToolbarActions(toolbarActions)
 
@@ -277,8 +281,9 @@ export function WikiShell({ children }: WikiShellProps) {
         tree={tree}
         activePath={activePath}
         openPaths={openPaths}
-        sidebarVisible={sidebarVisible}
+        sidebarVisible={sidebarVisible && !isLoginRoute}
         onToggleSidebar={toggleSidebar}
+        hideHeader={isLoginRoute}
         onNavigate={handleNavigate}
         onToggleNode={(path) => {
           const node = getPageByPath(path)

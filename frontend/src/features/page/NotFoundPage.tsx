@@ -10,8 +10,8 @@ interface NotFoundPageProps {
 
 export function NotFoundPage({ path, onCreate, canCreate = true, signInHref = null }: NotFoundPageProps) {
   return (
-    <div className="page-editor__error">
-      <div className="surface-card max-w-xl p-6">
+    <div className="shell-form-page">
+      <div className="shell-form-page__card--wide surface-card p-6">
         <h2 className="mb-2 text-xl font-semibold">Page not found</h2>
         <p className="mb-4 text-sm text-muted">
           The page <span className="font-mono">/{path}</span> does not exist yet.

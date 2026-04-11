@@ -43,9 +43,10 @@ export function Toolbar() {
             onClick={action.onRun}
             disabled={action.disabled}
             title={action.hotkeyLabel ? `${title} (${action.hotkeyLabel})` : title}
+            aria-label={title}
           >
             {action.icon}
-            {action.label}
+            <span className="hidden md:inline">{action.label}</span>
           </button>
         )
       })}

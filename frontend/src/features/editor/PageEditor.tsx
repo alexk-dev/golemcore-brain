@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 
 import { uploadAsset } from '../../lib/api'
 import { editorPathToRoute, normalizeWikiPath, pathToRoute } from '../../lib/paths'
+import { InsertWikiLinkDialog } from '../../components/InsertWikiLinkDialog'
 import { AssetManagerDialog } from '../assets/AssetManagerDialog'
 import { buildDefaultMarkdownForAsset } from '../assets/assetMarkdown'
 import { MarkdownPreview } from '../preview/MarkdownPreview'
@@ -13,7 +14,7 @@ import { useEditorStore } from '../../stores/editor'
 import { useTreeStore } from '../../stores/tree'
 import { MarkdownCodeEditor } from './MarkdownCodeEditor'
 import { MarkdownToolbar } from './MarkdownToolbar'
-import type { WikiAsset } from '../../types'
+import type { WikiAsset, WikiTreeNode } from '../../types'
 
 function insertMarkdownAtCursor(view: EditorView | null, markdown: string, onChange: (value: string) => void) {
   if (!view) {
@@ -72,6 +73,9 @@ export function PageEditor() {
   const editorViewRef = useRef<EditorView | null>(null)
   const [previewVisible, setPreviewVisible] = useState(true)
   const [assetManagerOpen, setAssetManagerOpen] = useState(false)
+  const [wikiLinkDialogOpen, setWikiLinkDialogOpen] = useState(false)
+  const [wikiLinkInitialQuery, setWikiLinkInitialQuery] = useState('')
+  const pendingLinkSelectionRef = useRef<{ from: number; to: number } | null>(null)
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)
   const [pendingNavigationPath, setPendingNavigationPath] = useState<string | null>(null)
   const [showMetadataPanel, setShowMetadataPanel] = useState(false)
@@ -169,10 +173,52 @@ export function PageEditor() {
         event.preventDefault()
         setShowMetadataPanel((value) => !value)
       }
+      if (modifier && !event.shiftKey && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        openWikiLinkPicker()
+      }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   })
+
+  const openWikiLinkPicker = () => {
+    const view = editorViewRef.current
+    if (!view) {
+      pendingLinkSelectionRef.current = null
+      setWikiLinkInitialQuery('')
+      setWikiLinkDialogOpen(true)
+      return
+    }
+    const selection = view.state.selection.main
+    const selectedText = view.state.sliceDoc(selection.from, selection.to)
+    pendingLinkSelectionRef.current = { from: selection.from, to: selection.to }
+    setWikiLinkInitialQuery(selectedText.trim())
+    setWikiLinkDialogOpen(true)
+  }
+
+  const handleInsertWikiLink = (page: Pick<WikiTreeNode, 'path' | 'title'>) => {
+    const view = editorViewRef.current
+    const targetPath = `/${page.path}`
+    const pending = pendingLinkSelectionRef.current
+    pendingLinkSelectionRef.current = null
+    if (!view) {
+      const markdown = `[${page.title}](${targetPath})`
+      setContent(`${content}${content && !content.endsWith('\n') ? ' ' : ''}${markdown}`)
+      return
+    }
+    const selection = view.state.selection.main
+    const range = pending ?? { from: selection.from, to: selection.to }
+    const selectedText = view.state.sliceDoc(range.from, range.to)
+    const label = selectedText.trim().length > 0 ? selectedText : page.title
+    const markdown = `[${label}](${targetPath})`
+    view.dispatch({
+      changes: { from: range.from, to: range.to, insert: markdown },
+      selection: { anchor: range.from + markdown.length },
+    })
+    view.focus()
+    setContent(view.state.doc.toString())
+  }
 
   const handleSave = async () => {
     if (!hasUnsavedChanges) {
@@ -380,6 +426,7 @@ export function PageEditor() {
                 previewVisible={previewVisible}
                 onTogglePreview={() => setPreviewVisible((value) => !value)}
                 onOpenAssetManager={() => setAssetManagerOpen(true)}
+                onOpenWikiLinkPicker={openWikiLinkPicker}
               />
               <div className="flex flex-1 overflow-hidden">
                 <div className={`${previewVisible ? 'markdown-editor__editor-pane markdown-editor__editor-pane--half' : 'markdown-editor__editor-pane markdown-editor__editor-pane--full'} ${activeMobilePane === 'preview' ? 'markdown-editor__pane--mobile-hidden' : ''}`}>
@@ -415,6 +462,18 @@ export function PageEditor() {
         onInsertMarkdown={(markdown) => insertMarkdownAtCursor(editorViewRef.current, markdown, setContent)}
         onAssetRenamed={handleAssetRenamed}
         onAssetsChanged={bumpAssetPreviewVersion}
+      />
+
+      <InsertWikiLinkDialog
+        open={wikiLinkDialogOpen}
+        initialQuery={wikiLinkInitialQuery}
+        onOpenChange={(open) => {
+          setWikiLinkDialogOpen(open)
+          if (!open) {
+            pendingLinkSelectionRef.current = null
+          }
+        }}
+        onSelect={handleInsertWikiLink}
       />
 
       {showUnsavedDialog ? (

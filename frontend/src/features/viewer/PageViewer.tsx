@@ -100,16 +100,17 @@ export function PageViewer() {
   return (
     <div className="page-viewer">
       <div className="page-viewer__header">
-        <nav className="mb-3 flex flex-wrap items-center gap-2 text-sm text-muted" aria-label="Breadcrumbs">
+        <nav className="flex flex-wrap items-center gap-2 text-sm text-muted" aria-label="Breadcrumbs">
           {breadcrumbs.map((breadcrumb, index) => (
             <div key={breadcrumb.path || 'root'} className="flex items-center gap-2">
-              {index > 0 ? <span>/</span> : null}
+              {index > 0 ? <span aria-hidden="true">/</span> : null}
               <Link to={pathToRoute(breadcrumb.path)} className="hover:text-foreground">
                 {breadcrumb.title}
               </Link>
             </div>
           ))}
         </nav>
+        <h1 className="page-viewer__title">{page.title}</h1>
         <div className="page-viewer__metadata">
           <span className="page-viewer__metadata-item">
             Updated {new Date(page.updatedAt).toLocaleString()}

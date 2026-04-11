@@ -3,6 +3,10 @@ data/
 frontend/node/
 frontend/node_modules/
 frontend/dist/
+frontend/audit-*.png
+frontend/playwright-*.png
+frontend/test-results/
+frontend/playwright-report/
 
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
