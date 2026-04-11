@@ -6,9 +6,13 @@ import type {
   CreateApiKeyPayload,
   CreatePagePayload,
   IssuedApiKey,
+  LlmProviderCheckResult,
+  LlmSettings,
   MovePagePayload,
   PublicUserView,
   MarkdownImportOptions,
+  SaveLlmModelPayload,
+  SaveLlmProviderPayload,
   Space,
   UpdatePagePayload,
   UpdateUserPayload,
@@ -195,6 +199,56 @@ export function createSpaceApiKey(slug: string, payload: CreateApiKeyPayload): P
 
 export function revokeApiKey(keyId: string): Promise<void> {
   return readJson<void>(`/api/api-keys/${encodeURIComponent(keyId)}`, {
+    method: 'DELETE',
+  })
+}
+
+export function getLlmSettings(): Promise<LlmSettings> {
+  return readJson<LlmSettings>('/api/llm/settings')
+}
+
+export function createLlmProvider(payload: SaveLlmProviderPayload): Promise<LlmSettings> {
+  return readJson<LlmSettings>('/api/llm/providers', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateLlmProvider(name: string, payload: SaveLlmProviderPayload): Promise<LlmSettings> {
+  return readJson<LlmSettings>(`/api/llm/providers/${encodeURIComponent(name)}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function deleteLlmProvider(name: string): Promise<LlmSettings> {
+  return readJson<LlmSettings>(`/api/llm/providers/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+  })
+}
+
+export function checkLlmProvider(name: string): Promise<LlmProviderCheckResult> {
+  return readJson<LlmProviderCheckResult>(`/api/llm/providers/${encodeURIComponent(name)}/check`, {
+    method: 'POST',
+  })
+}
+
+export function createLlmModel(payload: SaveLlmModelPayload): Promise<LlmSettings> {
+  return readJson<LlmSettings>('/api/llm/models', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateLlmModel(id: string, payload: SaveLlmModelPayload): Promise<LlmSettings> {
+  return readJson<LlmSettings>(`/api/llm/models/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function deleteLlmModel(id: string): Promise<LlmSettings> {
+  return readJson<LlmSettings>(`/api/llm/models/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   })
 }

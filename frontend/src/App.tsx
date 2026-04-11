@@ -5,6 +5,7 @@ import { ApiKeysPage } from './features/api-keys/ApiKeysPage'
 import { LoginPage } from './features/auth/LoginPage'
 import { PageEditor } from './features/editor/PageEditor'
 import { ImportPage } from './features/import/ImportPage'
+import { LlmSettingsPage } from './features/llm-settings/LlmSettingsPage'
 import { AccessDeniedPage } from './features/page/AccessDeniedPage'
 import { SpacesPage } from './features/spaces/SpacesPage'
 import { UserManagementPage } from './features/users/UserManagementPage'
@@ -21,6 +22,7 @@ function App() {
   const canEdit = authDisabled || currentUser?.role === 'ADMIN' || currentUser?.role === 'EDITOR'
   const canView = authDisabled || publicAccess || currentUser !== null
   const canManageUsers = authDisabled || currentUser?.role === 'ADMIN'
+  const canManageLlmSettings = currentUser?.role === 'ADMIN'
   const canAccessAccount = authDisabled || currentUser !== null
   const needsLoginForEdit = !authDisabled && currentUser === null
 
@@ -40,6 +42,7 @@ function App() {
         <Route path="/users" element={canManageUsers ? <UserManagementPage /> : <Navigate to="/" replace />} />
         <Route path="/spaces" element={canManageUsers ? <SpacesPage /> : <Navigate to="/" replace />} />
         <Route path="/api-keys" element={canManageUsers ? <ApiKeysPage /> : <Navigate to="/" replace />} />
+        <Route path="/llm-settings" element={canManageLlmSettings ? <LlmSettingsPage /> : <Navigate to="/" replace />} />
         <Route path="/import" element={canEdit ? <ImportPage /> : <Navigate to="/" replace />} />
         <Route path="/" element={canView ? <PageViewer /> : <Navigate to="/login" replace />} />
         <Route

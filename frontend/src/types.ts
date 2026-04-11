@@ -235,3 +235,65 @@ export interface CreateApiKeyPayload {
   roles?: UserRole[]
   expiresAt?: string | null
 }
+
+export interface Secret {
+  value: string | null
+  encrypted: boolean
+  present: boolean
+}
+
+export type LlmApiType = 'openai' | 'anthropic' | 'gemini'
+export type LlmModelKind = 'chat' | 'embedding'
+
+export interface LlmProviderConfig {
+  apiKey: Secret | null
+  baseUrl: string | null
+  requestTimeoutSeconds: number | null
+  apiType: LlmApiType | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface LlmModelConfig {
+  id: string
+  provider: string
+  modelId: string
+  displayName: string | null
+  kind: LlmModelKind
+  enabled: boolean
+  maxInputTokens: number | null
+  dimensions: number | null
+  temperature: number | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface LlmSettings {
+  providers: Record<string, LlmProviderConfig>
+  models: LlmModelConfig[]
+}
+
+export interface SaveLlmProviderPayload {
+  name?: string
+  apiKey?: Secret | null
+  baseUrl?: string | null
+  requestTimeoutSeconds?: number | null
+  apiType?: LlmApiType | null
+}
+
+export interface SaveLlmModelPayload {
+  provider: string
+  modelId: string
+  displayName?: string | null
+  kind?: LlmModelKind | null
+  enabled?: boolean | null
+  maxInputTokens?: number | null
+  dimensions?: number | null
+  temperature?: number | null
+}
+
+export interface LlmProviderCheckResult {
+  success: boolean
+  message: string
+  statusCode: number | null
+}

@@ -1,5 +1,5 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { ChevronDown, KeyRound, LogOut, Settings, Shield, UserRound, Users as UsersIcon } from 'lucide-react'
+import { BrainCircuit, ChevronDown, KeyRound, LogOut, Settings, Shield, UserRound, Users as UsersIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 interface UserMenuProps {
@@ -63,6 +63,12 @@ export function UserMenu({ username, canAccessAccount, canManageUsers, onLogout 
                 <Link to="/api-keys" className="user-menu__item">
                   <KeyRound size={14} />
                   <span>API Keys</span>
+                </Link>
+              </DropdownMenu.Item>
+              <DropdownMenu.Item asChild>
+                <Link to="/llm-settings" className="user-menu__item">
+                  <BrainCircuit size={14} />
+                  <span>LLM Settings</span>
                 </Link>
               </DropdownMenu.Item>
             </>
