@@ -1,8 +1,12 @@
 package dev.golemcore.brain.application.service;
 
 import dev.golemcore.brain.adapter.out.filesystem.FileSystemWikiRepository;
+import dev.golemcore.brain.adapter.out.filesystem.space.FileSpaceRepository;
 import dev.golemcore.brain.application.exception.WikiNotFoundException;
+import dev.golemcore.brain.application.space.SpaceContextHolder;
 import dev.golemcore.brain.config.WikiProperties;
+import dev.golemcore.brain.domain.space.Space;
+import org.junit.jupiter.api.AfterEach;
 import dev.golemcore.brain.domain.WikiAsset;
 import dev.golemcore.brain.domain.WikiAssetContent;
 import dev.golemcore.brain.domain.WikiLinkStatus;
@@ -27,6 +31,11 @@ class WikiApplicationServiceTest {
 
     @TempDir
     Path tempDir;
+
+    @AfterEach
+    void tearDown() {
+        SpaceContextHolder.clear();
+    }
 
     @Test
     void shouldCreateLoadSearchMoveCopyDeleteLinksLookupEnsureAndAssets() throws Exception {
@@ -201,10 +210,14 @@ class WikiApplicationServiceTest {
         WikiProperties properties = new WikiProperties();
         properties.setStorageRoot(tempDir.resolve("wiki"));
         properties.setSeedDemoContent(false);
-        FileSystemWikiRepository repository = new FileSystemWikiRepository(properties);
+        FileSpaceRepository spaceRepository = new FileSpaceRepository(properties);
+        spaceRepository.initialize();
+        Space defaultSpace = spaceRepository.findBySlug(properties.getDefaultSpaceSlug()).orElseThrow();
+        SpaceContextHolder.set(defaultSpace.getId());
+        FileSystemWikiRepository repository = new FileSystemWikiRepository(properties, spaceRepository);
         repository.initialize();
         WikiApplicationService service = new WikiApplicationService(repository, properties);
-        assertTrue(Files.exists(properties.getStorageRoot().resolve("index.md")));
+        assertTrue(Files.exists(properties.getStorageRoot().resolve("spaces").resolve(defaultSpace.getId()).resolve("index.md")));
         return service;
     }
 }

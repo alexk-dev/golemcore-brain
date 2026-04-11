@@ -8,6 +8,8 @@ import dev.golemcore.brain.domain.auth.AuthConfigResponse;
 import dev.golemcore.brain.domain.auth.AuthContext;
 import dev.golemcore.brain.domain.auth.AuthResponse;
 import dev.golemcore.brain.domain.auth.PublicUserView;
+import dev.golemcore.brain.domain.auth.SpaceMembership;
+import dev.golemcore.brain.domain.auth.UserRole;
 import dev.golemcore.brain.domain.auth.UserSession;
 import dev.golemcore.brain.domain.auth.WikiUser;
 import jakarta.annotation.PostConstruct;
@@ -77,12 +79,8 @@ public class AuthService {
         if (!passwordHasher.matches(currentPassword, user.getPasswordHash())) {
             throw new AuthUnauthorizedException("Current password is incorrect");
         }
-        WikiUser updatedUser = WikiUser.builder()
-                .id(user.getId())
-                .username(user.getUsername())
-                .email(user.getEmail())
+        WikiUser updatedUser = user.toBuilder()
                 .passwordHash(passwordHasher.hash(newPassword))
-                .role(user.getRole())
                 .build();
         userRepository.save(updatedUser);
         sessionRepository.deleteByUserId(user.getId());
@@ -127,31 +125,22 @@ public class AuthService {
         return userRepository.listUsers().stream().map(this::toPublicView).toList();
     }
 
-    private AuthContext resolveContext(Optional<String> sessionToken) {
+    public AuthContext resolveContext(Optional<String> sessionToken) {
         if (wikiProperties.isAuthDisabled()) {
             return AuthContext.builder()
                     .authDisabled(true)
                     .publicAccess(wikiProperties.isPublicAccess())
                     .authenticated(false)
                     .user(null)
+                    .memberships(List.of())
                     .build();
         }
         if (sessionToken.isEmpty()) {
-            return AuthContext.builder()
-                    .authDisabled(false)
-                    .publicAccess(wikiProperties.isPublicAccess())
-                    .authenticated(false)
-                    .user(null)
-                    .build();
+            return anonymousContext();
         }
         Optional<UserSession> session = sessionRepository.findByToken(sessionToken.get());
         if (session.isEmpty()) {
-            return AuthContext.builder()
-                    .authDisabled(false)
-                    .publicAccess(wikiProperties.isPublicAccess())
-                    .authenticated(false)
-                    .user(null)
-                    .build();
+            return anonymousContext();
         }
         WikiUser user = userRepository.findById(session.get().getUserId())
                 .orElseThrow(() -> new AuthUnauthorizedException("User for session not found"));
@@ -160,6 +149,37 @@ public class AuthService {
                 .publicAccess(wikiProperties.isPublicAccess())
                 .authenticated(true)
                 .user(toPublicView(user))
+                .memberships(user.getMemberships())
+                .build();
+    }
+
+    public AuthContext apiKeyContext(String subject, String pinnedSpaceId, java.util.Set<UserRole> roles) {
+        List<SpaceMembership> memberships = roles.stream()
+                .map(role -> SpaceMembership.builder().spaceId(pinnedSpaceId).role(role).build())
+                .toList();
+        PublicUserView user = null;
+        if (subject != null && subject.startsWith("user:")) {
+            String userId = subject.substring("user:".length());
+            user = userRepository.findById(userId).map(this::toPublicView).orElse(null);
+        }
+        return AuthContext.builder()
+                .authDisabled(false)
+                .publicAccess(wikiProperties.isPublicAccess())
+                .authenticated(true)
+                .apiKey(true)
+                .pinnedSpaceId(pinnedSpaceId)
+                .user(user)
+                .memberships(memberships)
+                .build();
+    }
+
+    private AuthContext anonymousContext() {
+        return AuthContext.builder()
+                .authDisabled(false)
+                .publicAccess(wikiProperties.isPublicAccess())
+                .authenticated(false)
+                .user(null)
+                .memberships(List.of())
                 .build();
     }
 
@@ -175,11 +195,14 @@ public class AuthService {
     }
 
     private PublicUserView toPublicView(WikiUser user) {
-        return PublicUserView.builder()
+        PublicUserView.PublicUserViewBuilder builder = PublicUserView.builder()
                 .id(user.getId())
                 .username(user.getUsername())
                 .email(user.getEmail())
-                .role(user.getRole())
-                .build();
+                .role(user.getRole());
+        for (SpaceMembership membership : user.getMemberships()) {
+            builder.membership(membership);
+        }
+        return builder.build();
     }
 }

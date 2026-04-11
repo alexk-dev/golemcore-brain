@@ -53,11 +53,11 @@ class WikiControllerTest {
                 .andExpect(jsonPath("$.siteTitle", is(wikiProperties.getSiteTitle())))
                 .andExpect(jsonPath("$.authDisabled", is(true)));
 
-        mockMvc.perform(get("/api/tree"))
+        mockMvc.perform(get("/api/spaces/default/tree"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.kind", is("ROOT")));
 
-        mockMvc.perform(post("/api/pages")
+        mockMvc.perform(post("/api/spaces/default/pages")
                         .contentType("application/json")
                         .content("""
                                 {
@@ -71,7 +71,7 @@ class WikiControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.path", is("operations")));
 
-        mockMvc.perform(post("/api/pages")
+        mockMvc.perform(post("/api/spaces/default/pages")
                         .contentType("application/json")
                         .content("""
                                 {
@@ -85,7 +85,7 @@ class WikiControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.path", is("operations/runbook")));
 
-        mockMvc.perform(post("/api/pages")
+        mockMvc.perform(post("/api/spaces/default/pages")
                         .contentType("application/json")
                         .content("""
                                 {
@@ -98,7 +98,7 @@ class WikiControllerTest {
                                 """))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(post("/api/pages")
+        mockMvc.perform(post("/api/spaces/default/pages")
                         .contentType("application/json")
                         .content("""
                                 {
@@ -111,16 +111,16 @@ class WikiControllerTest {
                                 """))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(get("/api/pages/by-path").param("path", "operations/runbook"))
+        mockMvc.perform(get("/api/spaces/default/pages/by-path").param("path", "operations/runbook"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title", is("Runbook")));
 
-        mockMvc.perform(get("/api/pages/lookup").param("path", "operations/runbook"))
+        mockMvc.perform(get("/api/spaces/default/pages/lookup").param("path", "operations/runbook"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.exists", is(true)))
                 .andExpect(jsonPath("$.segments", hasSize(2)));
 
-        mockMvc.perform(put("/api/page")
+        mockMvc.perform(put("/api/spaces/default/page")
                         .param("path", "operations/runbook")
                         .contentType("application/json")
                         .content("""
@@ -133,7 +133,7 @@ class WikiControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.path", is("operations/release-runbook")));
 
-        mockMvc.perform(post("/api/pages/ensure")
+        mockMvc.perform(post("/api/spaces/default/pages/ensure")
                         .contentType("application/json")
                         .content("""
                                 {
@@ -144,18 +144,18 @@ class WikiControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.path", is("operations/generated-page")));
 
-        mockMvc.perform(get("/api/search/status"))
+        mockMvc.perform(get("/api/spaces/default/search/status"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.mode", is("live-scan")))
                 .andExpect(jsonPath("$.ready", is(true)))
                 .andExpect(jsonPath("$.indexedDocuments", greaterThan(0)))
                 .andExpect(jsonPath("$.lastUpdatedAt").exists());
 
-        mockMvc.perform(get("/api/search").param("q", "updated"))
+        mockMvc.perform(get("/api/spaces/default/search").param("q", "updated"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].path", is("operations/release-runbook")));
 
-        mockMvc.perform(get("/api/links").param("path", "operations/release-runbook"))
+        mockMvc.perform(get("/api/spaces/default/links").param("path", "operations/release-runbook"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.outgoings", hasSize(1)))
                 .andExpect(jsonPath("$.brokenOutgoings", hasSize(1)));
@@ -166,17 +166,17 @@ class WikiControllerTest {
                 "text/plain",
                 "hello asset".getBytes());
 
-        mockMvc.perform(multipart("/api/pages/assets")
+        mockMvc.perform(multipart("/api/spaces/default/pages/assets")
                         .file(file)
                         .param("path", "operations/release-runbook"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name", is("notes.txt")));
 
-        mockMvc.perform(get("/api/pages/assets").param("path", "operations/release-runbook"))
+        mockMvc.perform(get("/api/spaces/default/pages/assets").param("path", "operations/release-runbook"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)));
 
-        mockMvc.perform(post("/api/pages")
+        mockMvc.perform(post("/api/spaces/default/pages")
                         .contentType("application/json")
                         .content("""
                                 {
@@ -189,7 +189,7 @@ class WikiControllerTest {
                                 """))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(post("/api/page/convert")
+        mockMvc.perform(post("/api/spaces/default/page/convert")
                         .param("path", "empty-section")
                         .contentType("application/json")
                         .content("""
@@ -200,7 +200,7 @@ class WikiControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.kind", is("PAGE")));
 
-        mockMvc.perform(delete("/api/page").param("path", "operations/generated-page"))
+        mockMvc.perform(delete("/api/spaces/default/page").param("path", "operations/generated-page"))
                 .andExpect(status().isOk());
     }
 }

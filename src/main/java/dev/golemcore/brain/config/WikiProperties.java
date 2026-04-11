@@ -18,4 +18,14 @@ public class WikiProperties {
     private String adminEmail = "admin@example.com";
     private String adminPassword = "admin";
     private long sessionTtlSeconds = 60L * 60L * 24L * 7L;
+
+    private Jwt jwt = new Jwt();
+    private String defaultSpaceSlug = "default";
+    private String defaultSpaceName = "Default";
+
+    @Data
+    public static class Jwt {
+        private String secret = "change-me-change-me-change-me-change-me-change-me";
+        private String issuer = "golemcore-brain";
+    }
 }

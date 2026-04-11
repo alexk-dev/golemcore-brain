@@ -13,6 +13,12 @@ public interface WikiRepository {
 
     void initialize();
 
+    /**
+     * Ensure filesystem storage for a space exists (create the root dir and a welcome page,
+     * optionally seed demo content). Idempotent.
+     */
+    void initializeSpace(String spaceId);
+
     Optional<WikiNodeReference> findReference(String path);
 
     WikiNodeReference getRootReference();

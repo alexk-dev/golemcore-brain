@@ -1,6 +1,8 @@
 package dev.golemcore.brain.domain.auth;
 
+import java.util.List;
 import lombok.Builder;
+import lombok.Singular;
 import lombok.Value;
 
 @Value
@@ -10,4 +12,6 @@ public class PublicUserView {
     String username;
     String email;
     UserRole role;
+    @Singular
+    List<SpaceMembership> memberships;
 }

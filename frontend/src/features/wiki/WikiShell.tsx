@@ -11,6 +11,7 @@ import { SortChildrenDialog } from '../../components/SortChildrenDialog'
 import { convertPage, copyPage, createPage, deletePage, getAuthConfig, getConfig, logout, movePage, sortSection } from '../../lib/api'
 import { editorPathToRoute, normalizeWikiPath, parentPath, pathToRoute } from '../../lib/paths'
 import { useEditorStore } from '../../stores/editor'
+import { useSpaceStore } from '../../stores/space'
 import { useTreeStore } from '../../stores/tree'
 import { useUiStore } from '../../stores/ui'
 import { useViewerStore } from '../../stores/viewer'
@@ -62,6 +63,8 @@ export function WikiShell({ children }: WikiShellProps) {
   const publicAccess = useUiStore((state) => state.publicAccess)
   const setAuthConfig = useUiStore((state) => state.setAuthConfig)
   const setCurrentUser = useUiStore((state) => state.setCurrentUser)
+  const reloadSpaces = useSpaceStore((state) => state.reloadSpaces)
+  const activeSpaceSlug = useSpaceStore((state) => state.activeSlug)
 
   const [config, setConfig] = useState<WikiConfig | null>(null)
   const [dialogState, setDialogState] = useState<DialogState>({ type: 'none' })
@@ -71,14 +74,20 @@ export function WikiShell({ children }: WikiShellProps) {
   }, [isDark])
 
   useEffect(() => {
-    void reloadTree().catch((error: Error) => toast.error(error.message))
+    void reloadSpaces()
+      .then(() => reloadTree())
+      .catch((error: Error) => toast.error(error.message))
     void getConfig()
       .then((response) => setConfig(response))
       .catch((error: Error) => toast.error(error.message))
     void getAuthConfig()
       .then((response) => setAuthConfig(response))
       .catch((error: Error) => toast.error(error.message))
-  }, [reloadTree, setAuthConfig])
+  }, [reloadSpaces, reloadTree, setAuthConfig])
+
+  useEffect(() => {
+    void reloadTree().catch((error: Error) => toast.error(error.message))
+  }, [activeSpaceSlug, reloadTree])
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
@@ -98,7 +107,7 @@ export function WikiShell({ children }: WikiShellProps) {
   const canManageUsers = authDisabled || currentUser?.role === 'ADMIN'
   const canAccessAccount = authDisabled || currentUser !== null
   const isAnonymousPublicReader = !authDisabled && publicAccess && currentUser === null
-  const isUtilityRoute = ['login', 'account', 'users', 'import'].includes(currentPath)
+  const isUtilityRoute = ['login', 'account', 'users', 'import', 'spaces', 'api-keys'].includes(currentPath)
   const editorHasUnsavedChanges =
     isEditorRoute &&
     editorPage !== null &&
