@@ -5,6 +5,8 @@ import type {
   CopyPagePayload,
   CreateApiKeyPayload,
   CreatePagePayload,
+  DynamicSpaceApiConfig,
+  DynamicSpaceApiRunResult,
   IssuedApiKey,
   LlmProviderCheckResult,
   LlmSettings,
@@ -13,6 +15,7 @@ import type {
   MarkdownImportOptions,
   SaveLlmModelPayload,
   SaveLlmProviderPayload,
+  SaveDynamicSpaceApiPayload,
   Space,
   UpdatePagePayload,
   UpdateUserPayload,
@@ -250,6 +253,37 @@ export function updateLlmModel(id: string, payload: SaveLlmModelPayload): Promis
 export function deleteLlmModel(id: string): Promise<LlmSettings> {
   return readJson<LlmSettings>(`/api/llm/models/${encodeURIComponent(id)}`, {
     method: 'DELETE',
+  })
+}
+
+export function listDynamicSpaceApis(): Promise<DynamicSpaceApiConfig[]> {
+  return readJson<DynamicSpaceApiConfig[]>(spaceUrl('/dynamic-apis'))
+}
+
+export function createDynamicSpaceApi(payload: SaveDynamicSpaceApiPayload): Promise<DynamicSpaceApiConfig> {
+  return readJson<DynamicSpaceApiConfig>(spaceUrl('/dynamic-apis'), {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateDynamicSpaceApi(id: string, payload: SaveDynamicSpaceApiPayload): Promise<DynamicSpaceApiConfig> {
+  return readJson<DynamicSpaceApiConfig>(spaceUrl(`/dynamic-apis/${encodeURIComponent(id)}`), {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function deleteDynamicSpaceApi(id: string): Promise<void> {
+  return readJson<void>(spaceUrl(`/dynamic-apis/${encodeURIComponent(id)}`), {
+    method: 'DELETE',
+  })
+}
+
+export function runDynamicSpaceApi(slug: string, payload: Record<string, unknown>): Promise<DynamicSpaceApiRunResult> {
+  return readJson<DynamicSpaceApiRunResult>(spaceUrl(`/dynamic-apis/${encodeURIComponent(slug)}/run`), {
+    method: 'POST',
+    body: JSON.stringify(payload),
   })
 }
 

@@ -66,6 +66,12 @@ export function UserMenu({ username, canAccessAccount, canManageUsers, onLogout 
                 </Link>
               </DropdownMenu.Item>
               <DropdownMenu.Item asChild>
+                <Link to="/dynamic-apis" className="user-menu__item">
+                  <Settings size={14} />
+                  <span>Dynamic APIs</span>
+                </Link>
+              </DropdownMenu.Item>
+              <DropdownMenu.Item asChild>
                 <Link to="/llm-settings" className="user-menu__item">
                   <BrainCircuit size={14} />
                   <span>LLM Settings</span>
