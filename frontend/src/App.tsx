@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { AccountPage } from './features/account/AccountPage'
 import { ApiKeysPage } from './features/api-keys/ApiKeysPage'
 import { LoginPage } from './features/auth/LoginPage'
+import { DynamicSpaceApisPage } from './features/dynamic-apis/DynamicSpaceApisPage'
 import { PageEditor } from './features/editor/PageEditor'
 import { ImportPage } from './features/import/ImportPage'
 import { LlmSettingsPage } from './features/llm-settings/LlmSettingsPage'
@@ -42,6 +43,7 @@ function App() {
         <Route path="/users" element={canManageUsers ? <UserManagementPage /> : <Navigate to="/" replace />} />
         <Route path="/spaces" element={canManageUsers ? <SpacesPage /> : <Navigate to="/" replace />} />
         <Route path="/api-keys" element={canManageUsers ? <ApiKeysPage /> : <Navigate to="/" replace />} />
+        <Route path="/dynamic-apis" element={canManageUsers ? <DynamicSpaceApisPage /> : <Navigate to="/" replace />} />
         <Route path="/llm-settings" element={canManageLlmSettings ? <LlmSettingsPage /> : <Navigate to="/" replace />} />
         <Route path="/import" element={canEdit ? <ImportPage /> : <Navigate to="/" replace />} />
         <Route path="/" element={canView ? <PageViewer /> : <Navigate to="/login" replace />} />

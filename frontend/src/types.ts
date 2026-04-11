@@ -297,3 +297,35 @@ export interface LlmProviderCheckResult {
   message: string
   statusCode: number | null
 }
+
+export interface DynamicSpaceApiConfig {
+  id: string
+  slug: string
+  name: string
+  description: string | null
+  modelConfigId: string
+  systemPrompt: string
+  enabled: boolean
+  maxIterations: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SaveDynamicSpaceApiPayload {
+  slug: string
+  name?: string | null
+  description?: string | null
+  modelConfigId: string
+  systemPrompt: string
+  enabled?: boolean | null
+  maxIterations?: number | null
+}
+
+export interface DynamicSpaceApiRunResult {
+  apiId: string
+  apiSlug: string
+  result: unknown
+  rawResponse: string
+  iterations: number
+  toolCallCount: number
+}
