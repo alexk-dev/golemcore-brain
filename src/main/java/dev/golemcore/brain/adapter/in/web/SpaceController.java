@@ -35,7 +35,8 @@ public class SpaceController {
     }
 
     @PostMapping
-    public ResponseEntity<Space> createSpace(@Valid @RequestBody CreateSpaceRequest payload, HttpServletRequest request) {
+    public ResponseEntity<Space> createSpace(@Valid @RequestBody CreateSpaceRequest payload,
+            HttpServletRequest request) {
         AuthContext context = authContextResolver.requireAuthenticated(request);
         Space space = spaceService.createSpace(context, payload.getSlug(), payload.getName());
         return ResponseEntity.status(201).body(space);

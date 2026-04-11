@@ -41,32 +41,33 @@ class WikiControllerConflictTest {
     @Test
     void shouldRejectStaleSaveAndReturnCurrentPageSnapshot() throws Exception {
         mockMvc.perform(post("/api/spaces/default/pages")
-                        .contentType("application/json")
-                        .content("""
-                                {
-                                  "parentPath": "",
-                                  "title": "Operations",
-                                  "slug": "operations",
-                                  "content": "Ops section",
-                                  "kind": "SECTION"
-                                }
-                                """))
+                .contentType("application/json")
+                .content("""
+                        {
+                          "parentPath": "",
+                          "title": "Operations",
+                          "slug": "operations",
+                          "content": "Ops section",
+                          "kind": "SECTION"
+                        }
+                        """))
                 .andExpect(status().isOk());
 
         mockMvc.perform(post("/api/spaces/default/pages")
-                        .contentType("application/json")
-                        .content("""
-                                {
-                                  "parentPath": "operations",
-                                  "title": "Runbook v1",
-                                  "slug": "runbook",
-                                  "content": "Version one",
-                                  "kind": "PAGE"
-                                }
-                                """))
+                .contentType("application/json")
+                .content("""
+                        {
+                          "parentPath": "operations",
+                          "title": "Runbook v1",
+                          "slug": "runbook",
+                          "content": "Version one",
+                          "kind": "PAGE"
+                        }
+                        """))
                 .andExpect(status().isOk());
 
-        MvcResult originalPage = mockMvc.perform(get("/api/spaces/default/pages/by-path").param("path", "operations/runbook"))
+        MvcResult originalPage = mockMvc
+                .perform(get("/api/spaces/default/pages/by-path").param("path", "operations/runbook"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.revision").isString())
                 .andReturn();
@@ -74,30 +75,30 @@ class WikiControllerConflictTest {
         String originalRevision = extractField(originalPage.getResponse().getContentAsString(), "revision");
 
         mockMvc.perform(put("/api/spaces/default/page")
-                        .param("path", "operations/runbook")
-                        .contentType("application/json")
-                        .content("""
-                                {
-                                  "title": "Runbook v2",
-                                  "slug": "runbook",
-                                  "content": "Version two",
-                                  "revision": "%s"
-                                }
-                                """.formatted(originalRevision)))
+                .param("path", "operations/runbook")
+                .contentType("application/json")
+                .content("""
+                        {
+                          "title": "Runbook v2",
+                          "slug": "runbook",
+                          "content": "Version two",
+                          "revision": "%s"
+                        }
+                        """.formatted(originalRevision)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title", is("Runbook v2")));
 
         mockMvc.perform(put("/api/spaces/default/page")
-                        .param("path", "operations/runbook")
-                        .contentType("application/json")
-                        .content("""
-                                {
-                                  "title": "Runbook stale",
-                                  "slug": "runbook",
-                                  "content": "Stale overwrite",
-                                  "revision": "%s"
-                                }
-                                """.formatted(originalRevision)))
+                .param("path", "operations/runbook")
+                .contentType("application/json")
+                .content("""
+                        {
+                          "title": "Runbook stale",
+                          "slug": "runbook",
+                          "content": "Stale overwrite",
+                          "revision": "%s"
+                        }
+                        """.formatted(originalRevision)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code", is("PAGE_EDIT_CONFLICT")))
                 .andExpect(jsonPath("$.expectedRevision", is(originalRevision)))

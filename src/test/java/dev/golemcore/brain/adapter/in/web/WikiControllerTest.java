@@ -58,57 +58,57 @@ class WikiControllerTest {
                 .andExpect(jsonPath("$.kind", is("ROOT")));
 
         mockMvc.perform(post("/api/spaces/default/pages")
-                        .contentType("application/json")
-                        .content("""
-                                {
-                                  "parentPath": "",
-                                  "title": "Operations",
-                                  "slug": "operations",
-                                  "content": "Ops section",
-                                  "kind": "SECTION"
-                                }
-                                """))
+                .contentType("application/json")
+                .content("""
+                        {
+                          "parentPath": "",
+                          "title": "Operations",
+                          "slug": "operations",
+                          "content": "Ops section",
+                          "kind": "SECTION"
+                        }
+                        """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.path", is("operations")));
 
         mockMvc.perform(post("/api/spaces/default/pages")
-                        .contentType("application/json")
-                        .content("""
-                                {
-                                  "parentPath": "operations",
-                                  "title": "Runbook",
-                                  "slug": "runbook",
-                                  "content": "[Checklist](../shared/checklist)",
-                                  "kind": "PAGE"
-                                }
-                                """))
+                .contentType("application/json")
+                .content("""
+                        {
+                          "parentPath": "operations",
+                          "title": "Runbook",
+                          "slug": "runbook",
+                          "content": "[Checklist](../shared/checklist)",
+                          "kind": "PAGE"
+                        }
+                        """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.path", is("operations/runbook")));
 
         mockMvc.perform(post("/api/spaces/default/pages")
-                        .contentType("application/json")
-                        .content("""
-                                {
-                                  "parentPath": "",
-                                  "title": "Shared",
-                                  "slug": "shared",
-                                  "content": "Shared section",
-                                  "kind": "SECTION"
-                                }
-                                """))
+                .contentType("application/json")
+                .content("""
+                        {
+                          "parentPath": "",
+                          "title": "Shared",
+                          "slug": "shared",
+                          "content": "Shared section",
+                          "kind": "SECTION"
+                        }
+                        """))
                 .andExpect(status().isOk());
 
         mockMvc.perform(post("/api/spaces/default/pages")
-                        .contentType("application/json")
-                        .content("""
-                                {
-                                  "parentPath": "shared",
-                                  "title": "Checklist",
-                                  "slug": "checklist",
-                                  "content": "Checklist body",
-                                  "kind": "PAGE"
-                                }
-                                """))
+                .contentType("application/json")
+                .content("""
+                        {
+                          "parentPath": "shared",
+                          "title": "Checklist",
+                          "slug": "checklist",
+                          "content": "Checklist body",
+                          "kind": "PAGE"
+                        }
+                        """))
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/spaces/default/pages/by-path").param("path", "operations/runbook"))
@@ -121,9 +121,10 @@ class WikiControllerTest {
                 .andExpect(jsonPath("$.segments", hasSize(2)));
 
         mockMvc.perform(put("/api/spaces/default/page")
-                        .param("path", "operations/runbook")
-                        .contentType("application/json")
-                        .content("""
+                .param("path", "operations/runbook")
+                .contentType("application/json")
+                .content(
+                        """
                                 {
                                   "title": "Release Runbook",
                                   "slug": "release-runbook",
@@ -134,13 +135,13 @@ class WikiControllerTest {
                 .andExpect(jsonPath("$.path", is("operations/release-runbook")));
 
         mockMvc.perform(post("/api/spaces/default/pages/ensure")
-                        .contentType("application/json")
-                        .content("""
-                                {
-                                  "path": "operations/generated-page",
-                                  "targetTitle": "Generated Page"
-                                }
-                                """))
+                .contentType("application/json")
+                .content("""
+                        {
+                          "path": "operations/generated-page",
+                          "targetTitle": "Generated Page"
+                        }
+                        """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.path", is("operations/generated-page")));
 
@@ -167,8 +168,8 @@ class WikiControllerTest {
                 "hello asset".getBytes());
 
         mockMvc.perform(multipart("/api/spaces/default/pages/assets")
-                        .file(file)
-                        .param("path", "operations/release-runbook"))
+                .file(file)
+                .param("path", "operations/release-runbook"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name", is("notes.txt")));
 
@@ -177,26 +178,26 @@ class WikiControllerTest {
                 .andExpect(jsonPath("$", hasSize(1)));
 
         mockMvc.perform(post("/api/spaces/default/pages")
-                        .contentType("application/json")
-                        .content("""
-                                {
-                                  "parentPath": "",
-                                  "title": "Empty Section",
-                                  "slug": "empty-section",
-                                  "content": "Empty",
-                                  "kind": "SECTION"
-                                }
-                                """))
+                .contentType("application/json")
+                .content("""
+                        {
+                          "parentPath": "",
+                          "title": "Empty Section",
+                          "slug": "empty-section",
+                          "content": "Empty",
+                          "kind": "SECTION"
+                        }
+                        """))
                 .andExpect(status().isOk());
 
         mockMvc.perform(post("/api/spaces/default/page/convert")
-                        .param("path", "empty-section")
-                        .contentType("application/json")
-                        .content("""
-                                {
-                                  "targetKind": "PAGE"
-                                }
-                                """))
+                .param("path", "empty-section")
+                .contentType("application/json")
+                .content("""
+                        {
+                          "targetKind": "PAGE"
+                        }
+                        """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.kind", is("PAGE")));
 

@@ -14,8 +14,8 @@ public interface WikiRepository {
     void initialize();
 
     /**
-     * Ensure filesystem storage for a space exists (create the root dir and a welcome page,
-     * optionally seed demo content). Idempotent.
+     * Ensure filesystem storage for a space exists (create the root dir and a
+     * welcome page, optionally seed demo content). Idempotent.
      */
     void initializeSpace(String spaceId);
 
@@ -27,9 +27,11 @@ public interface WikiRepository {
 
     WikiPageDocument readDocument(WikiNodeReference nodeReference);
 
-    WikiPageDocument createPage(String parentPath, String title, String slug, String content, dev.golemcore.brain.domain.WikiNodeKind kind);
+    WikiPageDocument createPage(String parentPath, String title, String slug, String content,
+            dev.golemcore.brain.domain.WikiNodeKind kind);
 
-    WikiPageDocument updatePage(String path, String title, String slug, String content, String expectedRevision, String actor, String reason, String summary);
+    WikiPageDocument updatePage(String path, String title, String slug, String content, String expectedRevision,
+            String actor, String reason, String summary);
 
     void deletePage(String path);
 

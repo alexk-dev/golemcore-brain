@@ -57,7 +57,8 @@ public class FileSystemWikiRepository implements WikiRepository {
     private static final String MARKDOWN_EXTENSION = ".md";
     private static final String HISTORY_METADATA_EXTENSION = ".meta";
     private static final String HISTORY_DIRECTORY_NAME = ".history";
-    private static final DateTimeFormatter HISTORY_TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS");
+    private static final DateTimeFormatter HISTORY_TIMESTAMP_FORMATTER = DateTimeFormatter
+            .ofPattern("yyyyMMddHHmmssSSS");
 
     private static final String SPACES_DIR = "spaces";
 
@@ -182,7 +183,8 @@ public class FileSystemWikiRepository implements WikiRepository {
     }
 
     @Override
-    public WikiPageDocument createPage(String parentPath, String title, String slug, String content, WikiNodeKind kind) {
+    public WikiPageDocument createPage(String parentPath, String title, String slug, String content,
+            WikiNodeKind kind) {
         WikiNodeReference parentReference = requireSectionReference(parentPath);
         String requestedSlug = Optional.ofNullable(slug).orElse("");
         String resolvedSlug = slugify(requestedSlug.isBlank() ? title : requestedSlug);
@@ -198,7 +200,8 @@ public class FileSystemWikiRepository implements WikiRepository {
             } else {
                 throw new IllegalArgumentException("Unsupported node kind: " + kind);
             }
-            saveOrderedSlugs(parentReference.getNodePath(), insertSlug(readOrderedSlugs(parentReference.getNodePath()), resolvedSlug, null));
+            saveOrderedSlugs(parentReference.getNodePath(),
+                    insertSlug(readOrderedSlugs(parentReference.getNodePath()), resolvedSlug, null));
             return readDocument(findReference(joinPath(parentReference.getPath(), resolvedSlug)).orElseThrow());
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to create page", exception);
@@ -206,7 +209,8 @@ public class FileSystemWikiRepository implements WikiRepository {
     }
 
     @Override
-    public WikiPageDocument updatePage(String path, String title, String slug, String content, String expectedRevision, String actor, String reason, String summary) {
+    public WikiPageDocument updatePage(String path, String title, String slug, String content, String expectedRevision,
+            String actor, String reason, String summary) {
         WikiNodeReference nodeReference = findReference(path)
                 .orElseThrow(() -> new WikiNotFoundException("Page not found: " + normalizePath(path)));
         WikiPageDocument currentDocument = readDocument(nodeReference);
@@ -230,7 +234,8 @@ public class FileSystemWikiRepository implements WikiRepository {
                 nodeReference = findReference(nextPath)
                         .orElseThrow(() -> new IllegalStateException("Page missing after rename"));
             }
-            writeMarkdown(nodeReference.getMarkdownPath(), renderMarkdown(normalizedTitle, rewriteAssetPathReferences(content, previousPath, nextPath)));
+            writeMarkdown(nodeReference.getMarkdownPath(),
+                    renderMarkdown(normalizedTitle, rewriteAssetPathReferences(content, previousPath, nextPath)));
             rewriteAssetReferencesInSubtree(nodeReference, previousPath, nextPath);
             return readDocument(nodeReference);
         } catch (IOException exception) {
@@ -270,9 +275,11 @@ public class FileSystemWikiRepository implements WikiRepository {
         WikiNodeReference targetParentReference = requireSectionReference(targetParentPath);
         String requestedSlug = Optional.ofNullable(targetSlug).orElse("");
         String resolvedTargetSlug = slugify(requestedSlug.isBlank() ? sourceReference.getSlug() : requestedSlug);
-        Path targetNodePath = buildNodePath(targetParentReference.getNodePath(), resolvedTargetSlug, sourceReference.getKind());
+        Path targetNodePath = buildNodePath(targetParentReference.getNodePath(), resolvedTargetSlug,
+                sourceReference.getKind());
         boolean sameNode = sourceReference.getNodePath().equals(targetNodePath);
-        if (sourceReference.getKind() == WikiNodeKind.SECTION && targetParentReference.getNodePath().startsWith(sourceReference.getNodePath())) {
+        if (sourceReference.getKind() == WikiNodeKind.SECTION
+                && targetParentReference.getNodePath().startsWith(sourceReference.getNodePath())) {
             throw new IllegalArgumentException("A section cannot be moved into itself");
         }
         if (!sameNode) {
@@ -292,8 +299,10 @@ public class FileSystemWikiRepository implements WikiRepository {
             if (sameNode) {
                 targetOrder.remove(sourceReference.getSlug());
             }
-            saveOrderedSlugs(targetParentReference.getNodePath(), insertSlug(targetOrder, resolvedTargetSlug, beforeSlug));
-            WikiNodeReference targetReference = findReference(joinPath(targetParentReference.getPath(), resolvedTargetSlug)).orElseThrow();
+            saveOrderedSlugs(targetParentReference.getNodePath(),
+                    insertSlug(targetOrder, resolvedTargetSlug, beforeSlug));
+            WikiNodeReference targetReference = findReference(
+                    joinPath(targetParentReference.getPath(), resolvedTargetSlug)).orElseThrow();
             rewriteAssetReferencesInSubtree(targetReference, sourceReference.getPath(), targetReference.getPath());
             return readDocument(targetReference);
         } catch (IOException exception) {
@@ -310,15 +319,19 @@ public class FileSystemWikiRepository implements WikiRepository {
         }
         WikiNodeReference targetParentReference = requireSectionReference(targetParentPath);
         String requestedSlug = Optional.ofNullable(targetSlug).orElse("");
-        String resolvedTargetSlug = slugify(requestedSlug.isBlank() ? sourceReference.getSlug() + "-copy" : requestedSlug);
-        Path targetNodePath = buildNodePath(targetParentReference.getNodePath(), resolvedTargetSlug, sourceReference.getKind());
+        String resolvedTargetSlug = slugify(
+                requestedSlug.isBlank() ? sourceReference.getSlug() + "-copy" : requestedSlug);
+        Path targetNodePath = buildNodePath(targetParentReference.getNodePath(), resolvedTargetSlug,
+                sourceReference.getKind());
         requireAvailable(targetNodePath, resolvedTargetSlug);
 
         try {
             copyRecursively(sourceReference.getNodePath(), targetNodePath);
             copyPageSidecars(sourceReference, targetParentReference, resolvedTargetSlug);
-            saveOrderedSlugs(targetParentReference.getNodePath(), insertSlug(readOrderedSlugs(targetParentReference.getNodePath()), resolvedTargetSlug, beforeSlug));
-            WikiNodeReference targetReference = findReference(joinPath(targetParentReference.getPath(), resolvedTargetSlug)).orElseThrow();
+            saveOrderedSlugs(targetParentReference.getNodePath(),
+                    insertSlug(readOrderedSlugs(targetParentReference.getNodePath()), resolvedTargetSlug, beforeSlug));
+            WikiNodeReference targetReference = findReference(
+                    joinPath(targetParentReference.getPath(), resolvedTargetSlug)).orElseThrow();
             rewriteAssetReferencesInSubtree(targetReference, sourceReference.getPath(), targetReference.getPath());
             return readDocument(targetReference);
         } catch (IOException exception) {
@@ -353,7 +366,8 @@ public class FileSystemWikiRepository implements WikiRepository {
     public void sortChildren(String path, List<String> orderedSlugs) {
         WikiNodeReference sectionReference = requireSectionReference(path);
         List<WikiNodeReference> children = listChildren(sectionReference);
-        Set<String> existingSlugs = children.stream().map(WikiNodeReference::getSlug).collect(Collectors.toCollection(LinkedHashSet::new));
+        Set<String> existingSlugs = children.stream().map(WikiNodeReference::getSlug)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
         List<String> requestedOrder = Optional.ofNullable(orderedSlugs).orElse(List.of()).stream()
                 .filter(existingSlugs::contains)
                 .distinct()
@@ -397,7 +411,8 @@ public class FileSystemWikiRepository implements WikiRepository {
     }
 
     @Override
-    public WikiPageDocument restorePageVersion(String path, String versionId, String actor, String reason, String summary) {
+    public WikiPageDocument restorePageVersion(String path, String versionId, String actor, String reason,
+            String summary) {
         WikiNodeReference nodeReference = findReference(path)
                 .orElseThrow(() -> new WikiNotFoundException("Page not found: " + normalizePath(path)));
         Path historyPath = getHistoryDirectory(nodeReference).resolve(versionId + ".md");
@@ -475,7 +490,8 @@ public class FileSystemWikiRepository implements WikiRepository {
         try {
             Files.createDirectories(assetsDirectory);
             Files.copy(inputStream, targetPath);
-            return toAsset(targetPath, nodeReference, Optional.ofNullable(contentType).orElseGet(() -> probeContentType(targetPath)));
+            return toAsset(targetPath, nodeReference,
+                    Optional.ofNullable(contentType).orElseGet(() -> probeContentType(targetPath)));
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to save asset", exception);
         }
@@ -499,7 +515,8 @@ public class FileSystemWikiRepository implements WikiRepository {
             String previousAssetPath = toAsset(sourcePath, nodeReference).getPath();
             Files.move(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
             WikiAsset renamedAsset = toAsset(targetPath, nodeReference);
-            rewriteAssetNameReferences(nodeReference.getMarkdownPath(), previousAssetPath, renamedAsset.getPath(), sanitizeFileName(oldName), safeNewName);
+            rewriteAssetNameReferences(nodeReference.getMarkdownPath(), previousAssetPath, renamedAsset.getPath(),
+                    sanitizeFileName(oldName), safeNewName);
             return renamedAsset;
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to rename asset", exception);
@@ -535,7 +552,8 @@ public class FileSystemWikiRepository implements WikiRepository {
         }
     }
 
-    private void snapshotHistory(WikiNodeReference nodeReference, String actor, String reason, String summary) throws IOException {
+    private void snapshotHistory(WikiNodeReference nodeReference, String actor, String reason, String summary)
+            throws IOException {
         if (!nodeReference.getKind().keepsHistory()) {
             return;
         }
@@ -570,8 +588,10 @@ public class FileSystemWikiRepository implements WikiRepository {
     }
 
     private Path getHistoryDirectory(WikiNodeReference nodeReference) {
-        Path containerDirectory = nodeReference.getKind().isContainer() ? nodeReference.getNodePath() : nodeReference.getParentDirectory();
-        String slug = nodeReference.getKind().isContainer() ? ".section-history-" + nodeReference.getSlug() : ".history-" + nodeReference.getSlug();
+        Path containerDirectory = nodeReference.getKind().isContainer() ? nodeReference.getNodePath()
+                : nodeReference.getParentDirectory();
+        String slug = nodeReference.getKind().isContainer() ? ".section-history-" + nodeReference.getSlug()
+                : ".history-" + nodeReference.getSlug();
         return containerDirectory.resolve(HISTORY_DIRECTORY_NAME).resolve(slug);
     }
 
@@ -665,7 +685,8 @@ public class FileSystemWikiRepository implements WikiRepository {
         properties.setProperty("author", metadata.author());
         properties.setProperty("reason", metadata.reason());
         properties.setProperty("summary", metadata.summary());
-        try (Writer writer = Files.newBufferedWriter(getHistoryMetadataPath(historyPath), StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
+        try (Writer writer = Files.newBufferedWriter(getHistoryMetadataPath(historyPath), StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
             properties.store(writer, null);
         }
     }
@@ -718,8 +739,10 @@ public class FileSystemWikiRepository implements WikiRepository {
         requireAvailable(targetPath, nextSlug);
         Files.move(nodeReference.getNodePath(), targetPath, StandardCopyOption.REPLACE_EXISTING);
         if (nodeReference.getKind() == WikiNodeKind.PAGE) {
-            moveIfExists(getAssetsDirectory(nodeReference), nodeReference.getParentDirectory().resolve(".assets-" + nextSlug));
-            moveIfExists(getHistoryDirectory(nodeReference), nodeReference.getParentDirectory().resolve(HISTORY_DIRECTORY_NAME).resolve(".history-" + nextSlug));
+            moveIfExists(getAssetsDirectory(nodeReference),
+                    nodeReference.getParentDirectory().resolve(".assets-" + nextSlug));
+            moveIfExists(getHistoryDirectory(nodeReference),
+                    nodeReference.getParentDirectory().resolve(HISTORY_DIRECTORY_NAME).resolve(".history-" + nextSlug));
         } else if (nodeReference.getKind() == WikiNodeKind.SECTION) {
             moveIfExists(
                     targetPath.resolve(HISTORY_DIRECTORY_NAME).resolve(".section-history-" + nodeReference.getSlug()),
@@ -741,11 +764,13 @@ public class FileSystemWikiRepository implements WikiRepository {
         Path targetDirectory = sourceReference.getParentDirectory().resolve(sourceReference.getSlug());
         requireAvailable(targetDirectory, sourceReference.getSlug());
         Files.createDirectories(targetDirectory);
-        Files.move(sourceReference.getMarkdownPath(), targetDirectory.resolve(INDEX_FILE_NAME), StandardCopyOption.REPLACE_EXISTING);
+        Files.move(sourceReference.getMarkdownPath(), targetDirectory.resolve(INDEX_FILE_NAME),
+                StandardCopyOption.REPLACE_EXISTING);
         moveIfExists(getAssetsDirectory(sourceReference), targetDirectory.resolve(".section-assets"));
         moveIfExists(
                 getHistoryDirectory(sourceReference),
-                targetDirectory.resolve(HISTORY_DIRECTORY_NAME).resolve(".section-history-" + sourceReference.getSlug()));
+                targetDirectory.resolve(HISTORY_DIRECTORY_NAME)
+                        .resolve(".section-history-" + sourceReference.getSlug()));
         return readDocument(findReference(sourceReference.getPath()).orElseThrow());
     }
 
@@ -756,30 +781,38 @@ public class FileSystemWikiRepository implements WikiRepository {
         if (!listChildren(sourceReference).isEmpty()) {
             throw new IllegalArgumentException("Only empty sections can be converted to pages");
         }
-        Path targetMarkdownPath = sourceReference.getParentDirectory().resolve(sourceReference.getSlug() + MARKDOWN_EXTENSION);
+        Path targetMarkdownPath = sourceReference.getParentDirectory()
+                .resolve(sourceReference.getSlug() + MARKDOWN_EXTENSION);
         requireAvailable(targetMarkdownPath, sourceReference.getSlug());
         Files.move(sourceReference.getMarkdownPath(), targetMarkdownPath, StandardCopyOption.REPLACE_EXISTING);
-        moveIfExists(getAssetsDirectory(sourceReference), sourceReference.getParentDirectory().resolve(".assets-" + sourceReference.getSlug()));
+        moveIfExists(getAssetsDirectory(sourceReference),
+                sourceReference.getParentDirectory().resolve(".assets-" + sourceReference.getSlug()));
         moveIfExists(
                 getHistoryDirectory(sourceReference),
-                sourceReference.getParentDirectory().resolve(HISTORY_DIRECTORY_NAME).resolve(".history-" + sourceReference.getSlug()));
+                sourceReference.getParentDirectory().resolve(HISTORY_DIRECTORY_NAME)
+                        .resolve(".history-" + sourceReference.getSlug()));
         deleteIfExistsRecursively(sourceReference.getNodePath());
         return readDocument(findReference(sourceReference.getPath()).orElseThrow());
     }
 
-    private void movePageSidecars(WikiNodeReference sourceReference, WikiNodeReference targetParentReference, String targetSlug) throws IOException {
+    private void movePageSidecars(WikiNodeReference sourceReference, WikiNodeReference targetParentReference,
+            String targetSlug) throws IOException {
         if (sourceReference.getKind() != WikiNodeKind.PAGE) {
             return;
         }
-        moveIfExists(getAssetsDirectory(sourceReference), targetParentReference.getNodePath().resolve(".assets-" + targetSlug));
-        moveIfExists(getHistoryDirectory(sourceReference), targetParentReference.getNodePath().resolve(HISTORY_DIRECTORY_NAME).resolve(".history-" + targetSlug));
+        moveIfExists(getAssetsDirectory(sourceReference),
+                targetParentReference.getNodePath().resolve(".assets-" + targetSlug));
+        moveIfExists(getHistoryDirectory(sourceReference),
+                targetParentReference.getNodePath().resolve(HISTORY_DIRECTORY_NAME).resolve(".history-" + targetSlug));
     }
 
-    private void copyPageSidecars(WikiNodeReference sourceReference, WikiNodeReference targetParentReference, String targetSlug) throws IOException {
+    private void copyPageSidecars(WikiNodeReference sourceReference, WikiNodeReference targetParentReference,
+            String targetSlug) throws IOException {
         if (sourceReference.getKind() != WikiNodeKind.PAGE) {
             return;
         }
-        copyIfExists(getAssetsDirectory(sourceReference), targetParentReference.getNodePath().resolve(".assets-" + targetSlug));
+        copyIfExists(getAssetsDirectory(sourceReference),
+                targetParentReference.getNodePath().resolve(".assets-" + targetSlug));
     }
 
     private void moveIfExists(Path source, Path target) throws IOException {
@@ -805,7 +838,8 @@ public class FileSystemWikiRepository implements WikiRepository {
         deleteRecursively(path);
     }
 
-    private void rewriteAssetReferencesInSubtree(WikiNodeReference rootReference, String oldRootPath, String newRootPath) throws IOException {
+    private void rewriteAssetReferencesInSubtree(WikiNodeReference rootReference, String oldRootPath,
+            String newRootPath) throws IOException {
         String normalizedOldRootPath = normalizePath(oldRootPath);
         String normalizedNewRootPath = normalizePath(newRootPath);
         if (normalizedOldRootPath.equals(normalizedNewRootPath)) {
@@ -818,7 +852,8 @@ public class FileSystemWikiRepository implements WikiRepository {
         rewriteAssetReferencesForChildren(rootReference.getNodePath(), normalizedOldRootPath, normalizedNewRootPath);
     }
 
-    private void rewriteAssetReferencesForChildren(Path directory, String oldRootPath, String newRootPath) throws IOException {
+    private void rewriteAssetReferencesForChildren(Path directory, String oldRootPath, String newRootPath)
+            throws IOException {
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(directory)) {
             for (Path candidate : stream) {
                 String fileName = candidate.getFileName().toString();
@@ -840,7 +875,8 @@ public class FileSystemWikiRepository implements WikiRepository {
         }
     }
 
-    private void rewriteAssetReferencesForReference(WikiNodeReference reference, String oldRootPath, String newRootPath) throws IOException {
+    private void rewriteAssetReferencesForReference(WikiNodeReference reference, String oldRootPath, String newRootPath)
+            throws IOException {
         String previousPath = previousPathForReference(reference.getPath(), oldRootPath, newRootPath);
         rewriteMarkdownAssetPath(reference.getMarkdownPath(), previousPath, reference.getPath());
     }
@@ -859,7 +895,8 @@ public class FileSystemWikiRepository implements WikiRepository {
         String rawMarkdown = Files.readString(markdownPath, StandardCharsets.UTF_8);
         String updatedMarkdown = rewriteAssetPathReferences(rawMarkdown, oldPath, newPath);
         if (!rawMarkdown.equals(updatedMarkdown)) {
-            Files.writeString(markdownPath, updatedMarkdown, StandardCharsets.UTF_8, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
+            Files.writeString(markdownPath, updatedMarkdown, StandardCharsets.UTF_8,
+                    StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
         }
     }
 
@@ -870,17 +907,21 @@ public class FileSystemWikiRepository implements WikiRepository {
             return content;
         }
         return content
-                .replace("/api/assets?path=" + normalizedOldPath + "&name=", "/api/assets?path=" + normalizedNewPath + "&name=")
-                .replace("/api/assets?path=" + normalizedOldPath.replace("/", "%2F") + "&name=", "/api/assets?path=" + normalizedNewPath.replace("/", "%2F") + "&name=");
+                .replace("/api/assets?path=" + normalizedOldPath + "&name=",
+                        "/api/assets?path=" + normalizedNewPath + "&name=")
+                .replace("/api/assets?path=" + normalizedOldPath.replace("/", "%2F") + "&name=",
+                        "/api/assets?path=" + normalizedNewPath.replace("/", "%2F") + "&name=");
     }
 
-    private void rewriteAssetNameReferences(Path markdownPath, String oldAssetPath, String newAssetPath, String oldName, String newName) throws IOException {
+    private void rewriteAssetNameReferences(Path markdownPath, String oldAssetPath, String newAssetPath, String oldName,
+            String newName) throws IOException {
         String rawMarkdown = Files.readString(markdownPath, StandardCharsets.UTF_8);
         String updatedMarkdown = rawMarkdown
                 .replace(oldAssetPath, newAssetPath)
                 .replace("[" + oldName + "](", "[" + newName + "](");
         if (!rawMarkdown.equals(updatedMarkdown)) {
-            Files.writeString(markdownPath, updatedMarkdown, StandardCharsets.UTF_8, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
+            Files.writeString(markdownPath, updatedMarkdown, StandardCharsets.UTF_8,
+                    StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
         }
     }
 
@@ -920,7 +961,8 @@ public class FileSystemWikiRepository implements WikiRepository {
                 .map(this::quoteJsonString)
                 .collect(Collectors.joining(",\n  ", "[\n  ", "\n]\n"));
         try {
-            Files.writeString(directory.resolve(ORDER_FILE_NAME), json, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
+            Files.writeString(directory.resolve(ORDER_FILE_NAME), json, StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to write order file", exception);
         }
@@ -989,7 +1031,8 @@ public class FileSystemWikiRepository implements WikiRepository {
     private void writeMarkdown(Path markdownPath, String markdown) {
         try {
             Files.createDirectories(markdownPath.getParent());
-            Files.writeString(markdownPath, markdown, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
+            Files.writeString(markdownPath, markdown, StandardCharsets.UTF_8, StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to write markdown file " + markdownPath, exception);
         }
@@ -1108,17 +1151,22 @@ public class FileSystemWikiRepository implements WikiRepository {
         Path guidesDirectory = root.resolve("guides");
         if (!Files.exists(guidesDirectory)) {
             Files.createDirectories(guidesDirectory);
-            writeMarkdown(guidesDirectory.resolve(INDEX_FILE_NAME), renderMarkdown("Guides", "Start here when you need structured how-to documentation."));
-            writeMarkdown(guidesDirectory.resolve("writing-notes.md"), renderMarkdown("Writing notes", "Capture decisions, snippets, and operating procedures in markdown.\n\n## Tips\n\n- Keep sections focused\n- Use headings for fast navigation\n- Link related pages together"));
-            writeMarkdown(guidesDirectory.resolve("team-onboarding.md"), renderMarkdown("Team onboarding", "1. Read the overview\n2. Explore the tree\n3. Update pages directly in the editor"));
+            writeMarkdown(guidesDirectory.resolve(INDEX_FILE_NAME),
+                    renderMarkdown("Guides", "Start here when you need structured how-to documentation."));
+            writeMarkdown(guidesDirectory.resolve("writing-notes.md"), renderMarkdown("Writing notes",
+                    "Capture decisions, snippets, and operating procedures in markdown.\n\n## Tips\n\n- Keep sections focused\n- Use headings for fast navigation\n- Link related pages together"));
+            writeMarkdown(guidesDirectory.resolve("team-onboarding.md"), renderMarkdown("Team onboarding",
+                    "1. Read the overview\n2. Explore the tree\n3. Update pages directly in the editor"));
             saveOrderedSlugs(guidesDirectory, List.of("writing-notes", "team-onboarding"));
         }
 
         Path productDirectory = root.resolve("product");
         if (!Files.exists(productDirectory)) {
             Files.createDirectories(productDirectory);
-            writeMarkdown(productDirectory.resolve(INDEX_FILE_NAME), renderMarkdown("Product", "Use this section for specifications, roadmap notes, and release documentation."));
-            writeMarkdown(productDirectory.resolve("roadmap.md"), renderMarkdown("Roadmap", "## Next\n\n- Improve search relevance\n- Add asset uploads\n- Add export workflows"));
+            writeMarkdown(productDirectory.resolve(INDEX_FILE_NAME), renderMarkdown("Product",
+                    "Use this section for specifications, roadmap notes, and release documentation."));
+            writeMarkdown(productDirectory.resolve("roadmap.md"), renderMarkdown("Roadmap",
+                    "## Next\n\n- Improve search relevance\n- Add asset uploads\n- Add export workflows"));
             saveOrderedSlugs(productDirectory, List.of("roadmap"));
         }
 
@@ -1145,7 +1193,8 @@ public class FileSystemWikiRepository implements WikiRepository {
     }
 
     private Path getAssetsDirectory(WikiNodeReference nodeReference) {
-        Path containerDirectory = nodeReference.getKind().isContainer() ? nodeReference.getNodePath() : nodeReference.getParentDirectory();
+        Path containerDirectory = nodeReference.getKind().isContainer() ? nodeReference.getNodePath()
+                : nodeReference.getParentDirectory();
         String slug = nodeReference.getKind().isContainer() ? ".section-assets" : ".assets-" + nodeReference.getSlug();
         return containerDirectory.resolve(slug);
     }

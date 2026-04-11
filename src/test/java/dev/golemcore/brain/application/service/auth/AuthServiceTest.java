@@ -59,7 +59,8 @@ class AuthServiceTest {
                 .build();
         userRepository.save(viewer);
         AuthResponse viewerResponse = authService.login("viewer", "viewer");
-        assertThrows(AuthAccessDeniedException.class, () -> authService.requireEditAccess(Optional.of(viewerResponse.getMessage())));
+        assertThrows(AuthAccessDeniedException.class,
+                () -> authService.requireEditAccess(Optional.of(viewerResponse.getMessage())));
 
         AuthConfigResponse anonymousConfig = authService.getConfig(Optional.empty());
         assertTrue(anonymousConfig.isPublicAccess());

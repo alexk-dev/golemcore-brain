@@ -89,8 +89,8 @@ class WikiControllerImportTest {
                         """.getBytes(StandardCharsets.UTF_8));
 
         mockMvc.perform(multipart("/api/spaces/default/import/markdown/plan")
-                        .file(archive)
-                        .file(previewOptions))
+                .file(archive)
+                .file(previewOptions))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items", hasSize(2)))
                 .andExpect(jsonPath("$.targetRootPath", is("knowledge")))
@@ -100,8 +100,8 @@ class WikiControllerImportTest {
                 .andExpect(jsonPath("$.items[1].kind", is("PAGE")));
 
         mockMvc.perform(multipart("/api/spaces/default/import/markdown/apply")
-                        .file(archive)
-                        .file(previewOptions))
+                .file(archive)
+                .file(previewOptions))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.importedCount", is(2)))
                 .andExpect(jsonPath("$.createdCount", is(2)))
@@ -113,8 +113,8 @@ class WikiControllerImportTest {
                 .andExpect(jsonPath("$.title", is("Setup")));
 
         mockMvc.perform(multipart("/api/spaces/default/import/markdown/apply")
-                        .file(archive)
-                        .file(applyOptions))
+                .file(archive)
+                .file(applyOptions))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.importedCount", is(1)))
                 .andExpect(jsonPath("$.createdCount", is(0)))

@@ -1,14 +1,15 @@
 package dev.golemcore.brain.application.space;
 
 /**
- * Per-request holder for the active space id. Populated by SpaceResolverFilter before
- * any controller / service / repository code runs.
+ * Per-request holder for the active space id. Populated by SpaceResolverFilter
+ * before any controller / service / repository code runs.
  */
 public final class SpaceContextHolder {
 
     private static final ThreadLocal<String> CURRENT = new ThreadLocal<>();
 
-    private SpaceContextHolder() {}
+    private SpaceContextHolder() {
+    }
 
     public static void set(String spaceId) {
         CURRENT.set(spaceId);

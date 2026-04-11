@@ -13,18 +13,21 @@ public class AuthContext {
     boolean authenticated;
     PublicUserView user;
     /**
-     * Effective memberships for this context. For session-based auth these come from the user record;
-     * for JWT API keys these are synthesised from the key scope.
+     * Effective memberships for this context. For session-based auth these come
+     * from the user record; for JWT API keys these are synthesised from the key
+     * scope.
      */
     @Builder.Default
     List<SpaceMembership> memberships = List.of();
     /**
-     * Whether this context originated from a JWT API key (true) or a session cookie (false).
+     * Whether this context originated from a JWT API key (true) or a session cookie
+     * (false).
      */
     @Builder.Default
     boolean apiKey = false;
     /**
-     * For API key contexts, the space the key is pinned to, or null if the key is global.
+     * For API key contexts, the space the key is pinned to, or null if the key is
+     * global.
      */
     String pinnedSpaceId;
 
@@ -90,9 +93,9 @@ public class AuthContext {
 
     private static int rank(UserRole role) {
         return switch (role) {
-            case ADMIN -> 3;
-            case EDITOR -> 2;
-            case VIEWER -> 1;
+        case ADMIN -> 3;
+        case EDITOR -> 2;
+        case VIEWER -> 1;
         };
     }
 }

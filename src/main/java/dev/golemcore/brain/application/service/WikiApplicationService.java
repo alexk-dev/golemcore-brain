@@ -119,8 +119,10 @@ public class WikiApplicationService {
             return getPage(existingReference.get().getPath());
         }
         String normalizedPath = normalizePath(path);
-        String parentPath = normalizedPath.contains("/") ? normalizedPath.substring(0, normalizedPath.lastIndexOf('/')) : "";
-        String slug = normalizedPath.contains("/") ? normalizedPath.substring(normalizedPath.lastIndexOf('/') + 1) : normalizedPath;
+        String parentPath = normalizedPath.contains("/") ? normalizedPath.substring(0, normalizedPath.lastIndexOf('/'))
+                : "";
+        String slug = normalizedPath.contains("/") ? normalizedPath.substring(normalizedPath.lastIndexOf('/') + 1)
+                : normalizedPath;
         String title = Optional.ofNullable(targetTitle).filter(value -> !value.isBlank()).orElse(humanizePath(slug));
         return createPage(CreatePageCommand.builder()
                 .parentPath(parentPath)
@@ -143,7 +145,8 @@ public class WikiApplicationService {
                 command.getExpectedRevision(),
                 command.getActor(),
                 Optional.ofNullable(command.getHistoryReason()).orElse("Manual save"),
-                Optional.ofNullable(command.getHistorySummary()).orElse(summarizeManualSave(currentDocument, nodeReference, command)));
+                Optional.ofNullable(command.getHistorySummary())
+                        .orElse(summarizeManualSave(currentDocument, nodeReference, command)));
         return getPage(document.getPath());
     }
 
@@ -243,9 +246,11 @@ public class WikiApplicationService {
         validateImportTargetRoot(command.getTargetRootPath());
         List<ImportEntry> entries = readImportEntries(inputStream, command.getTargetRootPath());
         ensureSectionHierarchy(normalizePath(Optional.ofNullable(command.getTargetRootPath()).orElse("")));
-        Map<String, ImportSelectionCommand> selectionBySourcePath = Optional.ofNullable(command.getItems()).orElse(List.of()).stream()
+        Map<String, ImportSelectionCommand> selectionBySourcePath = Optional.ofNullable(command.getItems())
+                .orElse(List.of()).stream()
                 .filter(selection -> selection.getSourcePath() != null && !selection.getSourcePath().isBlank())
-                .collect(Collectors.toMap(ImportSelectionCommand::getSourcePath, selection -> selection, (left, right) -> right, LinkedHashMap::new));
+                .collect(Collectors.toMap(ImportSelectionCommand::getSourcePath, selection -> selection,
+                        (left, right) -> right, LinkedHashMap::new));
         List<WikiImportItem> items = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
         int createdCount = 0;
@@ -275,7 +280,8 @@ public class WikiApplicationService {
                         .title(entry.getTitle())
                         .slug(entry.getSlug())
                         .content(entry.getBody())
-                        .actor(Optional.ofNullable(command.getActor()).filter(value -> !value.isBlank()).orElse("Import"))
+                        .actor(Optional.ofNullable(command.getActor()).filter(value -> !value.isBlank())
+                                .orElse("Import"))
                         .historyReason("Markdown import")
                         .historySummary("Updated from the imported archive.")
                         .build());
@@ -303,7 +309,8 @@ public class WikiApplicationService {
             referencesByPath.put(reference.getPath(), reference);
         }
 
-        List<ResolvedLink> currentOutgoingLinks = extractResolvedLinks(currentReference.getPath(), currentDocument.getBody());
+        List<ResolvedLink> currentOutgoingLinks = extractResolvedLinks(currentReference.getPath(),
+                currentDocument.getBody());
         List<WikiLinkStatusItem> outgoings = new ArrayList<>();
         List<WikiLinkStatusItem> brokenOutgoings = new ArrayList<>();
         for (ResolvedLink link : currentOutgoingLinks) {
@@ -314,7 +321,8 @@ public class WikiApplicationService {
                     .fromTitle(currentDocument.getTitle())
                     .toPageId(targetReference == null ? null : targetReference.getId())
                     .toPath(link.getTargetPath())
-                    .toTitle(targetReference == null ? humanizePath(link.getTargetPath()) : wikiRepository.readDocument(targetReference).getTitle())
+                    .toTitle(targetReference == null ? humanizePath(link.getTargetPath())
+                            : wikiRepository.readDocument(targetReference).getTitle())
                     .broken(targetReference == null)
                     .build();
             if (targetReference == null) {
@@ -331,7 +339,8 @@ public class WikiApplicationService {
                 continue;
             }
             WikiPageDocument candidateDocument = wikiRepository.readDocument(candidateReference);
-            List<ResolvedLink> candidateLinks = extractResolvedLinks(candidateReference.getPath(), candidateDocument.getBody());
+            List<ResolvedLink> candidateLinks = extractResolvedLinks(candidateReference.getPath(),
+                    candidateDocument.getBody());
             for (ResolvedLink link : candidateLinks) {
                 if (link.getTargetPath().equals(currentReference.getPath())) {
                     backlinks.add(WikiLinkStatusItem.builder()
@@ -445,7 +454,8 @@ public class WikiApplicationService {
                 String slug = sectionPath.substring(sectionPath.lastIndexOf('/') + 1);
                 entryByPath.put(sectionPath, ImportEntry.builder()
                         .path(sectionPath)
-                        .parentPath(sectionPath.contains("/") ? sectionPath.substring(0, sectionPath.lastIndexOf('/')) : "")
+                        .parentPath(
+                                sectionPath.contains("/") ? sectionPath.substring(0, sectionPath.lastIndexOf('/')) : "")
                         .slug(slug)
                         .title(humanizePath(slug))
                         .body("")
@@ -457,7 +467,8 @@ public class WikiApplicationService {
 
             return entryByPath.values().stream()
                     .sorted((left, right) -> {
-                        int depthCompare = Integer.compare(left.getPath().split("/").length, right.getPath().split("/").length);
+                        int depthCompare = Integer.compare(left.getPath().split("/").length,
+                                right.getPath().split("/").length);
                         if (depthCompare != 0) {
                             return depthCompare;
                         }
@@ -475,8 +486,10 @@ public class WikiApplicationService {
                 ? archivePath.substring(0, archivePath.length() - "/index.md".length())
                 : archivePath.substring(0, archivePath.length() - ".md".length());
         String normalizedPath = joinPath(targetRootPath, importedPath);
-        String parentPath = normalizedPath.contains("/") ? normalizedPath.substring(0, normalizedPath.lastIndexOf('/')) : "";
-        String slug = normalizedPath.contains("/") ? normalizedPath.substring(normalizedPath.lastIndexOf('/') + 1) : normalizedPath;
+        String parentPath = normalizedPath.contains("/") ? normalizedPath.substring(0, normalizedPath.lastIndexOf('/'))
+                : "";
+        String slug = normalizedPath.contains("/") ? normalizedPath.substring(normalizedPath.lastIndexOf('/') + 1)
+                : normalizedPath;
         String title = extractTitle(markdown, humanizePath(slug));
         String body = extractBody(markdown);
         return ImportEntry.builder()
@@ -527,7 +540,8 @@ public class WikiApplicationService {
                 .build();
     }
 
-    private WikiImportPolicy resolveImportPolicy(ImportEntry entry, boolean existing, ImportSelectionCommand selection) {
+    private WikiImportPolicy resolveImportPolicy(ImportEntry entry, boolean existing,
+            ImportSelectionCommand selection) {
         if (!existing) {
             return WikiImportPolicy.OVERWRITE;
         }
@@ -559,14 +573,16 @@ public class WikiApplicationService {
         return explicitlySelected || hasSelectedDescendant;
     }
 
-    private String buildImportNote(ImportEntry entry, WikiImportAction action, boolean existing, ImportSelectionCommand selection) {
+    private String buildImportNote(ImportEntry entry, WikiImportAction action, boolean existing,
+            ImportSelectionCommand selection) {
         if (entry.getKind().isContainer() && selection != null && !selection.isSelected()) {
             return existing
                     ? "Required ancestor section will be kept for selected descendants."
                     : "Required ancestor section will be created for selected descendants.";
         }
         if (entry.isImplicitSection()) {
-            return existing ? "Parent section will be updated from the archive." : "Parent section will be created automatically.";
+            return existing ? "Parent section will be updated from the archive."
+                    : "Parent section will be created automatically.";
         }
         if (action == WikiImportAction.CREATE) {
             return "New content will be created.";
@@ -743,11 +759,13 @@ public class WikiApplicationService {
     }
 
     private List<ResolvedLink> extractResolvedLinks(String currentPath, String markdown) {
-        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\\[[^\\]]+\\]\\(([^)]+)\\)").matcher(markdown == null ? "" : markdown);
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\\[[^\\]]+\\]\\(([^)]+)\\)")
+                .matcher(markdown == null ? "" : markdown);
         List<ResolvedLink> links = new ArrayList<>();
         while (matcher.find()) {
             String href = matcher.group(1).trim();
-            if (href.isBlank() || href.startsWith("http") || href.startsWith("mailto:") || href.startsWith("#") || href.startsWith("assets/") || href.startsWith("/assets/")) {
+            if (href.isBlank() || href.startsWith("http") || href.startsWith("mailto:") || href.startsWith("#")
+                    || href.startsWith("assets/") || href.startsWith("/assets/")) {
                 continue;
             }
             links.add(ResolvedLink.builder().targetPath(resolveWikiLinkPath(currentPath, href)).build());
@@ -795,7 +813,8 @@ public class WikiApplicationService {
                 .collect(Collectors.joining(" "));
     }
 
-    private String summarizeManualSave(WikiPageDocument currentDocument, WikiNodeReference nodeReference, UpdatePageCommand command) {
+    private String summarizeManualSave(WikiPageDocument currentDocument, WikiNodeReference nodeReference,
+            UpdatePageCommand command) {
         List<String> changes = new ArrayList<>();
         String nextTitle = Optional.ofNullable(command.getTitle()).orElse("").trim();
         if (!nextTitle.equals(currentDocument.getTitle())) {
