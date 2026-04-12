@@ -4,37 +4,41 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { uploadAsset } from '../../lib/api'
 import { AssetManagerDialog } from './AssetManagerDialog'
 
-vi.mock('../../lib/api', () => ({
-  listAssets: vi.fn(async () => [
-    {
-      name: 'image.png',
-      path: '/api/assets?path=docs/page&name=image.png',
+vi.mock('../../lib/api', async () => {
+  const actual = await vi.importActual<typeof import('../../lib/api')>('../../lib/api')
+  return {
+    ...actual,
+    listAssets: vi.fn(async () => [
+      {
+        name: 'image.png',
+        path: '/api/assets?path=docs/page&name=image.png',
+        size: 1024,
+        contentType: 'image/png',
+      },
+      {
+        name: 'audio.mp3',
+        path: '/api/assets?path=docs/page&name=audio.mp3',
+        size: 2048,
+        contentType: 'audio/mpeg',
+      },
+    ]),
+    uploadAsset: vi.fn(async () => undefined),
+    renameAsset: vi.fn(async () => ({
+      name: 'renamed.png',
+      path: '/api/assets?path=docs/page&name=renamed.png',
       size: 1024,
       contentType: 'image/png',
-    },
-    {
-      name: 'audio.mp3',
-      path: '/api/assets?path=docs/page&name=audio.mp3',
-      size: 2048,
-      contentType: 'audio/mpeg',
-    },
-  ]),
-  uploadAsset: vi.fn(async () => undefined),
-  renameAsset: vi.fn(async () => ({
-    name: 'renamed.png',
-    path: '/api/assets?path=docs/page&name=renamed.png',
-    size: 1024,
-    contentType: 'image/png',
-  })),
-  deleteAsset: vi.fn(async () => undefined),
-}))
+    })),
+    deleteAsset: vi.fn(async () => undefined),
+  }
+})
 
 describe('AssetManagerDialog', () => {
   beforeEach(() => {
     vi.mocked(uploadAsset).mockClear()
   })
 
-  it('offers richer insertion modes and preview links for assets', async () => {
+  it('offers richer insertion modes and space-scoped preview links for assets', async () => {
     const inserted: string[] = []
     render(
       <AssetManagerDialog
@@ -54,15 +58,15 @@ describe('AssetManagerDialog', () => {
 
     await waitFor(() => {
       expect(inserted).toEqual([
-        '![image.png](/api/assets?path=docs/page&name=image.png)',
-        '[image.png](/api/assets?path=docs/page&name=image.png)',
-        '<audio controls src="/api/assets?path=docs/page&name=audio.mp3"></audio>',
-        '[audio.mp3](/api/assets?path=docs/page&name=audio.mp3)',
+        '![image.png](/api/spaces/default/assets?path=docs/page&name=image.png)',
+        '[image.png](/api/spaces/default/assets?path=docs/page&name=image.png)',
+        '<audio controls src="/api/spaces/default/assets?path=docs/page&name=audio.mp3"></audio>',
+        '[audio.mp3](/api/spaces/default/assets?path=docs/page&name=audio.mp3)',
       ])
     })
 
-    expect(screen.getByRole('link', { name: 'Preview image.png' })).toHaveAttribute('href', '/api/assets?path=docs/page&name=image.png')
-    expect(screen.getByRole('link', { name: 'Preview audio.mp3' })).toHaveAttribute('href', '/api/assets?path=docs/page&name=audio.mp3')
+    expect(screen.getByRole('link', { name: 'Preview image.png' })).toHaveAttribute('href', '/api/spaces/default/assets?path=docs/page&name=image.png')
+    expect(screen.getByRole('link', { name: 'Preview audio.mp3' })).toHaveAttribute('href', '/api/spaces/default/assets?path=docs/page&name=audio.mp3')
   })
 
   it('notifies the editor when an asset is renamed', async () => {

@@ -140,6 +140,8 @@ class WikiApplicationServiceTest {
                 "text/plain",
                 new ByteArrayInputStream("asset body".getBytes(StandardCharsets.UTF_8)));
         assertEquals("text/plain", uploadedAsset.getContentType());
+        assertEquals("/api/spaces/default/assets?path=operations/release-guide&name=" + uploadedAsset.getName(),
+                uploadedAsset.getPath());
         assertEquals(1, service.listAssets("operations/release-guide").size());
 
         service.updatePage(WikiApplicationService.UpdatePageCommand.builder()
@@ -148,6 +150,10 @@ class WikiApplicationServiceTest {
                 .slug("release-guide")
                 .content("![notes.txt](" + uploadedAsset.getPath() + ")")
                 .build());
+        WikiLinkStatus assetLinkStatus = service.getLinkStatus("operations/release-guide");
+        assertTrue(assetLinkStatus.getOutgoings().isEmpty());
+        assertTrue(assetLinkStatus.getBrokenOutgoings().isEmpty());
+
         WikiAsset renamedAsset = service.renameAsset("operations/release-guide", uploadedAsset.getName(),
                 "renamed-notes.txt");
         assertEquals("renamed-notes.txt", renamedAsset.getName());
@@ -161,7 +167,7 @@ class WikiApplicationServiceTest {
                 .build());
         assertEquals(1, service.listAssets(assetCopy.getPath()).size());
         assertTrue(service.getPage(assetCopy.getPath()).getContent()
-                .contains("/api/assets?path=release-guide-assets-copy&name=renamed-notes.txt"));
+                .contains("/api/spaces/default/assets?path=release-guide-assets-copy&name=renamed-notes.txt"));
 
         WikiPage assetMove = service.movePage(WikiApplicationService.MovePageCommand.builder()
                 .path(assetCopy.getPath())
@@ -170,7 +176,8 @@ class WikiApplicationServiceTest {
                 .build());
         assertEquals(1, service.listAssets(assetMove.getPath()).size());
         assertTrue(service.getPage(assetMove.getPath()).getContent()
-                .contains("/api/assets?path=operations/release-guide-assets-moved&name=renamed-notes.txt"));
+                .contains(
+                        "/api/spaces/default/assets?path=operations/release-guide-assets-moved&name=renamed-notes.txt"));
 
         WikiAssetContent assetContent = service.openAsset("operations/release-guide", renamedAsset.getName());
         assertEquals("renamed-notes.txt", assetContent.getName());

@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.Reader;
 import java.io.Writer;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
@@ -37,11 +38,11 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -522,7 +523,7 @@ public class FileSystemWikiRepository implements WikiRepository {
             Files.move(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
             WikiAsset renamedAsset = toAsset(targetPath, nodeReference);
             rewriteAssetNameReferences(nodeReference.getMarkdownPath(), previousAssetPath, renamedAsset.getPath(),
-                    sanitizeFileName(oldName), safeNewName);
+                    nodeReference.getPath(), sanitizeFileName(oldName), safeNewName);
             return renamedAsset;
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to rename asset", exception);
@@ -945,17 +946,19 @@ public class FileSystemWikiRepository implements WikiRepository {
             return content;
         }
         return content
-                .replace("/api/assets?path=" + normalizedOldPath + "&name=",
-                        "/api/assets?path=" + normalizedNewPath + "&name=")
-                .replace("/api/assets?path=" + normalizedOldPath.replace("/", "%2F") + "&name=",
-                        "/api/assets?path=" + normalizedNewPath.replace("/", "%2F") + "&name=");
+                .replace(assetPathPrefix(normalizedOldPath), assetPathPrefix(normalizedNewPath))
+                .replace(legacyAssetPathPrefix(normalizedOldPath), assetPathPrefix(normalizedNewPath))
+                .replace(encodedLegacyAssetPathPrefix(normalizedOldPath), assetPathPrefix(normalizedNewPath));
     }
 
-    private void rewriteAssetNameReferences(Path markdownPath, String oldAssetPath, String newAssetPath, String oldName,
-            String newName) throws IOException {
+    private void rewriteAssetNameReferences(Path markdownPath, String oldAssetPath, String newAssetPath,
+            String pagePath, String oldName, String newName) throws IOException {
+        String normalizedPagePath = normalizePath(pagePath);
         String rawMarkdown = Files.readString(markdownPath, StandardCharsets.UTF_8);
         String updatedMarkdown = rawMarkdown
                 .replace(oldAssetPath, newAssetPath)
+                .replace(legacyAssetPathPrefix(normalizedPagePath) + oldName, newAssetPath)
+                .replace(encodedLegacyAssetPathPrefix(normalizedPagePath) + oldName, newAssetPath)
                 .replace("[" + oldName + "](", "[" + newName + "](");
         if (!rawMarkdown.equals(updatedMarkdown)) {
             Files.writeString(markdownPath, updatedMarkdown, StandardCharsets.UTF_8,
@@ -1245,13 +1248,37 @@ public class FileSystemWikiRepository implements WikiRepository {
         try {
             return WikiAsset.builder()
                     .name(assetPath.getFileName().toString())
-                    .path("/api/assets?path=" + nodeReference.getPath() + "&name=" + assetPath.getFileName().toString())
+                    .path(assetPathPrefix(nodeReference.getPath()) + assetPath.getFileName().toString())
                     .size(Files.size(assetPath))
                     .contentType(contentType)
                     .build();
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to inspect asset", exception);
         }
+    }
+
+    private String assetPathPrefix(String pagePath) {
+        return "/api/spaces/" + activeSpaceSlug() + "/assets?path=" + pagePath + "&name=";
+    }
+
+    private String legacyAssetPathPrefix(String pagePath) {
+        return "/api/assets?path=" + pagePath + "&name=";
+    }
+
+    private String encodedLegacyAssetPathPrefix(String pagePath) {
+        return "/api/assets?path=" + pagePath.replace("/", "%2F") + "&name=";
+    }
+
+    private String activeSpaceSlug() {
+        String activeSpaceId = SpaceContextHolder.require();
+        return spaceRepository.findById(activeSpaceId)
+                .map(Space::getSlug)
+                .map(this::encodeUrlPathSegment)
+                .orElse(activeSpaceId);
+    }
+
+    private String encodeUrlPathSegment(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
     private String probeContentType(Path assetPath) {
