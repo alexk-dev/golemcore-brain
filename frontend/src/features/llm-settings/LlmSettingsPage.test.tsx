@@ -81,12 +81,81 @@ describe('LlmSettingsPage', () => {
     })
   })
 
+  it('opens provider and model create forms in modal dialogs', async () => {
+    render(<LlmSettingsPage />)
+
+    expect(await screen.findByRole('heading', { name: 'AI Models' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Base URL')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add provider' }))
+
+    expect(screen.getByRole('dialog', { name: 'Create provider' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Base URL')).toHaveValue('https://api.openai.com/v1')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close dialog' }))
+    fireEvent.click(screen.getByRole('tab', { name: /Models/ }))
+
+    expect(screen.queryByLabelText('Model ID')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add model' }))
+
+    expect(screen.getByRole('dialog', { name: 'Create model' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Model ID')).toHaveValue('gpt-5.4')
+  })
+
+  it('separates providers and models into tabs and keeps save available after edit', async () => {
+    getLlmSettingsMock.mockResolvedValue({
+      ...initialSettings,
+      models: [
+        {
+          id: 'chat-model-1',
+          provider: 'openai',
+          modelId: 'gpt-5.4',
+          displayName: 'Reasoning Chat',
+          kind: 'chat',
+          enabled: true,
+          maxInputTokens: null,
+          dimensions: null,
+          temperature: null,
+          reasoningEffort: 'high',
+        },
+      ],
+    })
+    render(<LlmSettingsPage />)
+
+    expect(await screen.findByRole('heading', { name: 'AI Models' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /Providers/ })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('button', { name: 'Edit openai provider settings' })).toBeInTheDocument()
+    expect(screen.queryByText('Reasoning Chat')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit openai provider settings' }))
+
+    expect(screen.getByRole('dialog', { name: 'Edit provider: openai' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Provider ID')).toBeDisabled()
+    expect(screen.getByPlaceholderText('Secret is configured (hidden)')).toHaveValue('')
+    expect(screen.getByRole('button', { name: 'Save provider' })).toBeInTheDocument()
+    expect(screen.getByText('Save the provider to apply a new API key.'))
+      .toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close dialog' }))
+    fireEvent.click(screen.getByRole('tab', { name: /Models/ }))
+
+    expect(screen.getByRole('tab', { name: /Models/ })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByText('Reasoning Chat')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save provider' })).not.toBeInTheDocument()
+  })
+
 
   it('fills provider and model defaults as editable values', async () => {
     render(<LlmSettingsPage />)
 
     expect(await screen.findByRole('heading', { name: 'AI Models' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Add provider' }))
     expect(screen.getByLabelText('Base URL')).toHaveValue('https://api.openai.com/v1')
+    fireEvent.click(screen.getByRole('button', { name: 'Close dialog' }))
+    fireEvent.click(screen.getByRole('tab', { name: /Models/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add model' }))
+
     expect(screen.getByLabelText('Model ID')).toHaveValue('gpt-5.4')
 
     fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'embedding' } })
@@ -99,7 +168,11 @@ describe('LlmSettingsPage', () => {
 
     expect(await screen.findByRole('heading', { name: 'AI Models' })).toBeInTheDocument()
 
+    fireEvent.click(screen.getByRole('button', { name: 'Add provider' }))
     fireEvent.click(screen.getByRole('button', { name: 'Test provider' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Close dialog' }))
+    fireEvent.click(screen.getByRole('tab', { name: /Models/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add model' }))
     fireEvent.click(screen.getByRole('button', { name: 'Test model' }))
 
     await waitFor(() => {
@@ -148,6 +221,7 @@ describe('LlmSettingsPage', () => {
     expect(await screen.findByRole('heading', { name: 'AI Models' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Check openai' }))
+    fireEvent.click(screen.getByRole('tab', { name: /Models/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Test Reasoning Chat' }))
 
     await waitFor(() => {
@@ -170,6 +244,8 @@ describe('LlmSettingsPage', () => {
     render(<LlmSettingsPage />)
 
     expect(await screen.findByRole('heading', { name: 'AI Models' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: /Models/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add model' }))
     fireEvent.change(screen.getByLabelText('Chat tuning'), { target: { value: 'reasoning' } })
     fireEvent.change(screen.getByLabelText('Reasoning effort'), { target: { value: 'high' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create model' }))
@@ -199,6 +275,8 @@ describe('LlmSettingsPage', () => {
     expect(screen.getByText((content) => content.includes('secret configured'))).toBeInTheDocument()
     expect(screen.queryByDisplayValue('sk-secret')).not.toBeInTheDocument()
 
+    fireEvent.click(screen.getByRole('tab', { name: /Models/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add model' }))
     fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'embedding' } })
     fireEvent.change(screen.getByLabelText('Model ID'), { target: { value: 'text-embedding-3-large' } })
     fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Embedding Large' } })

@@ -22,7 +22,7 @@ export function ModalCard({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-slate-950/55 backdrop-blur-sm" />
-        <Dialog.Content className="fixed top-1/2 left-1/2 z-50 w-[calc(100vw-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 rounded-[28px] border border-surface-border bg-surface p-6 shadow-2xl outline-none">
+        <Dialog.Content className="fixed top-1/2 left-1/2 z-50 max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[28px] border border-surface-border bg-surface p-6 shadow-2xl outline-none">
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
               <Dialog.Title className="text-xl font-semibold text-foreground">
@@ -34,12 +34,12 @@ export function ModalCard({
                 </Dialog.Description>
               ) : null}
             </div>
-            <Dialog.Close className="rounded-full border border-surface-border p-2 text-muted transition hover:bg-surface-alt hover:text-foreground">
+            <Dialog.Close aria-label="Close dialog" className="rounded-full border border-surface-border p-2 text-muted transition hover:bg-surface-alt hover:text-foreground">
               <X size={16} />
             </Dialog.Close>
           </div>
           <div className="space-y-4">{children}</div>
-          {footer ? <div className="mt-6 flex justify-end gap-3">{footer}</div> : null}
+          {footer ? <div className="mt-6 flex flex-wrap justify-end gap-3">{footer}</div> : null}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
