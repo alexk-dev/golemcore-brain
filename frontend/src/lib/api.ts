@@ -237,6 +237,20 @@ export function checkLlmProvider(name: string): Promise<LlmProviderCheckResult> 
   })
 }
 
+export function checkLlmProviderConfig(payload: SaveLlmProviderPayload): Promise<LlmProviderCheckResult> {
+  return readJson<LlmProviderCheckResult>('/api/llm/providers/check', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function checkLlmModel(payload: SaveLlmModelPayload): Promise<LlmProviderCheckResult> {
+  return readJson<LlmProviderCheckResult>('/api/llm/models/check', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
 export function createLlmModel(payload: SaveLlmModelPayload): Promise<LlmSettings> {
   return readJson<LlmSettings>('/api/llm/models', {
     method: 'POST',

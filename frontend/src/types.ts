@@ -260,6 +260,7 @@ export interface Secret {
 
 export type LlmApiType = 'openai' | 'anthropic' | 'gemini'
 export type LlmModelKind = 'chat' | 'embedding'
+export type LlmReasoningEffort = 'low' | 'medium' | 'high'
 
 export interface LlmProviderConfig {
   apiKey: Secret | null
@@ -280,6 +281,7 @@ export interface LlmModelConfig {
   maxInputTokens: number | null
   dimensions: number | null
   temperature: number | null
+  reasoningEffort: LlmReasoningEffort | null
   createdAt?: string
   updatedAt?: string
 }
@@ -306,6 +308,7 @@ export interface SaveLlmModelPayload {
   maxInputTokens?: number | null
   dimensions?: number | null
   temperature?: number | null
+  reasoningEffort?: LlmReasoningEffort | null
 }
 
 export interface LlmProviderCheckResult {

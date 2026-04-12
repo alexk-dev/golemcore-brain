@@ -57,11 +57,11 @@ public class HttpLlmChatAdapter implements LlmChatPort, LlmEmbeddingPort {
         Duration timeout = Duration.ofSeconds(request.getProvider().getRequestTimeoutSeconds() != null
                 ? request.getProvider().getRequestTimeoutSeconds()
                 : DEFAULT_TIMEOUT.toSeconds());
-        URI uri = URI.create(appendPath(defaultIfBlank(request.getProvider().getBaseUrl(),
-                "https://api.openai.com/v1"), "/embeddings"));
+        String uri = appendPath(LlmEndpointAllowlist.canonicalBaseUrl(request.getProvider().getBaseUrl(),
+                "https://api.openai.com/v1"), "/embeddings");
         String requestBody = writeJson(toOpenAiEmbeddingRequestBody(request));
 
-        HttpRequest httpRequest = HttpRequest.newBuilder(uri)
+        HttpRequest httpRequest = HttpRequest.newBuilder(URI.create(uri))
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
                 .timeout(timeout)
                 .header("Accept", "application/json")
@@ -101,11 +101,11 @@ public class HttpLlmChatAdapter implements LlmChatPort, LlmEmbeddingPort {
         Duration timeout = Duration.ofSeconds(request.getProvider().getRequestTimeoutSeconds() != null
                 ? request.getProvider().getRequestTimeoutSeconds()
                 : DEFAULT_TIMEOUT.toSeconds());
-        URI uri = URI.create(appendPath(defaultIfBlank(request.getProvider().getBaseUrl(),
-                "https://api.openai.com/v1"), "/chat/completions"));
+        String uri = appendPath(LlmEndpointAllowlist.canonicalBaseUrl(request.getProvider().getBaseUrl(),
+                "https://api.openai.com/v1"), "/chat/completions");
         String requestBody = writeJson(toOpenAiRequestBody(request));
 
-        HttpRequest httpRequest = HttpRequest.newBuilder(uri)
+        HttpRequest httpRequest = HttpRequest.newBuilder(URI.create(uri))
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
                 .timeout(timeout)
                 .header("Accept", "application/json")
@@ -143,7 +143,9 @@ public class HttpLlmChatAdapter implements LlmChatPort, LlmEmbeddingPort {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", request.getModel().getModelId());
         body.put("messages", toOpenAiMessages(request));
-        if (request.getModel().getTemperature() != null) {
+        if (request.getModel().getReasoningEffort() != null) {
+            body.put("reasoning_effort", request.getModel().getReasoningEffort().getValue());
+        } else if (request.getModel().getTemperature() != null) {
             body.put("temperature", request.getModel().getTemperature());
         }
         if (request.getTools() != null && !request.getTools().isEmpty()) {
@@ -298,9 +300,5 @@ public class HttpLlmChatAdapter implements LlmChatPort, LlmEmbeddingPort {
             base = base.substring(0, base.length() - 1);
         }
         return base + path;
-    }
-
-    private String defaultIfBlank(String value, String fallback) {
-        return value == null || value.isBlank() ? fallback : value.trim();
     }
 }

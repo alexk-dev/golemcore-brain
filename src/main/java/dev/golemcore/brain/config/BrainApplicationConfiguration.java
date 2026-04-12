@@ -96,8 +96,10 @@ public class BrainApplicationConfiguration {
     @Bean
     public LlmSettingsService llmSettingsService(
             LlmSettingsRepository llmSettingsRepository,
-            LlmProviderCheckPort llmProviderCheckPort) {
-        return new LlmSettingsService(llmSettingsRepository, llmProviderCheckPort);
+            LlmProviderCheckPort llmProviderCheckPort,
+            LlmChatPort llmChatPort,
+            LlmEmbeddingPort llmEmbeddingPort) {
+        return new LlmSettingsService(llmSettingsRepository, llmProviderCheckPort, llmChatPort, llmEmbeddingPort);
     }
 
     @Bean

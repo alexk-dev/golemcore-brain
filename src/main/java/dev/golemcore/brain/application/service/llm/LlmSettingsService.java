@@ -1,6 +1,8 @@
 package dev.golemcore.brain.application.service.llm;
 
 import dev.golemcore.brain.application.exception.WikiNotFoundException;
+import dev.golemcore.brain.application.port.out.LlmChatPort;
+import dev.golemcore.brain.application.port.out.LlmEmbeddingPort;
 import dev.golemcore.brain.application.port.out.LlmProviderCheckPort;
 import dev.golemcore.brain.application.port.out.LlmSettingsRepository;
 import dev.golemcore.brain.application.service.auth.AuthAccessDeniedException;
@@ -8,14 +10,19 @@ import dev.golemcore.brain.domain.Secret;
 import dev.golemcore.brain.domain.auth.AuthContext;
 import dev.golemcore.brain.domain.auth.UserRole;
 import dev.golemcore.brain.domain.llm.LlmApiType;
+import dev.golemcore.brain.domain.llm.LlmChatMessage;
+import dev.golemcore.brain.domain.llm.LlmChatRequest;
+import dev.golemcore.brain.domain.llm.LlmEmbeddingRequest;
 import dev.golemcore.brain.domain.llm.LlmModelConfig;
 import dev.golemcore.brain.domain.llm.LlmModelKind;
 import dev.golemcore.brain.domain.llm.LlmProviderCheckResult;
 import dev.golemcore.brain.domain.llm.LlmProviderConfig;
+import dev.golemcore.brain.domain.llm.LlmReasoningEffort;
 import dev.golemcore.brain.domain.llm.LlmSettings;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -30,6 +37,8 @@ public class LlmSettingsService {
 
     private final LlmSettingsRepository llmSettingsRepository;
     private final LlmProviderCheckPort llmProviderCheckPort;
+    private final LlmChatPort llmChatPort;
+    private final LlmEmbeddingPort llmEmbeddingPort;
 
     public LlmSettings getSettings(AuthContext authContext) {
         requireAdminAccount(authContext);
@@ -86,10 +95,45 @@ public class LlmSettingsService {
         return llmProviderCheckPort.check(providerName, providerConfig);
     }
 
+    public LlmProviderCheckResult checkProviderConfig(
+            AuthContext authContext,
+            String name,
+            LlmProviderConfig providerConfig) {
+        requireAdminAccount(authContext);
+        String providerName = normalizeProviderName(name);
+        LlmProviderConfig existing = normalizeSettings(llmSettingsRepository.load()).getProviders().get(providerName);
+        return llmProviderCheckPort.check(providerName, normalizeProvider(providerName, providerConfig, existing));
+    }
+
+    public LlmProviderCheckResult checkModel(AuthContext authContext, LlmModelConfig modelConfig) {
+        requireAdminAccount(authContext);
+        LlmSettings settings = normalizeSettings(llmSettingsRepository.load());
+        LlmModelConfig normalized = normalizeModel(settings, modelConfig, null, false);
+        LlmProviderConfig providerConfig = settings.getProviders().get(normalized.getProvider());
+        try {
+            if (normalized.getKind() == LlmModelKind.EMBEDDING) {
+                llmEmbeddingPort.embed(LlmEmbeddingRequest.builder()
+                        .provider(providerConfig)
+                        .model(normalized)
+                        .inputs(List.of("health-check"))
+                        .build());
+            } else {
+                llmChatPort.chat(LlmChatRequest.builder()
+                        .provider(providerConfig)
+                        .model(normalized)
+                        .messages(List.of(LlmChatMessage.builder().role("user").content("Say OK.").build()))
+                        .build());
+            }
+            return new LlmProviderCheckResult(true, "Model test completed", null);
+        } catch (RuntimeException exception) {
+            return new LlmProviderCheckResult(false, "Model test failed: " + exception.getMessage(), null);
+        }
+    }
+
     public LlmSettings createModel(AuthContext authContext, LlmModelConfig modelConfig) {
         requireAdminAccount(authContext);
         LlmSettings settings = normalizeSettings(llmSettingsRepository.load());
-        LlmModelConfig normalized = normalizeModel(settings, modelConfig, null);
+        LlmModelConfig normalized = normalizeModel(settings, modelConfig, null, true);
         settings.getModels().add(normalized);
         return redact(llmSettingsRepository.save(settings));
     }
@@ -102,7 +146,7 @@ public class LlmSettingsService {
                 .filter(model -> modelId.equals(model.getId()))
                 .findFirst()
                 .orElseThrow(() -> new WikiNotFoundException("LLM model config not found: " + modelId));
-        LlmModelConfig normalized = normalizeModel(settings, modelConfig, existing);
+        LlmModelConfig normalized = normalizeModel(settings, modelConfig, existing, true);
         settings.getModels().removeIf(model -> modelId.equals(model.getId()));
         settings.getModels().add(normalized);
         return redact(llmSettingsRepository.save(settings));
@@ -155,7 +199,11 @@ public class LlmSettingsService {
                 .build();
     }
 
-    private LlmModelConfig normalizeModel(LlmSettings settings, LlmModelConfig modelConfig, LlmModelConfig existing) {
+    private LlmModelConfig normalizeModel(
+            LlmSettings settings,
+            LlmModelConfig modelConfig,
+            LlmModelConfig existing,
+            boolean enforceUnique) {
         if (modelConfig == null) {
             throw new IllegalArgumentException("model config is required");
         }
@@ -166,7 +214,9 @@ public class LlmSettingsService {
         String modelName = requireTrimmed(modelConfig.getModelId(), "model id");
         LlmModelKind kind = modelConfig.getKind() != null ? modelConfig.getKind() : LlmModelKind.CHAT;
         String id = existing != null ? existing.getId() : UUID.randomUUID().toString();
-        ensureUniqueModel(settings, id, providerName, kind, modelName);
+        if (enforceUnique) {
+            ensureUniqueModel(settings, id, providerName, kind, modelName);
+        }
 
         Instant now = Instant.now();
         return LlmModelConfig.builder()
@@ -180,8 +230,11 @@ public class LlmSettingsService {
                 .dimensions(kind == LlmModelKind.EMBEDDING
                         ? normalizePositiveInteger(modelConfig.getDimensions(), "embedding dimensions")
                         : null)
-                .temperature(kind == LlmModelKind.CHAT
+                .temperature(kind == LlmModelKind.CHAT && modelConfig.getReasoningEffort() == null
                         ? normalizeTemperature(modelConfig.getTemperature())
+                        : null)
+                .reasoningEffort(kind == LlmModelKind.CHAT
+                        ? normalizeReasoningEffort(modelConfig.getReasoningEffort())
                         : null)
                 .createdAt(existing != null && existing.getCreatedAt() != null ? existing.getCreatedAt() : now)
                 .updatedAt(now)
@@ -300,6 +353,10 @@ public class LlmSettingsService {
         if (value < 0.0 || value > 2.0) {
             throw new IllegalArgumentException("temperature must be between 0 and 2");
         }
+        return value;
+    }
+
+    private LlmReasoningEffort normalizeReasoningEffort(LlmReasoningEffort value) {
         return value;
     }
 

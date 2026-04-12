@@ -9,6 +9,7 @@ import dev.golemcore.brain.domain.llm.LlmModelConfig;
 import dev.golemcore.brain.domain.llm.LlmModelKind;
 import dev.golemcore.brain.domain.llm.LlmProviderCheckResult;
 import dev.golemcore.brain.domain.llm.LlmProviderConfig;
+import dev.golemcore.brain.domain.llm.LlmReasoningEffort;
 import dev.golemcore.brain.domain.llm.LlmSettings;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -68,6 +69,23 @@ public class LlmSettingsController {
         return llmSettingsService.checkProvider(resolveContext(request), name);
     }
 
+    @PostMapping("/providers/check")
+    public LlmProviderCheckResult checkProviderConfig(
+            @Valid @RequestBody SaveProviderRequest payload,
+            HttpServletRequest request) {
+        return llmSettingsService.checkProviderConfig(
+                resolveContext(request),
+                payload.getName(),
+                toProviderConfig(payload));
+    }
+
+    @PostMapping("/models/check")
+    public LlmProviderCheckResult checkModel(
+            @Valid @RequestBody SaveModelRequest payload,
+            HttpServletRequest request) {
+        return llmSettingsService.checkModel(resolveContext(request), toModelConfig(payload));
+    }
+
     @PostMapping("/models")
     public ResponseEntity<LlmSettings> createModel(
             @Valid @RequestBody SaveModelRequest payload,
@@ -112,6 +130,7 @@ public class LlmSettingsController {
                 .maxInputTokens(payload.getMaxInputTokens())
                 .dimensions(payload.getDimensions())
                 .temperature(payload.getTemperature())
+                .reasoningEffort(payload.getReasoningEffort())
                 .build();
     }
 
@@ -147,5 +166,6 @@ public class LlmSettingsController {
         private Integer maxInputTokens;
         private Integer dimensions;
         private Double temperature;
+        private LlmReasoningEffort reasoningEffort;
     }
 }

@@ -6,7 +6,6 @@ import dev.golemcore.brain.domain.llm.LlmApiType;
 import dev.golemcore.brain.domain.llm.LlmProviderCheckResult;
 import dev.golemcore.brain.domain.llm.LlmProviderConfig;
 import java.io.IOException;
-import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -38,9 +37,9 @@ public class HttpLlmProviderCheckAdapter implements LlmProviderCheckPort {
                 ? providerConfig.getRequestTimeoutSeconds()
                 : DEFAULT_TIMEOUT.toSeconds());
         String apiKey = Secret.valueOrEmpty(providerConfig.getApiKey());
-        URI uri = buildModelsUri(apiType, providerConfig.getBaseUrl(), apiKey);
+        String uri = buildModelsUri(apiType, providerConfig.getBaseUrl(), apiKey);
 
-        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(uri)
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(java.net.URI.create(uri))
                 .GET()
                 .timeout(timeout)
                 .header("Accept", "application/json")
@@ -80,16 +79,20 @@ public class HttpLlmProviderCheckAdapter implements LlmProviderCheckPort {
         }
     }
 
-    private URI buildModelsUri(LlmApiType apiType, String configuredBaseUrl, String apiKey) {
+    private String buildModelsUri(LlmApiType apiType, String configuredBaseUrl, String apiKey) {
         return switch (apiType) {
-        case ANTHROPIC ->
-            URI.create(appendPath(defaultIfBlank(configuredBaseUrl, "https://api.anthropic.com"), "/v1/models"));
-        case GEMINI ->
-            URI.create(appendPath(defaultIfBlank(configuredBaseUrl, "https://generativelanguage.googleapis.com/v1beta"),
-                    "/models")
-                    + "?key=" + URLEncoder.encode(apiKey, StandardCharsets.UTF_8));
-        case OPENAI ->
-            URI.create(appendPath(defaultIfBlank(configuredBaseUrl, "https://api.openai.com/v1"), "/models"));
+        case ANTHROPIC -> appendPath(
+                LlmEndpointAllowlist.canonicalBaseUrl(configuredBaseUrl, "https://api.anthropic.com"),
+                "/v1/models");
+        case GEMINI -> appendPath(
+                LlmEndpointAllowlist.canonicalBaseUrl(
+                        configuredBaseUrl,
+                        "https://generativelanguage.googleapis.com/v1beta"),
+                "/models")
+                + "?key=" + URLEncoder.encode(apiKey, StandardCharsets.UTF_8);
+        case OPENAI -> appendPath(
+                LlmEndpointAllowlist.canonicalBaseUrl(configuredBaseUrl, "https://api.openai.com/v1"),
+                "/models");
         };
     }
 
@@ -102,10 +105,6 @@ public class HttpLlmProviderCheckAdapter implements LlmProviderCheckPort {
             return base + "/models";
         }
         return base + path;
-    }
-
-    private String defaultIfBlank(String value, String fallback) {
-        return value == null || value.isBlank() ? fallback : value.trim();
     }
 
     private String messageForStatus(int status) {
