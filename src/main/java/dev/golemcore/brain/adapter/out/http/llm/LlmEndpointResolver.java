@@ -12,8 +12,8 @@ final class LlmEndpointResolver {
         String rawBaseUrl = defaultIfBlank(configuredBaseUrl, fallbackBaseUrl);
         URI uri = URI.create(rawBaseUrl);
         String scheme = uri.getScheme();
-        if (!"https".equalsIgnoreCase(scheme)) {
-            throw new IllegalArgumentException("LLM endpoint must use HTTPS");
+        if (!"https".equalsIgnoreCase(scheme) && !"http".equalsIgnoreCase(scheme)) {
+            throw new IllegalArgumentException("LLM endpoint must use HTTP or HTTPS");
         }
         String host = uri.getHost();
         if (host == null || host.isBlank()) {

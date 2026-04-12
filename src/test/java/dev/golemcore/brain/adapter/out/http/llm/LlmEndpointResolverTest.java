@@ -8,10 +8,14 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class LlmEndpointResolverTest {
 
     @Test
-    void shouldAcceptCustomHttpsEndpoint() {
+    void shouldAcceptCustomHttpAndHttpsEndpoints() {
         assertEquals("https://llm.example.internal/custom/v1",
                 LlmEndpointResolver.canonicalBaseUrl(
                         "https://llm.example.internal/custom/v1/",
+                        "https://api.openai.com/v1"));
+        assertEquals("http://llm.example.internal/custom/v1",
+                LlmEndpointResolver.canonicalBaseUrl(
+                        "http://llm.example.internal/custom/v1/",
                         "https://api.openai.com/v1"));
     }
 
@@ -30,10 +34,10 @@ class LlmEndpointResolverTest {
     }
 
     @Test
-    void shouldRejectInvalidEndpointScheme() {
+    void shouldRejectUnsupportedEndpointScheme() {
         assertThrows(IllegalArgumentException.class,
                 () -> LlmEndpointResolver.canonicalBaseUrl(
-                        "http://llm.example.internal/v1",
+                        "ftp://llm.example.internal/v1",
                         "https://api.openai.com/v1"));
     }
 }
