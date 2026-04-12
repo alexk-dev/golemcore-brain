@@ -39,8 +39,11 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Run backend tests
-        run: ./mvnw test
+      - name: Run backend unit tests
+        run: ./mvnw -Dtest='!*IntegrationTest' test
+
+      - name: Run backend integration tests
+        run: ./mvnw -Dtest='*IntegrationTest' test
 
       - name: Run frontend tests
         working-directory: frontend
