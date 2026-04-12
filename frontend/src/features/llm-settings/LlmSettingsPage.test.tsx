@@ -78,7 +78,11 @@ describe('LlmSettingsPage', () => {
   it('keeps provider secrets hidden and creates embedding model configs', async () => {
     render(<LlmSettingsPage />)
 
-    expect(await screen.findByText((content) => content.includes('secret configured'))).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'AI Models' })).toBeInTheDocument()
+    expect(screen.getByText('AI setup status')).toBeInTheDocument()
+    expect(screen.getByText('Provider connected')).toBeInTheDocument()
+    expect(screen.getByText('No enabled chat model')).toBeInTheDocument()
+    expect(screen.getByText((content) => content.includes('secret configured'))).toBeInTheDocument()
     expect(screen.queryByDisplayValue('sk-secret')).not.toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'embedding' } })

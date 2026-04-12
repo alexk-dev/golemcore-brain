@@ -130,6 +130,15 @@ export function LlmSettingsPage() {
   const [checkResults, setCheckResults] = useState<Record<string, LlmProviderCheckResult>>({})
 
   const providerNames = useMemo(() => Object.keys(settings.providers).sort(), [settings.providers])
+  const enabledChatModels = useMemo(
+    () => settings.models.filter((model) => model.kind === 'chat' && model.enabled),
+    [settings.models],
+  )
+  const enabledEmbeddingModels = useMemo(
+    () => settings.models.filter((model) => model.kind === 'embedding' && model.enabled),
+    [settings.models],
+  )
+  const hasConnectedProvider = providerNames.some((name) => settings.providers[name]?.apiKey?.present)
 
   useEffect(() => {
     if (!isAdmin) {
@@ -317,15 +326,40 @@ export function LlmSettingsPage() {
   return (
     <div className="page-viewer">
       <div className="surface-card p-6">
-        <h1 className="mb-1 text-2xl font-semibold">LLM Settings</h1>
+        <h1 className="mb-1 text-2xl font-semibold">AI Models</h1>
         <p className="mb-6 text-sm text-muted">
-          Provider credentials stay server-side. Saved secrets are never returned to this screen.
+          Connect provider credentials once, then expose enabled chat models inside each space's Dynamic APIs.
+          Saved secrets stay server-side and are never returned to this screen.
         </p>
 
         {loading ? (
           <div className="text-sm text-muted">Loading settings...</div>
         ) : (
           <div className="space-y-8">
+            <section className="rounded-lg border border-surface-border bg-surface-alt/60 px-4 py-3">
+              <h2 className="mb-3 text-lg font-semibold">AI setup status</h2>
+              <div className="grid gap-3 text-sm md:grid-cols-3">
+                <div className="rounded-lg bg-background px-3 py-2">
+                  <div className="font-medium">{hasConnectedProvider ? 'Provider connected' : 'Provider missing'}</div>
+                  <div className="text-xs text-muted">API keys stay hidden after save.</div>
+                </div>
+                <div className="rounded-lg bg-background px-3 py-2">
+                  <div className="font-medium">
+                    {enabledChatModels.length > 0 ? `${enabledChatModels.length} enabled chat model` : 'No enabled chat model'}
+                  </div>
+                  <div className="text-xs text-muted">Required for Dynamic APIs.</div>
+                </div>
+                <div className="rounded-lg bg-background px-3 py-2">
+                  <div className="font-medium">
+                    {enabledEmbeddingModels.length > 0
+                      ? `${enabledEmbeddingModels.length} enabled embedding model`
+                      : 'No enabled embedding model'}
+                  </div>
+                  <div className="text-xs text-muted">Optional for semantic search quality.</div>
+                </div>
+              </div>
+            </section>
+
             <section>
               <h2 className="mb-3 text-lg font-semibold">Providers</h2>
               <form className="mb-5 grid gap-4 border-b border-surface-border pb-5 md:grid-cols-2" onSubmit={handleProviderSubmit}>

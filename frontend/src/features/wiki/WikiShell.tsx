@@ -107,7 +107,7 @@ export function WikiShell({ children }: WikiShellProps) {
   const canManageUsers = authDisabled || currentUser?.role === 'ADMIN'
   const canAccessAccount = authDisabled || currentUser !== null
   const isAnonymousPublicReader = !authDisabled && publicAccess && currentUser === null
-  const isUtilityRoute = ['login', 'account', 'users', 'import', 'spaces', 'api-keys', 'dynamic-apis', 'llm-settings'].includes(currentPath)
+  const isUtilityRoute = ['login', 'account', 'users', 'import', 'spaces', 'api-keys', 'dynamic-apis', 'llm-settings'].some((route) => currentPath === route || currentPath.startsWith(route + '/'))
   const editorHasUnsavedChanges =
     isEditorRoute &&
     editorPage !== null &&
