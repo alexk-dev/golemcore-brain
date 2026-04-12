@@ -26,7 +26,6 @@ export function LinkInfo() {
   const reloadTree = useTreeStore((state) => state.reloadTree)
   const currentUser = useUiStore((state) => state.currentUser)
   const authDisabled = useUiStore((state) => state.authDisabled)
-  const isDark = useUiStore((state) => state.isDark)
   const canRestore = authDisabled || currentUser?.role === 'ADMIN' || currentUser?.role === 'EDITOR'
   const [previewOpen, setPreviewOpen] = useState(false)
   const [restoreCandidate, setRestoreCandidate] = useState<string | null>(null)
@@ -218,9 +217,9 @@ export function LinkInfo() {
                     key={`${line.type}-${index}-${line.text}`}
                     className={
                       line.type === 'added'
-                        ? 'bg-emerald-500/10 text-emerald-700'
+                        ? 'bg-accent/10 text-accent'
                         : line.type === 'removed'
-                          ? 'bg-rose-500/10 text-rose-700'
+                          ? 'bg-danger/10 text-danger'
                           : 'text-muted'
                     }
                   >
@@ -235,7 +234,7 @@ export function LinkInfo() {
             <div className="rounded-2xl border border-surface-border bg-surface-alt/50 p-4">
               <div className="mb-3 text-sm font-medium">Rendered preview</div>
               <div className="max-h-80 overflow-auto">
-                <MarkdownPreview content={previewVersion.content} path={page?.path} darkMode={isDark} />
+                <MarkdownPreview content={previewVersion.content} path={page?.path} darkMode={true} />
               </div>
             </div>
           </>

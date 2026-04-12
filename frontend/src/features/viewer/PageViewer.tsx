@@ -25,7 +25,6 @@ export function PageViewer() {
   const openAncestorsForPath = useTreeStore((state) => state.openAncestorsForPath)
   const getPageByPath = useTreeStore((state) => state.getPageByPath)
   const reloadTree = useTreeStore((state) => state.reloadTree)
-  const isDark = useUiStore((state) => state.isDark)
   const authDisabled = useUiStore((state) => state.authDisabled)
   const currentUser = useUiStore((state) => state.currentUser)
   const canEdit = authDisabled || currentUser?.role === 'ADMIN' || currentUser?.role === 'EDITOR'
@@ -124,7 +123,7 @@ export function PageViewer() {
       </div>
       <div className="page-viewer__body">
         <article className="page-viewer__content">
-          <MarkdownPreview content={page.content} path={page.path} darkMode={isDark} />
+          <MarkdownPreview content={page.content} path={page.path} darkMode={true} />
           {isSection ? (
             <section className="mt-8 rounded-2xl border border-surface-border bg-surface-alt/50 p-4">
               <h2 className="mb-3 text-lg font-semibold">Section contents</h2>

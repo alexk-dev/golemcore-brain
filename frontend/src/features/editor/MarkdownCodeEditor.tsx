@@ -4,7 +4,6 @@ import { markdown } from '@codemirror/lang-markdown'
 import { Compartment, EditorState } from '@codemirror/state'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { EditorView, keymap } from '@codemirror/view'
-import { githubLight } from '@fsegurai/codemirror-theme-github-light'
 import { useEffect, useRef, useState } from 'react'
 import type { ClipboardEventHandler, RefObject } from 'react'
 
@@ -17,7 +16,6 @@ type InternalLinkCompletion = Completion & {
 
 interface MarkdownCodeEditorProps {
   value: string
-  darkMode: boolean
   onChange: (value: string) => void
   editorViewRef: RefObject<EditorView | null>
   onPaste?: ClipboardEventHandler<HTMLDivElement>
@@ -99,7 +97,6 @@ function internalLinkCompletionSource(context: CompletionContext): CompletionRes
 
 export function MarkdownCodeEditor({
   value,
-  darkMode,
   onChange,
   editorViewRef,
   onPaste,
@@ -108,7 +105,6 @@ export function MarkdownCodeEditor({
   const editorRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
   const initialValueRef = useRef(value)
-  const initialDarkModeRef = useRef(darkMode)
   const valueRef = useRef(value)
   const onChangeRef = useRef(onChange)
   const [themeCompartment] = useState(() => new Compartment())
@@ -179,7 +175,7 @@ export function MarkdownCodeEditor({
     const state = EditorState.create({
       doc: initialValueRef.current,
       extensions: [
-        themeCompartment.of(initialDarkModeRef.current ? oneDark : githubLight),
+        themeCompartment.of(oneDark),
         markdown(),
         autocompletion({ override: [internalLinkCompletionSource] }),
         history(),
@@ -232,16 +228,6 @@ export function MarkdownCodeEditor({
       })
     }
   }, [value])
-
-  useEffect(() => {
-    const view = viewRef.current
-    if (!view) {
-      return
-    }
-    view.dispatch({
-      effects: themeCompartment.reconfigure(darkMode ? oneDark : githubLight),
-    })
-  }, [darkMode, themeCompartment])
 
   return <div ref={editorRef} className="markdown-code-editor" onPaste={onPaste} />
 }
