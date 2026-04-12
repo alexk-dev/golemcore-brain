@@ -1,5 +1,5 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { BrainCircuit, ChevronDown, KeyRound, LogOut, Settings, Shield, UserRound, Users as UsersIcon } from 'lucide-react'
+import { BrainCircuit, ChevronDown, KeyRound, LogOut, Shield, UserRound, Users as UsersIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 interface UserMenuProps {
@@ -38,7 +38,7 @@ export function UserMenu({ username, canAccessAccount, canManageUsers, onLogout 
           {canAccessAccount ? (
             <DropdownMenu.Item asChild>
               <Link to="/account" className="user-menu__item">
-                <Settings size={14} />
+                <UserRound size={14} />
                 <span>Account</span>
               </Link>
             </DropdownMenu.Item>
@@ -66,15 +66,9 @@ export function UserMenu({ username, canAccessAccount, canManageUsers, onLogout 
                 </Link>
               </DropdownMenu.Item>
               <DropdownMenu.Item asChild>
-                <Link to="/dynamic-apis" className="user-menu__item">
-                  <Settings size={14} />
-                  <span>Dynamic APIs</span>
-                </Link>
-              </DropdownMenu.Item>
-              <DropdownMenu.Item asChild>
                 <Link to="/llm-settings" className="user-menu__item">
                   <BrainCircuit size={14} />
-                  <span>LLM Settings</span>
+                  <span>AI Models</span>
                 </Link>
               </DropdownMenu.Item>
             </>

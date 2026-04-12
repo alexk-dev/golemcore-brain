@@ -2,26 +2,7 @@
 @plugin 'tailwindcss-animate';
 @plugin '@tailwindcss/typography';
 
-:root {
-  --background: 210 20% 98%;
-  --foreground: 222 47% 11%;
-  --surface: 0 0% 100%;
-  --surface-alt: 210 33% 96%;
-  --surface-border: 214 32% 91%;
-  --sidebar: 220 27% 15%;
-  --sidebar-foreground: 210 20% 96%;
-  --accent: 155 63% 41%;
-  --accent-foreground: 0 0% 100%;
-  --muted: 215 16% 47%;
-  --danger: 0 72% 51%;
-  --warning: 41 96% 40%;
-  --shadow: 220 28% 12%;
-  --radius: 18px;
-  font-family: 'Inter', system-ui, sans-serif;
-  color: hsl(var(--foreground));
-  background: hsl(var(--background));
-}
-
+:root,
 .dark {
   --background: 222 27% 10%;
   --foreground: 210 20% 96%;
@@ -36,6 +17,11 @@
   --danger: 0 78% 63%;
   --warning: 45 93% 62%;
   --shadow: 0 0% 0%;
+  --radius: 18px;
+  color-scheme: dark;
+  font-family: 'Inter', system-ui, sans-serif;
+  color: hsl(var(--foreground));
+  background: hsl(var(--background));
 }
 
 @theme {
@@ -302,7 +288,7 @@
   }
 
   .page-viewer__content {
-    @apply prose prose-base mt-6 max-w-full text-foreground dark:prose-invert;
+    @apply prose prose-base prose-invert mt-6 max-w-full text-foreground;
   }
 
   .page-viewer__metadata {

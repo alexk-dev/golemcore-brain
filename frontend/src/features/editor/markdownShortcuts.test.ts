@@ -18,4 +18,20 @@ describe('markdownShortcuts', () => {
       selectionEnd: 8,
     })
   })
+
+  it('keeps selected text when applying heading markers', () => {
+    expect(applyHeadingToSelection('intro\nselected title\noutro', 6, 20, 1)).toEqual({
+      text: 'intro\n# selected title\noutro',
+      selectionStart: 6,
+      selectionEnd: 22,
+    })
+  })
+
+  it('replaces an existing heading marker on the selected line', () => {
+    expect(applyHeadingToSelection('intro\n### selected title\noutro', 10, 24, 1)).toEqual({
+      text: 'intro\n# selected title\noutro',
+      selectionStart: 6,
+      selectionEnd: 22,
+    })
+  })
 })

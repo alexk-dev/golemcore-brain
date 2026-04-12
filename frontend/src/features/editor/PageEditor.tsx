@@ -80,7 +80,6 @@ export function PageEditor() {
   const [pendingNavigationPath, setPendingNavigationPath] = useState<string | null>(null)
   const [showMetadataPanel, setShowMetadataPanel] = useState(false)
   const [showConflictDialog, setShowConflictDialog] = useState(false)
-  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'))
   const [activeMobilePane, setActiveMobilePane] = useState<'editor' | 'preview'>('editor')
   const [assetPreviewVersion, setAssetPreviewVersion] = useState(0)
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
@@ -116,14 +115,6 @@ export function PageEditor() {
     setActiveNodeId(treeNode?.id ?? null)
     openAncestorsForPath(currentPath)
   }, [currentPath, getPageByPath, openAncestorsForPath, setActiveNodeId])
-
-  useEffect(() => {
-    const observer = new MutationObserver(() => {
-      setIsDark(document.documentElement.classList.contains('dark'))
-    })
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
-    return () => observer.disconnect()
-  }, [])
 
   useEffect(() => {
     if (conflict) {
@@ -364,7 +355,7 @@ export function PageEditor() {
           </div>
         </div>
         {conflict ? (
-          <div className="mx-6 mt-4 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <div className="mx-6 mt-4 rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">
             Another session saved this page at {formatTimestamp(conflict.updatedAt)}. Your draft is still in the editor.
             <div className="mt-3 flex flex-wrap gap-2">
               <button type="button" className="action-button-secondary" onClick={() => setShowConflictDialog(true)}>
@@ -380,7 +371,7 @@ export function PageEditor() {
           </div>
         ) : null}
         {error && !conflict ? (
-          <div className="mx-6 mt-4 rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+          <div className="mx-6 mt-4 rounded-2xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">
             {error}
           </div>
         ) : null}
@@ -433,7 +424,6 @@ export function PageEditor() {
                   <MarkdownCodeEditor
                     key={page.id}
                     value={content}
-                    darkMode={isDark}
                     onChange={setContent}
                     editorViewRef={editorViewRef}
                     onPaste={handlePaste}
@@ -444,7 +434,7 @@ export function PageEditor() {
                   <div className={`markdown-editor__preview-container ${activeMobilePane === 'editor' ? 'markdown-editor__pane--mobile-hidden' : ''}`}>
                     <div className="markdown-editor__preview" ref={previewScrollRef}>
                       <div className="markdown-editor__preview-inner">
-                        <MarkdownPreview content={content} path={page.path} darkMode={isDark} assetVersion={assetPreviewVersion} />
+                        <MarkdownPreview content={content} path={page.path} darkMode={true} assetVersion={assetPreviewVersion} />
                       </div>
                     </div>
                   </div>

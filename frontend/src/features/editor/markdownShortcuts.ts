@@ -1,7 +1,20 @@
+import type { EditorView } from '@codemirror/view'
+
 export interface TextTransformResult {
   text: string
   selectionStart: number
   selectionEnd: number
+}
+
+export type TextTransform = (text: string, selectionStart: number, selectionEnd: number) => TextTransformResult
+
+export function applyTextTransform(view: EditorView, transform: TextTransform): void {
+  const selection = view.state.selection.main
+  const result = transform(view.state.doc.toString(), selection.from, selection.to)
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: result.text },
+    selection: { anchor: result.selectionStart, head: result.selectionEnd },
+  })
 }
 
 export function wrapSelectionText(

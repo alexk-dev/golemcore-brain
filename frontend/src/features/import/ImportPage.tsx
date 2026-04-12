@@ -124,7 +124,7 @@ export function ImportPage() {
               </div>
             </div>
             {plan.warnings.length > 0 ? (
-              <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              <div className="rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">
                 {plan.warnings.map((warning) => (
                   <div key={warning}>{warning}</div>
                 ))}
@@ -172,7 +172,7 @@ export function ImportPage() {
               Imported {applyResult.importedCount} item(s). Created: {applyResult.createdCount}. Updated: {applyResult.updatedCount}. Skipped: {applyResult.skippedCount}.
             </div>
             {applyResult.warnings.length > 0 ? (
-              <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              <div className="rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">
                 {applyResult.warnings.map((warning) => (
                   <div key={warning}>{warning}</div>
                 ))}

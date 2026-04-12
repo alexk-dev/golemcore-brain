@@ -20,6 +20,7 @@ public class LlmModelConfig {
     private Integer maxInputTokens;
     private Integer dimensions;
     private Double temperature;
+    private LlmReasoningEffort reasoningEffort;
     private Instant createdAt;
     private Instant updatedAt;
 }

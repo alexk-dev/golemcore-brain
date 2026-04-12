@@ -79,9 +79,9 @@ export function getCurrentSpaceSlug(): string {
   return currentSpaceSlug
 }
 
-function spaceUrl(suffix: string): string {
+function spaceUrl(suffix: string, spaceSlug = currentSpaceSlug): string {
   const normalized = suffix.startsWith('/') ? suffix : `/${suffix}`
-  return `/api/spaces/${encodeURIComponent(currentSpaceSlug)}${normalized}`
+  return '/api/spaces/' + encodeURIComponent(spaceSlug) + normalized
 }
 
 async function readJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
@@ -237,6 +237,20 @@ export function checkLlmProvider(name: string): Promise<LlmProviderCheckResult> 
   })
 }
 
+export function checkLlmProviderConfig(payload: SaveLlmProviderPayload): Promise<LlmProviderCheckResult> {
+  return readJson<LlmProviderCheckResult>('/api/llm/providers/check', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function checkLlmModel(payload: SaveLlmModelPayload): Promise<LlmProviderCheckResult> {
+  return readJson<LlmProviderCheckResult>('/api/llm/models/check', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
 export function createLlmModel(payload: SaveLlmModelPayload): Promise<LlmSettings> {
   return readJson<LlmSettings>('/api/llm/models', {
     method: 'POST',
@@ -257,32 +271,32 @@ export function deleteLlmModel(id: string): Promise<LlmSettings> {
   })
 }
 
-export function listDynamicSpaceApis(): Promise<DynamicSpaceApiConfig[]> {
-  return readJson<DynamicSpaceApiConfig[]>(spaceUrl('/dynamic-apis'))
+export function listDynamicSpaceApis(spaceSlug?: string): Promise<DynamicSpaceApiConfig[]> {
+  return readJson<DynamicSpaceApiConfig[]>(spaceUrl('/dynamic-apis', spaceSlug))
 }
 
-export function createDynamicSpaceApi(payload: SaveDynamicSpaceApiPayload): Promise<DynamicSpaceApiConfig> {
-  return readJson<DynamicSpaceApiConfig>(spaceUrl('/dynamic-apis'), {
+export function createDynamicSpaceApi(payload: SaveDynamicSpaceApiPayload, spaceSlug?: string): Promise<DynamicSpaceApiConfig> {
+  return readJson<DynamicSpaceApiConfig>(spaceUrl('/dynamic-apis', spaceSlug), {
     method: 'POST',
     body: JSON.stringify(payload),
   })
 }
 
-export function updateDynamicSpaceApi(id: string, payload: SaveDynamicSpaceApiPayload): Promise<DynamicSpaceApiConfig> {
-  return readJson<DynamicSpaceApiConfig>(spaceUrl(`/dynamic-apis/${encodeURIComponent(id)}`), {
+export function updateDynamicSpaceApi(id: string, payload: SaveDynamicSpaceApiPayload, spaceSlug?: string): Promise<DynamicSpaceApiConfig> {
+  return readJson<DynamicSpaceApiConfig>(spaceUrl('/dynamic-apis/' + encodeURIComponent(id), spaceSlug), {
     method: 'PUT',
     body: JSON.stringify(payload),
   })
 }
 
-export function deleteDynamicSpaceApi(id: string): Promise<void> {
-  return readJson<void>(spaceUrl(`/dynamic-apis/${encodeURIComponent(id)}`), {
+export function deleteDynamicSpaceApi(id: string, spaceSlug?: string): Promise<void> {
+  return readJson<void>(spaceUrl('/dynamic-apis/' + encodeURIComponent(id), spaceSlug), {
     method: 'DELETE',
   })
 }
 
-export function runDynamicSpaceApi(slug: string, payload: Record<string, unknown>): Promise<DynamicSpaceApiRunResult> {
-  return readJson<DynamicSpaceApiRunResult>(spaceUrl(`/dynamic-apis/${encodeURIComponent(slug)}/run`), {
+export function runDynamicSpaceApi(slug: string, payload: Record<string, unknown>, spaceSlug?: string): Promise<DynamicSpaceApiRunResult> {
+  return readJson<DynamicSpaceApiRunResult>(spaceUrl('/dynamic-apis/' + encodeURIComponent(slug) + '/run', spaceSlug), {
     method: 'POST',
     body: JSON.stringify(payload),
   })

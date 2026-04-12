@@ -4,12 +4,11 @@ import { markdown } from '@codemirror/lang-markdown'
 import { Compartment, EditorState } from '@codemirror/state'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { EditorView, keymap } from '@codemirror/view'
-import { githubLight } from '@fsegurai/codemirror-theme-github-light'
 import { useEffect, useRef, useState } from 'react'
 import type { ClipboardEventHandler, RefObject } from 'react'
 
 import { useTreeStore } from '../../stores/tree'
-import { applyHeadingToSelection, wrapSelectionText } from './markdownShortcuts'
+import { applyHeadingToSelection, applyTextTransform, wrapSelectionText, type TextTransform } from './markdownShortcuts'
 
 type InternalLinkCompletion = Completion & {
   path: string
@@ -17,26 +16,14 @@ type InternalLinkCompletion = Completion & {
 
 interface MarkdownCodeEditorProps {
   value: string
-  darkMode: boolean
   onChange: (value: string) => void
   editorViewRef: RefObject<EditorView | null>
   onPaste?: ClipboardEventHandler<HTMLDivElement>
   onCursorLineChange?: (line: number, lineCount: number) => void
 }
 
-type TextTransform = (text: string, selectionStart: number, selectionEnd: number) => {
-  text: string
-  selectionStart: number
-  selectionEnd: number
-}
-
 const runTextTransform = (transform: TextTransform) => (view: EditorView) => {
-  const selection = view.state.selection.main
-  const result = transform(view.state.doc.toString(), selection.from, selection.to)
-  view.dispatch({
-    changes: { from: 0, to: view.state.doc.length, insert: result.text },
-    selection: { anchor: result.selectionStart, head: result.selectionEnd },
-  })
+  applyTextTransform(view, transform)
   return true
 }
 
@@ -99,7 +86,6 @@ function internalLinkCompletionSource(context: CompletionContext): CompletionRes
 
 export function MarkdownCodeEditor({
   value,
-  darkMode,
   onChange,
   editorViewRef,
   onPaste,
@@ -108,7 +94,6 @@ export function MarkdownCodeEditor({
   const editorRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
   const initialValueRef = useRef(value)
-  const initialDarkModeRef = useRef(darkMode)
   const valueRef = useRef(value)
   const onChangeRef = useRef(onChange)
   const [themeCompartment] = useState(() => new Compartment())
@@ -179,7 +164,7 @@ export function MarkdownCodeEditor({
     const state = EditorState.create({
       doc: initialValueRef.current,
       extensions: [
-        themeCompartment.of(initialDarkModeRef.current ? oneDark : githubLight),
+        themeCompartment.of(oneDark),
         markdown(),
         autocompletion({ override: [internalLinkCompletionSource] }),
         history(),
@@ -232,16 +217,6 @@ export function MarkdownCodeEditor({
       })
     }
   }, [value])
-
-  useEffect(() => {
-    const view = viewRef.current
-    if (!view) {
-      return
-    }
-    view.dispatch({
-      effects: themeCompartment.reconfigure(darkMode ? oneDark : githubLight),
-    })
-  }, [darkMode, themeCompartment])
 
   return <div ref={editorRef} className="markdown-code-editor" onPaste={onPaste} />
 }

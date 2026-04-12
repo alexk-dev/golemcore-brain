@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import {
@@ -18,6 +19,8 @@ import type {
   LlmModelConfig,
   SaveDynamicSpaceApiPayload,
 } from '../../types'
+import { DynamicApiEndpointPreview } from './DynamicApiEndpointPreview'
+import { buildDynamicApiRunPath } from './dynamicApiUrls'
 
 interface ApiFormState {
   slug: string
@@ -65,11 +68,17 @@ function modelLabel(model: LlmModelConfig): string {
   return model.displayName?.trim() || `${model.provider}/${model.modelId}`
 }
 
-export function DynamicSpaceApisPage() {
+interface DynamicSpaceApisPageProps {
+  spaceSlug?: string
+  embedded?: boolean
+}
+
+export function DynamicSpaceApisPage({ spaceSlug, embedded = false }: DynamicSpaceApisPageProps) {
   const currentUser = useUiStore((state) => state.currentUser)
   const authDisabled = useUiStore((state) => state.authDisabled)
   const isAdmin = authDisabled || currentUser?.role === 'ADMIN'
   const activeSlug = useSpaceStore((state) => state.activeSlug)
+  const targetSpaceSlug = spaceSlug ?? activeSlug
 
   const [apis, setApis] = useState<DynamicSpaceApiConfig[]>([])
   const [chatModels, setChatModels] = useState<LlmModelConfig[]>([])
@@ -89,7 +98,7 @@ export function DynamicSpaceApisPage() {
     if (!isAdmin) return
     setLoading(true)
     try {
-      const [apiList, llmSettings] = await Promise.all([listDynamicSpaceApis(), getLlmSettings()])
+      const [apiList, llmSettings] = await Promise.all([listDynamicSpaceApis(targetSpaceSlug), getLlmSettings()])
       const models = llmSettings.models.filter((model) => model.kind === 'chat' && model.enabled)
       setApis(apiList)
       setChatModels(models)
@@ -103,11 +112,11 @@ export function DynamicSpaceApisPage() {
     } finally {
       setLoading(false)
     }
-  }, [isAdmin])
+  }, [isAdmin, targetSpaceSlug])
 
   useEffect(() => {
     void loadData()
-  }, [activeSlug, loadData])
+  }, [targetSpaceSlug, loadData])
 
   if (!isAdmin) {
     return (
@@ -141,7 +150,7 @@ export function DynamicSpaceApisPage() {
   const handleDelete = async (api: DynamicSpaceApiConfig) => {
     if (!window.confirm(`Delete dynamic API ${api.slug}?`)) return
     try {
-      await deleteDynamicSpaceApi(api.id)
+      await deleteDynamicSpaceApi(api.id, targetSpaceSlug)
       toast.success('Dynamic API deleted')
       if (editingId === api.id) resetForm()
       await loadData()
@@ -168,8 +177,8 @@ export function DynamicSpaceApisPage() {
     setSaving(true)
     try {
       const saved = editingId
-        ? await updateDynamicSpaceApi(editingId, payload)
-        : await createDynamicSpaceApi(payload)
+        ? await updateDynamicSpaceApi(editingId, payload, targetSpaceSlug)
+        : await createDynamicSpaceApi(payload, targetSpaceSlug)
       toast.success(editingId ? 'Dynamic API updated' : 'Dynamic API created')
       setTestApiSlug(saved.slug)
       resetForm()
@@ -197,7 +206,7 @@ export function DynamicSpaceApisPage() {
     setRunning(true)
     setTestResult(null)
     try {
-      setTestResult(await runDynamicSpaceApi(testApiSlug, payload))
+      setTestResult(await runDynamicSpaceApi(testApiSlug, payload, targetSpaceSlug))
     } catch (error) {
       toast.error((error as Error).message)
     } finally {
@@ -205,13 +214,19 @@ export function DynamicSpaceApisPage() {
     }
   }
 
-  return (
-    <div className="page-viewer">
-      <div className="surface-card p-6">
-        <h1 className="mb-1 text-2xl font-semibold">Dynamic APIs</h1>
-        <p className="mb-6 text-sm text-muted">
-          Space-scoped JSON endpoints backed by a configured chat model and filesystem search tools.
-        </p>
+  const content = (
+    <div className="surface-card p-6">
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="mb-1 text-2xl font-semibold">Dynamic APIs for {targetSpaceSlug}</h1>
+            <p className="text-sm text-muted">
+              Space-scoped JSON endpoints backed by a configured chat model and filesystem search tools.
+            </p>
+          </div>
+          <Link to="/spaces" className="action-button-secondary">
+            All spaces
+          </Link>
+        </div>
 
         {loading ? (
           <div className="text-sm text-muted">Loading dynamic APIs...</div>
@@ -265,19 +280,23 @@ export function DynamicSpaceApisPage() {
                     ))}
                   </select>
                 </label>
-                <label className="field">
-                  <span className="text-sm font-medium">Max tool loops</span>
-                  <input
-                    className="field-input"
-                    type="number"
-                    min={1}
-                    max={20}
-                    value={form.maxIterations}
-                    onChange={(event) => setForm((state) => ({ ...state, maxIterations: event.target.value }))}
-                  />
-                </label>
+                <details className="rounded-lg border border-surface-border bg-surface-alt/60 px-3 py-2 md:col-span-2">
+                  <summary className="cursor-pointer text-sm font-medium">Advanced options</summary>
+                  <label className="field mt-3">
+                    <span className="text-sm font-medium">Max tool loops</span>
+                    <input
+                      className="field-input"
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={form.maxIterations}
+                      onChange={(event) => setForm((state) => ({ ...state, maxIterations: event.target.value }))}
+                    />
+                  </label>
+                </details>
+                <DynamicApiEndpointPreview spaceSlug={targetSpaceSlug} apiSlug={form.slug || 'knowledge-search'} />
                 <label className="field md:col-span-2">
-                  <span className="text-sm font-medium">System prompt</span>
+                  <span className="text-sm font-medium">Instructions / system prompt</span>
                   <textarea
                     className="field-input min-h-56 font-mono text-sm"
                     value={form.systemPrompt}
@@ -317,11 +336,14 @@ export function DynamicSpaceApisPage() {
                           <div className="min-w-0">
                             <div className="font-medium">{api.name || api.slug}</div>
                             <div className="text-sm text-muted">
-                              <span>/{api.slug}/run</span>
+                              <span>{buildDynamicApiRunPath(targetSpaceSlug, api.slug)}</span>
                               <span> · {model ? modelLabel(model) : 'missing model'}</span>
                               <span> · {api.enabled ? 'enabled' : 'disabled'}</span>
                             </div>
                             {api.description ? <div className="mt-1 text-sm text-muted">{api.description}</div> : null}
+                            <div className="mt-2">
+                              <DynamicApiEndpointPreview spaceSlug={targetSpaceSlug} apiSlug={api.slug} showCurl />
+                            </div>
                           </div>
                           <div className="flex flex-wrap gap-2">
                             <button type="button" className="action-button-secondary" onClick={() => handleEdit(api)}>
@@ -358,6 +380,14 @@ export function DynamicSpaceApisPage() {
                   </select>
                 </label>
                 <div className="hidden md:block" />
+                {testApiSlug ? (
+                  <DynamicApiEndpointPreview
+                    spaceSlug={targetSpaceSlug}
+                    apiSlug={testApiSlug}
+                    requestJson={testPayload}
+                    showCurl
+                  />
+                ) : null}
                 <label className="field md:col-span-2">
                   <span className="text-sm font-medium">Request JSON</span>
                   <textarea
@@ -380,7 +410,9 @@ export function DynamicSpaceApisPage() {
             </section>
           </div>
         )}
-      </div>
     </div>
   )
+
+  return embedded ? content : <div className="page-viewer">{content}</div>
 }
+
