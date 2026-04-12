@@ -57,7 +57,7 @@ public class HttpLlmChatAdapter implements LlmChatPort, LlmEmbeddingPort {
         Duration timeout = Duration.ofSeconds(request.getProvider().getRequestTimeoutSeconds() != null
                 ? request.getProvider().getRequestTimeoutSeconds()
                 : DEFAULT_TIMEOUT.toSeconds());
-        String uri = appendPath(LlmEndpointAllowlist.canonicalBaseUrl(request.getProvider().getBaseUrl(),
+        String uri = appendPath(LlmEndpointResolver.canonicalBaseUrl(request.getProvider().getBaseUrl(),
                 "https://api.openai.com/v1"), "/embeddings");
         String requestBody = writeJson(toOpenAiEmbeddingRequestBody(request));
 
@@ -101,7 +101,7 @@ public class HttpLlmChatAdapter implements LlmChatPort, LlmEmbeddingPort {
         Duration timeout = Duration.ofSeconds(request.getProvider().getRequestTimeoutSeconds() != null
                 ? request.getProvider().getRequestTimeoutSeconds()
                 : DEFAULT_TIMEOUT.toSeconds());
-        String uri = appendPath(LlmEndpointAllowlist.canonicalBaseUrl(request.getProvider().getBaseUrl(),
+        String uri = appendPath(LlmEndpointResolver.canonicalBaseUrl(request.getProvider().getBaseUrl(),
                 "https://api.openai.com/v1"), "/chat/completions");
         String requestBody = writeJson(toOpenAiRequestBody(request));
 
