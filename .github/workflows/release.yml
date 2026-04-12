@@ -76,6 +76,24 @@ jobs:
 
           echo "Latest tag ${LAST_TAG} is not in tag-only shape. Skipping local normalization."
 
+      - name: Bootstrap local first release base
+        run: |
+          set -euo pipefail
+          LAST_TAG=$(git tag --list 'v*' --sort=-version:refname | head -n 1)
+          if [[ -n "${LAST_TAG}" ]]; then
+            echo "Existing release tag ${LAST_TAG} found. Skipping first-release bootstrap."
+            exit 0
+          fi
+
+          ROOT_COMMIT=$(git rev-list --max-parents=0 --reverse HEAD | head -n 1)
+          if [[ -z "${ROOT_COMMIT}" ]]; then
+            echo "::error::Could not resolve repository root commit for first-release bootstrap."
+            exit 1
+          fi
+
+          git tag v0.0.0 "${ROOT_COMMIT}"
+          echo "Created local-only v0.0.0 baseline tag at ${ROOT_COMMIT} for first release calculation."
+
       - name: Cocogitto release
         id: release
         continue-on-error: true
