@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { LoginPage } from './LoginPage'
 import { useUiStore } from '../../stores/ui'
@@ -28,8 +28,23 @@ vi.mock('../../lib/api', () => ({
 }))
 
 describe('LoginPage', () => {
-  it('logs in and stores the current user', async () => {
+  beforeEach(() => {
+    navigateMock.mockClear()
     useUiStore.setState({ currentUser: null, authDisabled: false, publicAccess: false })
+  })
+
+  it('does not prefill default credentials', () => {
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByLabelText('Username or email')).toHaveValue('')
+    expect(screen.getByLabelText('Password')).toHaveValue('')
+  })
+
+  it('logs in and stores the current user', async () => {
     render(
       <MemoryRouter>
         <LoginPage />

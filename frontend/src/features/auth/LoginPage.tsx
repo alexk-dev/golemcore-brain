@@ -9,8 +9,8 @@ import { useUiStore } from '../../stores/ui'
 export function LoginPage() {
   const navigate = useNavigate()
   const setCurrentUser = useUiStore((state) => state.setCurrentUser)
-  const [identifier, setIdentifier] = useState('admin')
-  const [password, setPassword] = useState('admin')
+  const [identifier, setIdentifier] = useState('')
+  const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -35,11 +35,24 @@ export function LoginPage() {
         <form className="space-y-4" onSubmit={handleSubmit}>
           <label className="field">
             <span className="text-sm font-medium">Username or email</span>
-            <input className="field-input" value={identifier} onChange={(event) => setIdentifier(event.target.value)} />
+            <input
+              className="field-input"
+              value={identifier}
+              placeholder="Enter username or email"
+              autoComplete="username"
+              onChange={(event) => setIdentifier(event.target.value)}
+            />
           </label>
           <label className="field">
             <span className="text-sm font-medium">Password</span>
-            <input className="field-input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
+            <input
+              className="field-input"
+              type="password"
+              value={password}
+              placeholder="Enter password"
+              autoComplete="current-password"
+              onChange={(event) => setPassword(event.target.value)}
+            />
           </label>
           <button type="submit" className="action-button-primary w-full" disabled={submitting}>
             {submitting ? 'Signing in...' : 'Sign in'}
