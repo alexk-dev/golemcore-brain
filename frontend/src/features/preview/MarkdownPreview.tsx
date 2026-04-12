@@ -6,6 +6,7 @@ import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import remarkGfm from 'remark-gfm'
 
+import { normalizeAssetUrl } from '../assets/assetUrls'
 import { MarkdownCodeBlock } from './MarkdownCodeBlock'
 import { MarkdownLink } from './MarkdownLink'
 import { MermaidBlock } from './MermaidBlock'
@@ -41,14 +42,15 @@ function readTextContent(node: ReactNode): string {
   return ''
 }
 
-function normalizeAssetMediaSrc(src?: string, assetVersion?: number) {
+function normalizeAssetMediaSrc(src?: string, assetVersion?: number): string | undefined {
   if (!src) {
     return src
   }
-  if (!src.startsWith('/api/assets') || !assetVersion) {
-    return src
+  const normalizedSrc = normalizeAssetUrl(src)
+  if (!normalizedSrc.startsWith('/api/spaces/') || !assetVersion) {
+    return normalizedSrc
   }
-  return `${src}${src.includes('?') ? '&' : '?'}v=${assetVersion}`
+  return `${normalizedSrc}${normalizedSrc.includes('?') ? '&' : '?'}v=${assetVersion}`
 }
 
 export function MarkdownPreview({ content, path, darkMode, assetVersion }: MarkdownPreviewProps) {

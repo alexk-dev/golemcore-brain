@@ -1,21 +1,25 @@
 import type { WikiAsset } from '../../types'
+import { normalizeAsset } from './assetUrls'
 
 export function buildImageMarkdown(asset: WikiAsset): string {
-  return `![${asset.name}](${asset.path})`
+  const normalizedAsset = normalizeAsset(asset)
+  return `![${normalizedAsset.name}](${normalizedAsset.path})`
 }
 
 export function buildLinkMarkdown(asset: WikiAsset): string {
-  return `[${asset.name}](${asset.path})`
+  const normalizedAsset = normalizeAsset(asset)
+  return `[${normalizedAsset.name}](${normalizedAsset.path})`
 }
 
 export function buildMediaMarkdown(asset: WikiAsset): string {
-  if (asset.contentType.startsWith('audio/')) {
-    return `<audio controls src="${asset.path}"></audio>`
+  const normalizedAsset = normalizeAsset(asset)
+  if (normalizedAsset.contentType.startsWith('audio/')) {
+    return `<audio controls src="${normalizedAsset.path}"></audio>`
   }
-  if (asset.contentType.startsWith('video/')) {
-    return `<video controls src="${asset.path}"></video>`
+  if (normalizedAsset.contentType.startsWith('video/')) {
+    return `<video controls src="${normalizedAsset.path}"></video>`
   }
-  return buildLinkMarkdown(asset)
+  return buildLinkMarkdown(normalizedAsset)
 }
 
 export function buildDefaultMarkdownForAsset(asset: WikiAsset): string {

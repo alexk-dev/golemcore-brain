@@ -171,11 +171,18 @@ class WikiControllerTest {
                 .file(file)
                 .param("path", "operations/release-runbook"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.name", is("notes.txt")));
+                .andExpect(jsonPath("$.name", is("notes.txt")))
+                .andExpect(jsonPath("$.path", is(
+                        "/api/spaces/default/assets?path=operations%2Frelease-runbook&name=notes.txt")));
 
         mockMvc.perform(get("/api/spaces/default/pages/assets").param("path", "operations/release-runbook"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)));
+
+        mockMvc.perform(get("/api/spaces/default/assets")
+                .param("path", "operations/release-runbook")
+                .param("name", "notes.txt"))
+                .andExpect(status().isOk());
 
         mockMvc.perform(post("/api/spaces/default/pages")
                 .contentType("application/json")
