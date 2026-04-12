@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { ClipboardEventHandler, RefObject } from 'react'
 
 import { useTreeStore } from '../../stores/tree'
-import { applyHeadingToSelection, wrapSelectionText } from './markdownShortcuts'
+import { applyHeadingToSelection, applyTextTransform, wrapSelectionText, type TextTransform } from './markdownShortcuts'
 
 type InternalLinkCompletion = Completion & {
   path: string
@@ -22,19 +22,8 @@ interface MarkdownCodeEditorProps {
   onCursorLineChange?: (line: number, lineCount: number) => void
 }
 
-type TextTransform = (text: string, selectionStart: number, selectionEnd: number) => {
-  text: string
-  selectionStart: number
-  selectionEnd: number
-}
-
 const runTextTransform = (transform: TextTransform) => (view: EditorView) => {
-  const selection = view.state.selection.main
-  const result = transform(view.state.doc.toString(), selection.from, selection.to)
-  view.dispatch({
-    changes: { from: 0, to: view.state.doc.length, insert: result.text },
-    selection: { anchor: result.selectionStart, head: result.selectionEnd },
-  })
+  applyTextTransform(view, transform)
   return true
 }
 

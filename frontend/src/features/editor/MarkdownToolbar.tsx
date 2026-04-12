@@ -1,7 +1,9 @@
+import { redo, undo } from '@codemirror/commands'
+import type { EditorView } from '@codemirror/view'
 import { Bold, Code, Eye, EyeOff, FileSearch, Image, Italic, Link, Redo, Strikethrough, Table, Undo } from 'lucide-react'
 import type { RefObject } from 'react'
-import type { EditorView } from '@codemirror/view'
-import { redo, undo } from '@codemirror/commands'
+
+import { applyHeadingToSelection, applyTextTransform } from './markdownShortcuts'
 
 interface MarkdownToolbarProps {
   editorViewRef: RefObject<EditorView | null>
@@ -11,7 +13,7 @@ interface MarkdownToolbarProps {
   onOpenWikiLinkPicker: () => void
 }
 
-function insertText(view: EditorView | null, text: string) {
+function insertText(view: EditorView | null, text: string): void {
   if (!view) {
     return
   }
@@ -22,7 +24,7 @@ function insertText(view: EditorView | null, text: string) {
   })
 }
 
-function wrapSelection(view: EditorView | null, before: string, after = before) {
+function wrapSelection(view: EditorView | null, before: string, after = before): void {
   if (!view) {
     return
   }
@@ -36,6 +38,14 @@ function wrapSelection(view: EditorView | null, before: string, after = before) 
     },
     selection: { anchor: selection.from + before.length + selectedText.length + after.length },
   })
+}
+
+function applyHeading(view: EditorView | null, level: 1 | 2 | 3): void {
+  if (!view) {
+    return
+  }
+  applyTextTransform(view, (text: string, selectionStart: number, selectionEnd: number) =>
+    applyHeadingToSelection(text, selectionStart, selectionEnd, level))
 }
 
 export function MarkdownToolbar({
@@ -63,13 +73,13 @@ export function MarkdownToolbar({
         <FileSearch className="markdown-toolbar__icon" />
       </button>
       <div className="markdown-toolbar__separator" />
-      <button type="button" className="markdown-toolbar__button markdown-toolbar__button--desktop-only" onClick={() => insertText(editorViewRef.current, '# ')} title="Heading 1 (Ctrl+Alt+1)" aria-label="Heading 1">
+      <button type="button" className="markdown-toolbar__button markdown-toolbar__button--desktop-only" onClick={() => applyHeading(editorViewRef.current, 1)} title="Heading 1 (Ctrl+Alt+1)" aria-label="Heading 1">
         H1
       </button>
-      <button type="button" className="markdown-toolbar__button markdown-toolbar__button--desktop-only" onClick={() => insertText(editorViewRef.current, '## ')} title="Heading 2 (Ctrl+Alt+2)" aria-label="Heading 2">
+      <button type="button" className="markdown-toolbar__button markdown-toolbar__button--desktop-only" onClick={() => applyHeading(editorViewRef.current, 2)} title="Heading 2 (Ctrl+Alt+2)" aria-label="Heading 2">
         H2
       </button>
-      <button type="button" className="markdown-toolbar__button markdown-toolbar__button--desktop-only" onClick={() => insertText(editorViewRef.current, '### ')} title="Heading 3 (Ctrl+Alt+3)" aria-label="Heading 3">
+      <button type="button" className="markdown-toolbar__button markdown-toolbar__button--desktop-only" onClick={() => applyHeading(editorViewRef.current, 3)} title="Heading 3 (Ctrl+Alt+3)" aria-label="Heading 3">
         H3
       </button>
       <div className="markdown-toolbar__separator markdown-toolbar__separator--desktop-only" />
