@@ -82,16 +82,16 @@ public class HttpLlmProviderCheckAdapter implements LlmProviderCheckPort {
     private String buildModelsUri(LlmApiType apiType, String configuredBaseUrl, String apiKey) {
         return switch (apiType) {
         case ANTHROPIC -> appendPath(
-                LlmEndpointAllowlist.canonicalBaseUrl(configuredBaseUrl, "https://api.anthropic.com"),
+                LlmEndpointResolver.canonicalBaseUrl(configuredBaseUrl, "https://api.anthropic.com"),
                 "/v1/models");
         case GEMINI -> appendPath(
-                LlmEndpointAllowlist.canonicalBaseUrl(
+                LlmEndpointResolver.canonicalBaseUrl(
                         configuredBaseUrl,
                         "https://generativelanguage.googleapis.com/v1beta"),
                 "/models")
                 + "?key=" + URLEncoder.encode(apiKey, StandardCharsets.UTF_8);
         case OPENAI -> appendPath(
-                LlmEndpointAllowlist.canonicalBaseUrl(configuredBaseUrl, "https://api.openai.com/v1"),
+                LlmEndpointResolver.canonicalBaseUrl(configuredBaseUrl, "https://api.openai.com/v1"),
                 "/models");
         };
     }
