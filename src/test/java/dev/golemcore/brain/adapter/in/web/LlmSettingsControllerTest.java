@@ -1,13 +1,23 @@
 package dev.golemcore.brain.adapter.in.web;
 
+import dev.golemcore.brain.application.port.out.LlmChatPort;
+import dev.golemcore.brain.application.port.out.LlmEmbeddingPort;
+import dev.golemcore.brain.application.port.out.LlmProviderCheckPort;
 import dev.golemcore.brain.application.port.out.LlmSettingsRepository;
 import dev.golemcore.brain.application.service.auth.AuthService;
+import dev.golemcore.brain.domain.llm.LlmChatResponse;
+import dev.golemcore.brain.domain.llm.LlmEmbeddingResponse;
+import dev.golemcore.brain.domain.llm.LlmProviderCheckResult;
 import jakarta.servlet.http.Cookie;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -106,19 +116,78 @@ class LlmSettingsControllerTest {
                 .content("""
                         {
                           "provider": "openai",
-                          "modelId": "text-embedding-3-large",
-                          "displayName": "Embedding Large",
-                          "kind": "embedding",
+                          "modelId": "gpt-5.4",
+                          "displayName": "Reasoning Chat",
+                          "kind": "chat",
                           "enabled": true,
-                          "dimensions": 3072
+                          "reasoningEffort": "high"
                         }
                         """))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.models[0].provider", is("openai")))
-                .andExpect(jsonPath("$.models[0].modelId", is("text-embedding-3-large")))
-                .andExpect(jsonPath("$.models[0].kind", is("embedding")))
-                .andExpect(jsonPath("$.models[0].dimensions", is(3072)))
-                .andExpect(jsonPath("$.models[0].temperature", nullValue()));
+                .andExpect(jsonPath("$.models[0].modelId", is("gpt-5.4")))
+                .andExpect(jsonPath("$.models[0].kind", is("chat")))
+                .andExpect(jsonPath("$.models[0].temperature", nullValue()))
+                .andExpect(jsonPath("$.models[0].reasoningEffort", is("high")));
+
+        mockMvc.perform(post("/api/llm/providers/check")
+                .cookie(adminSession)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "name": "openai",
+                          "apiType": "openai",
+                          "baseUrl": "https://api.openai.com/v1",
+                          "requestTimeoutSeconds": 45,
+                          "apiKey": {
+                            "value": "sk-secret",
+                            "encrypted": false
+                          }
+                        }
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").exists());
+
+        mockMvc.perform(post("/api/llm/models/check")
+                .cookie(adminSession)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "provider": "openai",
+                          "modelId": "gpt-5.4",
+                          "kind": "chat",
+                          "enabled": true,
+                          "reasoningEffort": "medium"
+                        }
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").exists());
+    }
+
+    @TestConfiguration
+    static class LlmTestPortConfiguration {
+        @Bean
+        @Primary
+        LlmProviderCheckPort testLlmProviderCheckPort() {
+            return (providerName, providerConfig) -> new LlmProviderCheckResult(true, "Provider test completed", 200);
+        }
+
+        @Bean
+        @Primary
+        LlmChatPort testLlmChatPort() {
+            return request -> LlmChatResponse.builder()
+                    .content("OK")
+                    .finishReason("stop")
+                    .build();
+        }
+
+        @Bean
+        @Primary
+        LlmEmbeddingPort testLlmEmbeddingPort() {
+            return request -> LlmEmbeddingResponse.builder()
+                    .embeddings(List.of(List.of(1.0d)))
+                    .build();
+        }
     }
 
     @Test

@@ -4,6 +4,8 @@ import { toast } from 'sonner'
 
 import {
   checkLlmProvider,
+  checkLlmProviderConfig,
+  checkLlmModel,
   createLlmModel,
   createLlmProvider,
   deleteLlmModel,
@@ -41,11 +43,17 @@ interface ModelFormState {
   maxInputTokens: string
   dimensions: string
   temperature: string
+  chatTuning: 'temperature' | 'reasoning'
+  reasoningEffort: 'low' | 'medium' | 'high'
 }
 
 const EMPTY_SETTINGS: LlmSettings = { providers: {}, models: [] }
 const API_TYPES: LlmApiType[] = ['openai', 'anthropic', 'gemini']
 const MODEL_KINDS: LlmModelKind[] = ['chat', 'embedding']
+const DEFAULT_PROVIDER_NAME = 'openai'
+const DEFAULT_CHAT_MODEL_ID = 'gpt-5.4'
+const DEFAULT_EMBEDDING_MODEL_ID = 'text-embedding-3-large'
+const REASONING_EFFORTS = ['low', 'medium', 'high'] as const
 
 const KNOWN_BASE_URLS: Record<string, string> = {
   openai: 'https://api.openai.com/v1',
@@ -61,9 +69,9 @@ const KNOWN_BASE_URLS: Record<string, string> = {
 
 function emptyProviderForm(): ProviderFormState {
   return {
-    name: '',
+    name: DEFAULT_PROVIDER_NAME,
     apiType: 'openai',
-    baseUrl: '',
+    baseUrl: KNOWN_BASE_URLS[DEFAULT_PROVIDER_NAME],
     requestTimeoutSeconds: '300',
     apiKey: '',
   }
@@ -73,12 +81,14 @@ function emptyModelForm(provider = ''): ModelFormState {
   return {
     provider,
     kind: 'chat',
-    modelId: '',
+    modelId: DEFAULT_CHAT_MODEL_ID,
     displayName: '',
     enabled: true,
     maxInputTokens: '',
     dimensions: '',
     temperature: '',
+    chatTuning: 'reasoning',
+    reasoningEffort: 'medium',
   }
 }
 
@@ -127,7 +137,13 @@ export function LlmSettingsPage() {
   const [editingModelId, setEditingModelId] = useState<string | null>(null)
   const [modelForm, setModelForm] = useState<ModelFormState>(emptyModelForm)
   const [checkingProvider, setCheckingProvider] = useState<string | null>(null)
+  const [checkingProviderForm, setCheckingProviderForm] = useState(false)
+  const [checkingModelForm, setCheckingModelForm] = useState(false)
+  const [checkingSavedModelId, setCheckingSavedModelId] = useState<string | null>(null)
   const [checkResults, setCheckResults] = useState<Record<string, LlmProviderCheckResult>>({})
+  const [modelCheckResults, setModelCheckResults] = useState<Record<string, LlmProviderCheckResult>>({})
+  const [providerFormCheckResult, setProviderFormCheckResult] = useState<LlmProviderCheckResult | null>(null)
+  const [modelFormCheckResult, setModelFormCheckResult] = useState<LlmProviderCheckResult | null>(null)
 
   const providerNames = useMemo(() => Object.keys(settings.providers).sort(), [settings.providers])
   const enabledChatModels = useMemo(
@@ -197,13 +213,9 @@ export function LlmSettingsPage() {
       toast.error('Provider name is required')
       return
     }
-    const secret = toSecret(providerForm.apiKey)
     const payload: SaveLlmProviderPayload = {
+      ...buildProviderPayload(),
       ...(editingProvider ? {} : { name }),
-      ...(secret ? { apiKey: secret } : {}),
-      apiType: providerForm.apiType,
-      baseUrl: toNullableString(providerForm.baseUrl),
-      requestTimeoutSeconds: toNullableNumber(providerForm.requestTimeoutSeconds),
     }
     setSavingProvider(true)
     try {
@@ -218,6 +230,99 @@ export function LlmSettingsPage() {
     } finally {
       setSavingProvider(false)
     }
+  }
+
+  const buildProviderPayload = (): SaveLlmProviderPayload => {
+    const secret = toSecret(providerForm.apiKey)
+    return {
+      name: normalizeProviderName(providerForm.name),
+      ...(secret ? { apiKey: secret } : { apiKey: null }),
+      apiType: providerForm.apiType,
+      baseUrl: toNullableString(providerForm.baseUrl),
+      requestTimeoutSeconds: toNullableNumber(providerForm.requestTimeoutSeconds),
+    }
+  }
+
+  const buildModelPayload = (): SaveLlmModelPayload => {
+    const isEmbedding = modelForm.kind === 'embedding'
+    const isReasoning = modelForm.kind === 'chat' && modelForm.chatTuning === 'reasoning'
+    return {
+      provider: modelForm.provider,
+      modelId: modelForm.modelId.trim(),
+      displayName: toNullableString(modelForm.displayName),
+      kind: modelForm.kind,
+      enabled: modelForm.enabled,
+      maxInputTokens: toNullableNumber(modelForm.maxInputTokens),
+      dimensions: isEmbedding ? toNullableNumber(modelForm.dimensions) : null,
+      temperature: modelForm.kind === 'chat' && !isReasoning ? toNullableNumber(modelForm.temperature) : null,
+      reasoningEffort: isReasoning ? modelForm.reasoningEffort : null,
+    }
+  }
+
+  const handleProviderFormCheck = async () => {
+    const payload = buildProviderPayload()
+    if (!payload.name) {
+      toast.error('Provider name is required')
+      return
+    }
+    setCheckingProviderForm(true)
+    setProviderFormCheckResult(null)
+    try {
+      const result = await checkLlmProviderConfig(payload)
+      setProviderFormCheckResult(result)
+      if (result.success) {
+        toast.success(result.message)
+      } else {
+        toast.error(result.message)
+      }
+    } catch (error) {
+      toast.error((error as Error).message)
+    } finally {
+      setCheckingProviderForm(false)
+    }
+  }
+
+  const toModelPayload = (model: LlmModelConfig): SaveLlmModelPayload => ({
+    provider: model.provider,
+    modelId: model.modelId,
+    displayName: model.displayName,
+    kind: model.kind,
+    enabled: model.enabled,
+    maxInputTokens: model.maxInputTokens,
+    dimensions: model.dimensions,
+    temperature: model.temperature,
+    reasoningEffort: model.reasoningEffort,
+  })
+
+  const handleModelFormCheck = async () => {
+    const payload = buildModelPayload()
+    if (payload.provider.length === 0 || payload.modelId.length === 0) {
+      toast.error('Provider and model ID are required')
+      return
+    }
+    setCheckingModelForm(true)
+    setModelFormCheckResult(null)
+    try {
+      const result = await checkLlmModel(payload)
+      setModelFormCheckResult(result)
+      if (result.success) {
+        toast.success(result.message)
+      } else {
+        toast.error(result.message)
+      }
+    } catch (error) {
+      toast.error((error as Error).message)
+    } finally {
+      setCheckingModelForm(false)
+    }
+  }
+
+  const handleModelKindChange = (kind: LlmModelKind) => {
+    setModelForm((state) => ({
+      ...state,
+      kind,
+      modelId: kind === 'embedding' ? DEFAULT_EMBEDDING_MODEL_ID : DEFAULT_CHAT_MODEL_ID,
+    }))
   }
 
   const handleEditProvider = (name: string) => {
@@ -272,16 +377,7 @@ export function LlmSettingsPage() {
       toast.error('Model ID is required')
       return
     }
-    const payload: SaveLlmModelPayload = {
-      provider: modelForm.provider,
-      modelId: modelForm.modelId.trim(),
-      displayName: toNullableString(modelForm.displayName),
-      kind: modelForm.kind,
-      enabled: modelForm.enabled,
-      maxInputTokens: toNullableNumber(modelForm.maxInputTokens),
-      dimensions: modelForm.kind === 'embedding' ? toNullableNumber(modelForm.dimensions) : null,
-      temperature: modelForm.kind === 'chat' ? toNullableNumber(modelForm.temperature) : null,
-    }
+    const payload = buildModelPayload()
     setSavingModel(true)
     try {
       const response = editingModelId
@@ -308,7 +404,31 @@ export function LlmSettingsPage() {
       maxInputTokens: model.maxInputTokens == null ? '' : String(model.maxInputTokens),
       dimensions: model.dimensions == null ? '' : String(model.dimensions),
       temperature: model.temperature == null ? '' : String(model.temperature),
+      chatTuning: model.reasoningEffort ? 'reasoning' : 'temperature',
+      reasoningEffort: model.reasoningEffort ?? 'medium',
     })
+  }
+
+  const handleCheckModel = async (model: LlmModelConfig) => {
+    setCheckingSavedModelId(model.id)
+    setModelCheckResults((state) => {
+      const nextState = { ...state }
+      delete nextState[model.id]
+      return nextState
+    })
+    try {
+      const result = await checkLlmModel(toModelPayload(model))
+      setModelCheckResults((state) => ({ ...state, [model.id]: result }))
+      if (result.success) {
+        toast.success(result.message)
+      } else {
+        toast.error(result.message)
+      }
+    } catch (error) {
+      toast.error((error as Error).message)
+    } finally {
+      setCheckingSavedModelId(null)
+    }
   }
 
   const handleDeleteModel = async (model: LlmModelConfig) => {
@@ -390,7 +510,6 @@ export function LlmSettingsPage() {
                   <input
                     className="field-input"
                     value={providerForm.baseUrl}
-                    placeholder="https://api.openai.com/v1"
                     onChange={(event) => setProviderForm((state) => ({ ...state, baseUrl: event.target.value }))}
                   />
                 </label>
@@ -427,10 +546,18 @@ export function LlmSettingsPage() {
                   <button type="submit" className="action-button-primary" disabled={savingProvider}>
                     {savingProvider ? 'Saving...' : editingProvider ? 'Save provider' : 'Create provider'}
                   </button>
+                  <button type="button" className="action-button-secondary" onClick={() => void handleProviderFormCheck()} disabled={checkingProviderForm}>
+                    {checkingProviderForm ? 'Testing...' : 'Test provider'}
+                  </button>
                   {editingProvider ? (
                     <button type="button" className="action-button-secondary" onClick={resetProviderForm} disabled={savingProvider}>
                       Cancel
                     </button>
+                  ) : null}
+                  {providerFormCheckResult ? (
+                    <span className={providerFormCheckResult.success ? 'text-sm text-accent' : 'text-sm text-danger'}>
+                      {providerFormCheckResult.message}
+                    </span>
                   ) : null}
                 </div>
               </form>
@@ -459,7 +586,13 @@ export function LlmSettingsPage() {
                             ) : null}
                           </div>
                           <div className="flex flex-wrap gap-2">
-                            <button type="button" className="action-button-secondary" onClick={() => void handleCheckProvider(name)} disabled={checkingProvider === name}>
+                            <button
+                              type="button"
+                              className="action-button-secondary"
+                              aria-label={`Check ${name}`}
+                              onClick={() => void handleCheckProvider(name)}
+                              disabled={checkingProvider === name}
+                            >
                               {checkingProvider === name ? 'Checking...' : 'Check'}
                             </button>
                             <button type="button" className="action-button-secondary" onClick={() => handleEditProvider(name)}>
@@ -498,7 +631,7 @@ export function LlmSettingsPage() {
                   <select
                     className="field-input"
                     value={modelForm.kind}
-                    onChange={(event) => setModelForm((state) => ({ ...state, kind: event.target.value as LlmModelKind }))}
+                    onChange={(event) => handleModelKindChange(event.target.value as LlmModelKind)}
                   >
                     {MODEL_KINDS.map((kind) => (
                       <option key={kind} value={kind}>{kind}</option>
@@ -510,7 +643,6 @@ export function LlmSettingsPage() {
                   <input
                     className="field-input"
                     value={modelForm.modelId}
-                    placeholder={modelForm.kind === 'embedding' ? 'text-embedding-3-large' : 'gpt-5.4'}
                     onChange={(event) => setModelForm((state) => ({ ...state, modelId: event.target.value }))}
                   />
                 </label>
@@ -545,18 +677,46 @@ export function LlmSettingsPage() {
                     />
                   </label>
                 ) : (
-                  <label className="field">
-                    <span className="text-sm font-medium">Temperature</span>
-                    <input
-                      className="field-input"
-                      type="number"
-                      min={0}
-                      max={2}
-                      step="0.1"
-                      value={modelForm.temperature}
-                      onChange={(event) => setModelForm((state) => ({ ...state, temperature: event.target.value }))}
-                    />
-                  </label>
+                  <>
+                    <label className="field">
+                      <span className="text-sm font-medium">Chat tuning</span>
+                      <select
+                        className="field-input"
+                        value={modelForm.chatTuning}
+                        onChange={(event) => setModelForm((state) => ({ ...state, chatTuning: event.target.value as 'temperature' | 'reasoning' }))}
+                      >
+                        <option value="temperature">Temperature</option>
+                        <option value="reasoning">Reasoning</option>
+                      </select>
+                    </label>
+                    {modelForm.chatTuning === 'temperature' ? (
+                      <label className="field">
+                        <span className="text-sm font-medium">Temperature</span>
+                        <input
+                          className="field-input"
+                          type="number"
+                          min={0}
+                          max={2}
+                          step="0.1"
+                          value={modelForm.temperature}
+                          onChange={(event) => setModelForm((state) => ({ ...state, temperature: event.target.value }))}
+                        />
+                      </label>
+                    ) : (
+                      <label className="field">
+                        <span className="text-sm font-medium">Reasoning effort</span>
+                        <select
+                          className="field-input"
+                          value={modelForm.reasoningEffort}
+                          onChange={(event) => setModelForm((state) => ({ ...state, reasoningEffort: event.target.value as 'low' | 'medium' | 'high' }))}
+                        >
+                          {REASONING_EFFORTS.map((effort) => (
+                            <option key={effort} value={effort}>{effort}</option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+                  </>
                 )}
                 <label className="flex items-center gap-2 text-sm md:col-span-2">
                   <input
@@ -570,10 +730,18 @@ export function LlmSettingsPage() {
                   <button type="submit" className="action-button-primary" disabled={savingModel || providerNames.length === 0}>
                     {savingModel ? 'Saving...' : editingModelId ? 'Save model' : 'Create model'}
                   </button>
+                  <button type="button" className="action-button-secondary" onClick={() => void handleModelFormCheck()} disabled={checkingModelForm || providerNames.length === 0}>
+                    {checkingModelForm ? 'Testing...' : 'Test model'}
+                  </button>
                   {editingModelId ? (
                     <button type="button" className="action-button-secondary" onClick={resetModelForm} disabled={savingModel}>
                       Cancel
                     </button>
+                  ) : null}
+                  {modelFormCheckResult ? (
+                    <span className={modelFormCheckResult.success ? 'text-sm text-accent' : 'text-sm text-danger'}>
+                      {modelFormCheckResult.message}
+                    </span>
                   ) : null}
                 </div>
               </form>
@@ -593,9 +761,19 @@ export function LlmSettingsPage() {
                             <span> · {model.enabled ? 'enabled' : 'disabled'}</span>
                             {model.kind === 'embedding' && model.dimensions ? <span> · {model.dimensions} dimensions</span> : null}
                             {model.kind === 'chat' && model.temperature != null ? <span> · temperature {model.temperature}</span> : null}
+                            {model.kind === 'chat' && model.reasoningEffort ? <span> · reasoning {model.reasoningEffort}</span> : null}
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            className="action-button-secondary"
+                            aria-label={`Test ${modelLabel(model)}`}
+                            onClick={() => void handleCheckModel(model)}
+                            disabled={checkingSavedModelId === model.id}
+                          >
+                            {checkingSavedModelId === model.id ? 'Testing...' : 'Test'}
+                          </button>
                           <button type="button" className="action-button-secondary" onClick={() => handleEditModel(model)}>
                             Edit
                           </button>
@@ -603,6 +781,11 @@ export function LlmSettingsPage() {
                             Delete
                           </button>
                         </div>
+                        {modelCheckResults[model.id] ? (
+                          <div className={modelCheckResults[model.id].success ? 'mt-2 text-sm text-accent' : 'mt-2 text-sm text-danger'}>
+                            {modelCheckResults[model.id].message}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   ))}
