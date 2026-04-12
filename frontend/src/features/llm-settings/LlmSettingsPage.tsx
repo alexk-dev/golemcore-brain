@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { toast } from 'sonner'
 
+import { ModalCard } from '../../components/ModalCard'
 import {
   checkLlmProvider,
   checkLlmProviderConfig,
@@ -46,6 +47,9 @@ interface ModelFormState {
   chatTuning: 'temperature' | 'reasoning'
   reasoningEffort: 'low' | 'medium' | 'high'
 }
+
+type LlmSettingsTab = 'providers' | 'models'
+type LlmSettingsModal = 'provider' | 'model' | null
 
 const EMPTY_SETTINGS: LlmSettings = { providers: {}, models: [] }
 const API_TYPES: LlmApiType[] = ['openai', 'anthropic', 'gemini']
@@ -144,6 +148,8 @@ export function LlmSettingsPage() {
   const [modelCheckResults, setModelCheckResults] = useState<Record<string, LlmProviderCheckResult>>({})
   const [providerFormCheckResult, setProviderFormCheckResult] = useState<LlmProviderCheckResult | null>(null)
   const [modelFormCheckResult, setModelFormCheckResult] = useState<LlmProviderCheckResult | null>(null)
+  const [activeTab, setActiveTab] = useState<LlmSettingsTab>('providers')
+  const [activeModal, setActiveModal] = useState<LlmSettingsModal>(null)
 
   const providerNames = useMemo(() => Object.keys(settings.providers).sort(), [settings.providers])
   const enabledChatModels = useMemo(
@@ -195,6 +201,28 @@ export function LlmSettingsPage() {
     setModelForm(emptyModelForm(providerNames[0] ?? ''))
   }
 
+  const closeProviderModal = () => {
+    resetProviderForm()
+    setActiveModal(null)
+  }
+
+  const closeModelModal = () => {
+    resetModelForm()
+    setActiveModal(null)
+  }
+
+  const handleAddProvider = () => {
+    resetProviderForm()
+    setProviderFormCheckResult(null)
+    setActiveModal('provider')
+  }
+
+  const handleAddModel = () => {
+    resetModelForm()
+    setModelFormCheckResult(null)
+    setActiveModal('model')
+  }
+
   const handleProviderNameChange = (value: string) => {
     const name = normalizeProviderName(value)
     const apiType = defaultApiTypeForProvider(name)
@@ -225,6 +253,7 @@ export function LlmSettingsPage() {
       setSettings(response)
       toast.success(editingProvider ? 'Provider updated' : 'Provider created')
       resetProviderForm()
+      setActiveModal(null)
     } catch (error) {
       toast.error((error as Error).message)
     } finally {
@@ -328,6 +357,9 @@ export function LlmSettingsPage() {
   const handleEditProvider = (name: string) => {
     const provider = settings.providers[name]
     if (!provider) return
+    setActiveTab('providers')
+    setActiveModal('provider')
+    setProviderFormCheckResult(null)
     setEditingProvider(name)
     setProviderForm({
       name,
@@ -386,6 +418,7 @@ export function LlmSettingsPage() {
       setSettings(response)
       toast.success(editingModelId ? 'Model updated' : 'Model created')
       resetModelForm()
+      setActiveModal(null)
     } catch (error) {
       toast.error((error as Error).message)
     } finally {
@@ -394,6 +427,9 @@ export function LlmSettingsPage() {
   }
 
   const handleEditModel = (model: LlmModelConfig) => {
+    setActiveTab('models')
+    setActiveModal('model')
+    setModelFormCheckResult(null)
     setEditingModelId(model.id)
     setModelForm({
       provider: model.provider,
@@ -480,87 +516,42 @@ export function LlmSettingsPage() {
               </div>
             </section>
 
-            <section>
-              <h2 className="mb-3 text-lg font-semibold">Providers</h2>
-              <form className="mb-5 grid gap-4 border-b border-surface-border pb-5 md:grid-cols-2" onSubmit={handleProviderSubmit}>
-                <label className="field">
-                  <span className="text-sm font-medium">Provider ID</span>
-                  <input
-                    className="field-input"
-                    value={providerForm.name}
-                    placeholder="openai"
-                    disabled={editingProvider !== null}
-                    onChange={(event) => handleProviderNameChange(event.target.value)}
-                  />
-                </label>
-                <label className="field">
-                  <span className="text-sm font-medium">API type</span>
-                  <select
-                    className="field-input"
-                    value={providerForm.apiType}
-                    onChange={(event) => setProviderForm((state) => ({ ...state, apiType: event.target.value as LlmApiType }))}
-                  >
-                    {API_TYPES.map((type) => (
-                      <option key={type} value={type}>{type}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="field">
-                  <span className="text-sm font-medium">Base URL</span>
-                  <input
-                    className="field-input"
-                    value={providerForm.baseUrl}
-                    onChange={(event) => setProviderForm((state) => ({ ...state, baseUrl: event.target.value }))}
-                  />
-                </label>
-                <label className="field">
-                  <span className="text-sm font-medium">Timeout, seconds</span>
-                  <input
-                    className="field-input"
-                    type="number"
-                    min={1}
-                    max={3600}
-                    value={providerForm.requestTimeoutSeconds}
-                    onChange={(event) => setProviderForm((state) => ({ ...state, requestTimeoutSeconds: event.target.value }))}
-                  />
-                </label>
-                <label className="field md:col-span-2">
-                  <span className="text-sm font-medium">API key</span>
-                  <input
-                    className="field-input"
-                    type="password"
-                    autoComplete="new-password"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
-                    data-lpignore="true"
-                    value={providerForm.apiKey}
-                    placeholder={editingProvider && settings.providers[editingProvider]?.apiKey?.present ? 'Secret is configured (hidden)' : 'Enter API key'}
-                    onChange={(event) => setProviderForm((state) => ({ ...state, apiKey: event.target.value }))}
-                  />
-                  {editingProvider && settings.providers[editingProvider]?.apiKey?.present ? (
-                    <span className="text-xs text-muted">Leave blank to keep the current secret.</span>
-                  ) : null}
-                </label>
-                <div className="flex flex-wrap gap-2 md:col-span-2">
-                  <button type="submit" className="action-button-primary" disabled={savingProvider}>
-                    {savingProvider ? 'Saving...' : editingProvider ? 'Save provider' : 'Create provider'}
+            <div className="flex flex-wrap gap-2 border-b border-surface-border" role="tablist" aria-label="AI settings sections">
+              <button
+                type="button"
+                id="llm-providers-tab"
+                role="tab"
+                aria-selected={activeTab === 'providers'}
+                aria-controls="llm-providers-panel"
+                className={activeTab === 'providers' ? 'border-b-2 border-accent px-4 py-3 text-sm font-semibold text-accent' : 'px-4 py-3 text-sm font-medium text-muted hover:text-foreground'}
+                onClick={() => setActiveTab('providers')}
+              >
+                Providers ({providerNames.length})
+              </button>
+              <button
+                type="button"
+                id="llm-models-tab"
+                role="tab"
+                aria-selected={activeTab === 'models'}
+                aria-controls="llm-models-panel"
+                className={activeTab === 'models' ? 'border-b-2 border-accent px-4 py-3 text-sm font-semibold text-accent' : 'px-4 py-3 text-sm font-medium text-muted hover:text-foreground'}
+                onClick={() => setActiveTab('models')}
+              >
+                Models ({settings.models.length})
+              </button>
+            </div>
+
+            {activeTab === 'providers' ? (
+              <section role="tabpanel" id="llm-providers-panel" aria-labelledby="llm-providers-tab">
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex flex-col gap-1">
+                    <h2 className="text-lg font-semibold">Providers</h2>
+                    <p className="text-sm text-muted">Create a provider or edit an existing provider credential.</p>
+                  </div>
+                  <button type="button" className="action-button-primary" onClick={handleAddProvider}>
+                    Add provider
                   </button>
-                  <button type="button" className="action-button-secondary" onClick={() => void handleProviderFormCheck()} disabled={checkingProviderForm}>
-                    {checkingProviderForm ? 'Testing...' : 'Test provider'}
-                  </button>
-                  {editingProvider ? (
-                    <button type="button" className="action-button-secondary" onClick={resetProviderForm} disabled={savingProvider}>
-                      Cancel
-                    </button>
-                  ) : null}
-                  {providerFormCheckResult ? (
-                    <span className={providerFormCheckResult.success ? 'text-sm text-accent' : 'text-sm text-danger'}>
-                      {providerFormCheckResult.message}
-                    </span>
-                  ) : null}
                 </div>
-              </form>
 
               {providerNames.length === 0 ? (
                 <div className="text-sm text-muted">No LLM providers configured.</div>
@@ -595,7 +586,12 @@ export function LlmSettingsPage() {
                             >
                               {checkingProvider === name ? 'Checking...' : 'Check'}
                             </button>
-                            <button type="button" className="action-button-secondary" onClick={() => handleEditProvider(name)}>
+                            <button
+                              type="button"
+                              className="action-button-secondary"
+                              aria-label={`Edit ${name} provider settings`}
+                              onClick={() => handleEditProvider(name)}
+                            >
                               Edit
                             </button>
                             <button type="button" className="action-button-secondary" onClick={() => void handleDeleteProvider(name)}>
@@ -608,143 +604,20 @@ export function LlmSettingsPage() {
                   })}
                 </div>
               )}
-            </section>
+              </section>
+            ) : null}
 
-            <section>
-              <h2 className="mb-3 text-lg font-semibold">Model configurations</h2>
-              <form className="mb-5 grid gap-4 border-b border-surface-border pb-5 md:grid-cols-2" onSubmit={handleModelSubmit}>
-                <label className="field">
-                  <span className="text-sm font-medium">Provider</span>
-                  <select
-                    className="field-input"
-                    value={modelForm.provider}
-                    disabled={providerNames.length === 0}
-                    onChange={(event) => setModelForm((state) => ({ ...state, provider: event.target.value }))}
-                  >
-                    {providerNames.map((name) => (
-                      <option key={name} value={name}>{name}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="field">
-                  <span className="text-sm font-medium">Kind</span>
-                  <select
-                    className="field-input"
-                    value={modelForm.kind}
-                    onChange={(event) => handleModelKindChange(event.target.value as LlmModelKind)}
-                  >
-                    {MODEL_KINDS.map((kind) => (
-                      <option key={kind} value={kind}>{kind}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="field">
-                  <span className="text-sm font-medium">Model ID</span>
-                  <input
-                    className="field-input"
-                    value={modelForm.modelId}
-                    onChange={(event) => setModelForm((state) => ({ ...state, modelId: event.target.value }))}
-                  />
-                </label>
-                <label className="field">
-                  <span className="text-sm font-medium">Display name</span>
-                  <input
-                    className="field-input"
-                    value={modelForm.displayName}
-                    placeholder="Optional"
-                    onChange={(event) => setModelForm((state) => ({ ...state, displayName: event.target.value }))}
-                  />
-                </label>
-                <label className="field">
-                  <span className="text-sm font-medium">Max input tokens</span>
-                  <input
-                    className="field-input"
-                    type="number"
-                    min={1}
-                    value={modelForm.maxInputTokens}
-                    onChange={(event) => setModelForm((state) => ({ ...state, maxInputTokens: event.target.value }))}
-                  />
-                </label>
-                {modelForm.kind === 'embedding' ? (
-                  <label className="field">
-                    <span className="text-sm font-medium">Dimensions</span>
-                    <input
-                      className="field-input"
-                      type="number"
-                      min={1}
-                      value={modelForm.dimensions}
-                      onChange={(event) => setModelForm((state) => ({ ...state, dimensions: event.target.value }))}
-                    />
-                  </label>
-                ) : (
-                  <>
-                    <label className="field">
-                      <span className="text-sm font-medium">Chat tuning</span>
-                      <select
-                        className="field-input"
-                        value={modelForm.chatTuning}
-                        onChange={(event) => setModelForm((state) => ({ ...state, chatTuning: event.target.value as 'temperature' | 'reasoning' }))}
-                      >
-                        <option value="temperature">Temperature</option>
-                        <option value="reasoning">Reasoning</option>
-                      </select>
-                    </label>
-                    {modelForm.chatTuning === 'temperature' ? (
-                      <label className="field">
-                        <span className="text-sm font-medium">Temperature</span>
-                        <input
-                          className="field-input"
-                          type="number"
-                          min={0}
-                          max={2}
-                          step="0.1"
-                          value={modelForm.temperature}
-                          onChange={(event) => setModelForm((state) => ({ ...state, temperature: event.target.value }))}
-                        />
-                      </label>
-                    ) : (
-                      <label className="field">
-                        <span className="text-sm font-medium">Reasoning effort</span>
-                        <select
-                          className="field-input"
-                          value={modelForm.reasoningEffort}
-                          onChange={(event) => setModelForm((state) => ({ ...state, reasoningEffort: event.target.value as 'low' | 'medium' | 'high' }))}
-                        >
-                          {REASONING_EFFORTS.map((effort) => (
-                            <option key={effort} value={effort}>{effort}</option>
-                          ))}
-                        </select>
-                      </label>
-                    )}
-                  </>
-                )}
-                <label className="flex items-center gap-2 text-sm md:col-span-2">
-                  <input
-                    type="checkbox"
-                    checked={modelForm.enabled}
-                    onChange={(event) => setModelForm((state) => ({ ...state, enabled: event.target.checked }))}
-                  />
-                  Enabled
-                </label>
-                <div className="flex flex-wrap gap-2 md:col-span-2">
-                  <button type="submit" className="action-button-primary" disabled={savingModel || providerNames.length === 0}>
-                    {savingModel ? 'Saving...' : editingModelId ? 'Save model' : 'Create model'}
+            {activeTab === 'models' ? (
+              <section role="tabpanel" id="llm-models-panel" aria-labelledby="llm-models-tab">
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex flex-col gap-1">
+                    <h2 className="text-lg font-semibold">Model configurations</h2>
+                    <p className="text-sm text-muted">Register chat and embedding models after their provider is connected.</p>
+                  </div>
+                  <button type="button" className="action-button-primary" onClick={handleAddModel}>
+                    Add model
                   </button>
-                  <button type="button" className="action-button-secondary" onClick={() => void handleModelFormCheck()} disabled={checkingModelForm || providerNames.length === 0}>
-                    {checkingModelForm ? 'Testing...' : 'Test model'}
-                  </button>
-                  {editingModelId ? (
-                    <button type="button" className="action-button-secondary" onClick={resetModelForm} disabled={savingModel}>
-                      Cancel
-                    </button>
-                  ) : null}
-                  {modelFormCheckResult ? (
-                    <span className={modelFormCheckResult.success ? 'text-sm text-accent' : 'text-sm text-danger'}>
-                      {modelFormCheckResult.message}
-                    </span>
-                  ) : null}
                 </div>
-              </form>
 
               {settings.models.length === 0 ? (
                 <div className="text-sm text-muted">No model configurations yet.</div>
@@ -774,7 +647,12 @@ export function LlmSettingsPage() {
                           >
                             {checkingSavedModelId === model.id ? 'Testing...' : 'Test'}
                           </button>
-                          <button type="button" className="action-button-secondary" onClick={() => handleEditModel(model)}>
+                          <button
+                            type="button"
+                            className="action-button-secondary"
+                            aria-label={`Edit ${modelLabel(model)} model settings`}
+                            onClick={() => handleEditModel(model)}
+                          >
                             Edit
                           </button>
                           <button type="button" className="action-button-secondary" onClick={() => void handleDeleteModel(model)}>
@@ -791,10 +669,243 @@ export function LlmSettingsPage() {
                   ))}
                 </div>
               )}
-            </section>
+              </section>
+            ) : null}
           </div>
         )}
       </div>
+
+      <ModalCard
+        open={activeModal === 'provider'}
+        title={editingProvider ? `Edit provider: ${editingProvider}` : 'Create provider'}
+        description={editingProvider ? 'Save the provider to apply a new API key.' : 'Connect a provider credential once, then reuse it for model configs.'}
+        onOpenChange={(open) => {
+          if (!open) closeProviderModal()
+        }}
+        footer={
+          <>
+            <button type="button" className="action-button-secondary" onClick={closeProviderModal} disabled={savingProvider}>
+              Cancel
+            </button>
+            <button type="button" className="action-button-secondary" onClick={() => void handleProviderFormCheck()} disabled={checkingProviderForm}>
+              {checkingProviderForm ? 'Testing...' : 'Test provider'}
+            </button>
+            <button type="submit" form="llm-provider-form" className="action-button-primary" disabled={savingProvider}>
+              {savingProvider ? 'Saving...' : editingProvider ? 'Save provider' : 'Create provider'}
+            </button>
+          </>
+        }
+      >
+        <form id="llm-provider-form" className="grid gap-4 md:grid-cols-2" onSubmit={handleProviderSubmit}>
+          <label className="field">
+              <span className="text-sm font-medium">Provider ID</span>
+              <input
+                className="field-input"
+                value={providerForm.name}
+                placeholder="openai"
+                disabled={editingProvider !== null}
+                onChange={(event) => handleProviderNameChange(event.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span className="text-sm font-medium">API type</span>
+              <select
+                className="field-input"
+                value={providerForm.apiType}
+                onChange={(event) => setProviderForm((state) => ({ ...state, apiType: event.target.value as LlmApiType }))}
+              >
+                {API_TYPES.map((type) => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span className="text-sm font-medium">Base URL</span>
+              <input
+                className="field-input"
+                value={providerForm.baseUrl}
+                onChange={(event) => setProviderForm((state) => ({ ...state, baseUrl: event.target.value }))}
+              />
+            </label>
+            <label className="field">
+              <span className="text-sm font-medium">Timeout, seconds</span>
+              <input
+                className="field-input"
+                type="number"
+                min={1}
+                max={3600}
+                value={providerForm.requestTimeoutSeconds}
+                onChange={(event) => setProviderForm((state) => ({ ...state, requestTimeoutSeconds: event.target.value }))}
+              />
+            </label>
+            <label className="field md:col-span-2">
+              <span className="text-sm font-medium">API key</span>
+              <input
+                className="field-input"
+                type="password"
+                autoComplete="new-password"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                data-lpignore="true"
+                value={providerForm.apiKey}
+                placeholder={editingProvider && settings.providers[editingProvider]?.apiKey?.present ? 'Secret is configured (hidden)' : 'Enter API key'}
+                onChange={(event) => setProviderForm((state) => ({ ...state, apiKey: event.target.value }))}
+              />
+              {editingProvider && settings.providers[editingProvider]?.apiKey?.present ? (
+                <span className="text-xs text-muted">Leave blank to keep the current secret.</span>
+              ) : null}
+            </label>
+            {providerFormCheckResult ? (
+              <span className={providerFormCheckResult.success ? 'text-sm text-accent md:col-span-2' : 'text-sm text-danger md:col-span-2'}>
+                {providerFormCheckResult.message}
+              </span>
+            ) : null}
+        </form>
+      </ModalCard>
+
+      <ModalCard
+        open={activeModal === 'model'}
+        title={editingModelId ? 'Edit model' : 'Create model'}
+        description="Configure the provider-backed model that spaces can use."
+        onOpenChange={(open) => {
+          if (!open) closeModelModal()
+        }}
+        footer={
+          <>
+            <button type="button" className="action-button-secondary" onClick={closeModelModal} disabled={savingModel}>
+              Cancel
+            </button>
+            <button type="button" className="action-button-secondary" onClick={() => void handleModelFormCheck()} disabled={checkingModelForm || providerNames.length === 0}>
+              {checkingModelForm ? 'Testing...' : 'Test model'}
+            </button>
+            <button type="submit" form="llm-model-form" className="action-button-primary" disabled={savingModel || providerNames.length === 0}>
+              {savingModel ? 'Saving...' : editingModelId ? 'Save model' : 'Create model'}
+            </button>
+          </>
+        }
+      >
+        <form id="llm-model-form" className="grid gap-4 md:grid-cols-2" onSubmit={handleModelSubmit}>
+          <label className="field">
+              <span className="text-sm font-medium">Provider</span>
+              <select
+                className="field-input"
+                value={modelForm.provider}
+                disabled={providerNames.length === 0}
+                onChange={(event) => setModelForm((state) => ({ ...state, provider: event.target.value }))}
+              >
+                {providerNames.map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span className="text-sm font-medium">Kind</span>
+              <select
+                className="field-input"
+                value={modelForm.kind}
+                onChange={(event) => handleModelKindChange(event.target.value as LlmModelKind)}
+              >
+                {MODEL_KINDS.map((kind) => (
+                  <option key={kind} value={kind}>{kind}</option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span className="text-sm font-medium">Model ID</span>
+              <input
+                className="field-input"
+                value={modelForm.modelId}
+                onChange={(event) => setModelForm((state) => ({ ...state, modelId: event.target.value }))}
+              />
+            </label>
+            <label className="field">
+              <span className="text-sm font-medium">Display name</span>
+              <input
+                className="field-input"
+                value={modelForm.displayName}
+                placeholder="Optional"
+                onChange={(event) => setModelForm((state) => ({ ...state, displayName: event.target.value }))}
+              />
+            </label>
+            <label className="field">
+              <span className="text-sm font-medium">Max input tokens</span>
+              <input
+                className="field-input"
+                type="number"
+                min={1}
+                value={modelForm.maxInputTokens}
+                onChange={(event) => setModelForm((state) => ({ ...state, maxInputTokens: event.target.value }))}
+              />
+            </label>
+            {modelForm.kind === 'embedding' ? (
+              <label className="field">
+                <span className="text-sm font-medium">Dimensions</span>
+                <input
+                  className="field-input"
+                  type="number"
+                  min={1}
+                  value={modelForm.dimensions}
+                  onChange={(event) => setModelForm((state) => ({ ...state, dimensions: event.target.value }))}
+                />
+              </label>
+            ) : (
+              <>
+                <label className="field">
+                  <span className="text-sm font-medium">Chat tuning</span>
+                  <select
+                    className="field-input"
+                    value={modelForm.chatTuning}
+                    onChange={(event) => setModelForm((state) => ({ ...state, chatTuning: event.target.value as 'temperature' | 'reasoning' }))}
+                  >
+                    <option value="temperature">Temperature</option>
+                    <option value="reasoning">Reasoning</option>
+                  </select>
+                </label>
+                {modelForm.chatTuning === 'temperature' ? (
+                  <label className="field">
+                    <span className="text-sm font-medium">Temperature</span>
+                    <input
+                      className="field-input"
+                      type="number"
+                      min={0}
+                      max={2}
+                      step="0.1"
+                      value={modelForm.temperature}
+                      onChange={(event) => setModelForm((state) => ({ ...state, temperature: event.target.value }))}
+                    />
+                  </label>
+                ) : (
+                  <label className="field">
+                    <span className="text-sm font-medium">Reasoning effort</span>
+                    <select
+                      className="field-input"
+                      value={modelForm.reasoningEffort}
+                      onChange={(event) => setModelForm((state) => ({ ...state, reasoningEffort: event.target.value as 'low' | 'medium' | 'high' }))}
+                    >
+                      {REASONING_EFFORTS.map((effort) => (
+                        <option key={effort} value={effort}>{effort}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </>
+            )}
+            <label className="flex items-center gap-2 text-sm md:col-span-2">
+              <input
+                type="checkbox"
+                checked={modelForm.enabled}
+                onChange={(event) => setModelForm((state) => ({ ...state, enabled: event.target.checked }))}
+              />
+              Enabled
+            </label>
+            {modelFormCheckResult ? (
+              <span className={modelFormCheckResult.success ? 'text-sm text-accent md:col-span-2' : 'text-sm text-danger md:col-span-2'}>
+                {modelFormCheckResult.message}
+              </span>
+            ) : null}
+        </form>
+      </ModalCard>
     </div>
   )
 }
