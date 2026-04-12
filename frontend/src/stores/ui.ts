@@ -10,8 +10,6 @@ interface UiState {
   publicAccess: boolean
   currentUser: PublicUserView | null
   authResolved: boolean
-  setDarkMode: (value: boolean) => void
-  toggleDarkMode: () => void
   setSidebarVisible: (value: boolean) => void
   toggleSidebar: () => void
   setSearchOpen: (value: boolean) => void
@@ -21,9 +19,7 @@ interface UiState {
 }
 
 export const useUiStore = create<UiState>((set) => ({
-  isDark: typeof window !== 'undefined'
-    ? window.matchMedia('(prefers-color-scheme: dark)').matches
-    : false,
+  isDark: true,
   sidebarVisible: typeof window !== 'undefined'
     ? window.matchMedia('(min-width: 768px)').matches
     : true,
@@ -33,8 +29,6 @@ export const useUiStore = create<UiState>((set) => ({
   publicAccess: false,
   currentUser: null,
   authResolved: false,
-  setDarkMode: (value) => set({ isDark: value }),
-  toggleDarkMode: () => set((state) => ({ isDark: !state.isDark })),
   setSidebarVisible: (value) => set({ sidebarVisible: value }),
   toggleSidebar: () => set((state) => ({ sidebarVisible: !state.sidebarVisible })),
   setSearchOpen: (value) => set({ searchOpen: value }),

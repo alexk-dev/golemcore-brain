@@ -7,6 +7,7 @@ import { PageEditor } from './features/editor/PageEditor'
 import { ImportPage } from './features/import/ImportPage'
 import { LlmSettingsPage } from './features/llm-settings/LlmSettingsPage'
 import { AccessDeniedPage } from './features/page/AccessDeniedPage'
+import { ServerErrorPage } from './features/page/ServerErrorPage'
 import { SpacesPage } from './features/spaces/SpacesPage'
 import { SpaceSettingsPage } from './features/spaces/SpaceSettingsPage'
 import { UserManagementPage } from './features/users/UserManagementPage'
@@ -27,7 +28,9 @@ function App() {
   const canAccessAccount = authDisabled || currentUser !== null
   const needsLoginForEdit = !authDisabled && currentUser === null
 
-  if (!authResolved) {
+  const isStandaloneErrorRoute = window.location.pathname === '/500' || window.location.pathname === '/error'
+
+  if (!authResolved && !isStandaloneErrorRoute) {
     return (
       <WikiShell>
         <div className="shell-form-page" aria-busy="true" />
@@ -47,6 +50,8 @@ function App() {
         <Route path="/dynamic-apis" element={<Navigate to="/spaces" replace />} />
         <Route path="/llm-settings" element={canManageLlmSettings ? <LlmSettingsPage /> : <Navigate to="/" replace />} />
         <Route path="/import" element={canEdit ? <ImportPage /> : <Navigate to="/" replace />} />
+        <Route path="/500" element={<ServerErrorPage />} />
+        <Route path="/error" element={<ServerErrorPage />} />
         <Route path="/" element={canView ? <PageViewer /> : <Navigate to="/login" replace />} />
         <Route
           path="/e/*"

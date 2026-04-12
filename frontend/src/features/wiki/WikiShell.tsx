@@ -50,8 +50,6 @@ export function WikiShell({ children }: WikiShellProps) {
   const editorTitle = useEditorStore((state) => state.title)
   const editorSlug = useEditorStore((state) => state.slug)
   const editorContent = useEditorStore((state) => state.content)
-  const isDark = useUiStore((state) => state.isDark)
-  const setDarkMode = useUiStore((state) => state.setDarkMode)
   const sidebarVisible = useUiStore((state) => state.sidebarVisible)
   const toggleSidebar = useUiStore((state) => state.toggleSidebar)
   const searchOpen = useUiStore((state) => state.searchOpen)
@@ -70,8 +68,8 @@ export function WikiShell({ children }: WikiShellProps) {
   const [dialogState, setDialogState] = useState<DialogState>({ type: 'none' })
 
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', isDark)
-  }, [isDark])
+    document.documentElement.classList.add('dark')
+  }, [])
 
   useEffect(() => {
     void reloadSpaces()
@@ -88,13 +86,6 @@ export function WikiShell({ children }: WikiShellProps) {
   useEffect(() => {
     void reloadTree().catch((error: Error) => toast.error(error.message))
   }, [activeSpaceSlug, reloadTree])
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    const handleChange = () => setDarkMode(mediaQuery.matches)
-    mediaQuery.addEventListener('change', handleChange)
-    return () => mediaQuery.removeEventListener('change', handleChange)
-  }, [setDarkMode])
 
   const rawRoutePath = useMemo(() => normalizeWikiPath(location.pathname), [location.pathname])
   const isEditorRoute = rawRoutePath === 'e' || rawRoutePath.startsWith('e/')
