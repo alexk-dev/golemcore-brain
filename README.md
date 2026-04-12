@@ -82,6 +82,27 @@ The Vite dev server proxies `/api` to `http://localhost:8080`.
 cd frontend && npm run lint && npm run build
 ```
 
+## Releases
+
+Pushes to `main` run the conventional release workflow. When releasable commits are present, Brain:
+
+- creates the next `v*` tag with `cocogitto`
+- builds the packaged Spring Boot jar
+- publishes `golemcore-brain-*.jar` and `sha256sums.txt` to the GitHub Release for that tag
+- triggers container publication to `ghcr.io`
+
+Published image tags:
+
+- branch pushes outside `main`: short SHA only
+- `main`: `latest` and short SHA
+- release tags `v*`: `<version>`, `latest`, and short SHA
+
+Example:
+
+```bash
+docker pull ghcr.io/<owner>/golemcore-brain:latest
+```
+
 ## Storage layout
 
 By default the application stores content in `data/wiki`.
