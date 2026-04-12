@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 
+import { setCurrentSpaceSlug } from '../../lib/api'
 import { MarkdownPreview } from './MarkdownPreview'
 
 describe('MarkdownPreview', () => {
@@ -20,7 +21,9 @@ describe('MarkdownPreview', () => {
     expect(screen.getByTestId('markdown-code-copy-button')).toBeInTheDocument()
   })
 
-  it('cache-busts local asset images when assets change', () => {
+  it('normalizes legacy local asset image URLs and cache-busts them when assets change', () => {
+    setCurrentSpaceSlug('default')
+
     render(
       <MemoryRouter>
         <MarkdownPreview
@@ -34,7 +37,7 @@ describe('MarkdownPreview', () => {
 
     expect(screen.getByRole('img', { name: 'Diagram' })).toHaveAttribute(
       'src',
-      '/api/assets?path=docs/page&name=image.png&v=12345',
+      '/api/spaces/default/assets?path=docs/page&name=image.png&v=12345',
     )
     expect(screen.getByRole('img', { name: 'Remote' })).toHaveAttribute('src', 'https://example.com/image.png')
   })

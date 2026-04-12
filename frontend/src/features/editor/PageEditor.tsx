@@ -61,9 +61,14 @@ function formatTimestamp(timestamp?: string) {
   return new Date(timestamp).toLocaleString()
 }
 
+function legacyAssetPath(assetPath: string): string {
+  return assetPath.replace(/^\/api\/spaces\/[^/]+\/assets/, '/api/assets')
+}
+
 function replaceAssetReferences(content: string, oldAsset: WikiAsset, newAsset: WikiAsset) {
   return content
     .replaceAll(oldAsset.path, newAsset.path)
+    .replaceAll(legacyAssetPath(oldAsset.path), newAsset.path)
     .replaceAll(`[${oldAsset.name}](`, `[${newAsset.name}](`)
 }
 

@@ -6,6 +6,7 @@ import { ModalCard } from '../../components/ModalCard'
 import { deleteAsset, listAssets, renameAsset, uploadAsset } from '../../lib/api'
 import type { WikiAsset } from '../../types'
 import { buildDefaultMarkdownForAsset, buildImageMarkdown, buildLinkMarkdown, buildMediaMarkdown } from './assetMarkdown'
+import { normalizeAsset, normalizeAssetUrl } from './assetUrls'
 
 interface AssetManagerDialogProps {
   open: boolean
@@ -40,7 +41,7 @@ export function AssetManagerDialog({
     setLoading(true)
     try {
       const nextAssets = await listAssets(pagePath)
-      setAssets(nextAssets)
+      setAssets(nextAssets.map(normalizeAsset))
     } catch (error) {
       toast.error((error as Error).message)
     } finally {
@@ -97,7 +98,7 @@ export function AssetManagerDialog({
 
   const handleRename = async (asset: WikiAsset) => {
     try {
-      const renamedAsset = await renameAsset(pagePath, asset.name, renameValue)
+      const renamedAsset = normalizeAsset(await renameAsset(pagePath, asset.name, renameValue))
       toast.success('Asset renamed')
       onAssetRenamed?.(asset, renamedAsset)
       onAssetsChanged?.()
@@ -259,7 +260,7 @@ export function AssetManagerDialog({
               <div className="mt-2">
                 <a
                   className="text-xs text-accent hover:underline"
-                  href={asset.path}
+                  href={normalizeAssetUrl(asset.path)}
                   target="_blank"
                   rel="noreferrer"
                   aria-label={`Preview ${asset.name}`}

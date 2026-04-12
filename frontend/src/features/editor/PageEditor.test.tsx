@@ -196,6 +196,9 @@ describe('PageEditor', () => {
     await waitFor(() => {
       expect(setContentMock).toHaveBeenCalled()
     })
+    expect(setContentMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/spaces/default/assets?path=guides/runbook&name=pasted-image.png'),
+    )
   })
 
   it('shows conflict recovery actions when another session updated the page', () => {

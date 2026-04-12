@@ -84,6 +84,10 @@ function spaceUrl(suffix: string, spaceSlug = currentSpaceSlug): string {
   return '/api/spaces/' + encodeURIComponent(spaceSlug) + normalized
 }
 
+export function assetUrl(suffix: string, spaceSlug = currentSpaceSlug): string {
+  return spaceUrl(suffix, spaceSlug)
+}
+
 async function readJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {
     credentials: 'include',

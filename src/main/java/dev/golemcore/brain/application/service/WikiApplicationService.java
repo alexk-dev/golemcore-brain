@@ -834,7 +834,8 @@ public class WikiApplicationService {
         while (matcher.find()) {
             String href = matcher.group(1).trim();
             if (href.isBlank() || href.startsWith("http") || href.startsWith("mailto:") || href.startsWith("#")
-                    || href.startsWith("assets/") || href.startsWith("/assets/")) {
+                    || href.startsWith("assets/") || href.startsWith("/assets/")
+                    || href.startsWith("/api/assets") || href.startsWith("/api/spaces/")) {
                 continue;
             }
             links.add(ResolvedLink.builder().targetPath(resolveWikiLinkPath(currentPath, href)).build());
