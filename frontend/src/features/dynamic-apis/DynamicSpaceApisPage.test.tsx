@@ -1,0 +1,99 @@
+import { render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { DynamicSpaceApisPage } from './DynamicSpaceApisPage'
+import { useSpaceStore } from '../../stores/space'
+import { useUiStore } from '../../stores/ui'
+
+const listDynamicSpaceApisMock = vi.fn()
+const getLlmSettingsMock = vi.fn()
+const runDynamicSpaceApiMock = vi.fn()
+const createDynamicSpaceApiMock = vi.fn()
+const updateDynamicSpaceApiMock = vi.fn()
+const deleteDynamicSpaceApiMock = vi.fn()
+
+vi.mock('../../lib/api', () => ({
+  listDynamicSpaceApis: (...args: unknown[]) => listDynamicSpaceApisMock(...args),
+  getLlmSettings: (...args: unknown[]) => getLlmSettingsMock(...args),
+  runDynamicSpaceApi: (...args: unknown[]) => runDynamicSpaceApiMock(...args),
+  createDynamicSpaceApi: (...args: unknown[]) => createDynamicSpaceApiMock(...args),
+  updateDynamicSpaceApi: (...args: unknown[]) => updateDynamicSpaceApiMock(...args),
+  deleteDynamicSpaceApi: (...args: unknown[]) => deleteDynamicSpaceApiMock(...args),
+}))
+
+vi.mock('sonner', () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+}))
+
+describe('DynamicSpaceApisPage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useUiStore.setState({
+      authDisabled: false,
+      currentUser: {
+        id: 'admin-1',
+        username: 'admin',
+        email: 'admin@example.com',
+        role: 'ADMIN',
+      },
+    })
+    useSpaceStore.setState({
+      spaces: [
+        {
+          id: 'space-1',
+          slug: 'docs',
+          name: 'Docs',
+          createdAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+      activeSlug: 'docs',
+      loaded: true,
+    })
+    listDynamicSpaceApisMock.mockResolvedValue([
+      {
+        id: 'api-1',
+        slug: 'knowledge-search',
+        name: 'Knowledge Search',
+        description: 'Answers questions',
+        modelConfigId: 'chat-model',
+        systemPrompt: 'Answer as JSON',
+        enabled: true,
+        maxIterations: 6,
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+    ])
+    getLlmSettingsMock.mockResolvedValue({
+      providers: {},
+      models: [
+        {
+          id: 'chat-model',
+          provider: 'openai',
+          modelId: 'gpt-test',
+          displayName: 'GPT Test',
+          kind: 'chat',
+          enabled: true,
+          maxInputTokens: null,
+          dimensions: null,
+          temperature: null,
+        },
+      ],
+    })
+  })
+
+  it('shows the full run endpoint for each dynamic API', async () => {
+    render(
+      <MemoryRouter>
+        <DynamicSpaceApisPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getAllByText('/api/spaces/docs/dynamic-apis/knowledge-search/run').length).toBeGreaterThan(0)
+    })
+  })
+})

@@ -3,12 +3,12 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { AccountPage } from './features/account/AccountPage'
 import { ApiKeysPage } from './features/api-keys/ApiKeysPage'
 import { LoginPage } from './features/auth/LoginPage'
-import { DynamicSpaceApisPage } from './features/dynamic-apis/DynamicSpaceApisPage'
 import { PageEditor } from './features/editor/PageEditor'
 import { ImportPage } from './features/import/ImportPage'
 import { LlmSettingsPage } from './features/llm-settings/LlmSettingsPage'
 import { AccessDeniedPage } from './features/page/AccessDeniedPage'
 import { SpacesPage } from './features/spaces/SpacesPage'
+import { SpaceSettingsPage } from './features/spaces/SpaceSettingsPage'
 import { UserManagementPage } from './features/users/UserManagementPage'
 import { PageViewer } from './features/viewer/PageViewer'
 import { WikiShell } from './features/wiki/WikiShell'
@@ -42,8 +42,9 @@ function App() {
         <Route path="/account" element={canAccessAccount ? <AccountPage /> : <Navigate to="/login" replace />} />
         <Route path="/users" element={canManageUsers ? <UserManagementPage /> : <Navigate to="/" replace />} />
         <Route path="/spaces" element={canManageUsers ? <SpacesPage /> : <Navigate to="/" replace />} />
+        <Route path="/spaces/:spaceSlug/settings" element={canManageUsers ? <SpaceSettingsPage /> : <Navigate to="/" replace />} />
         <Route path="/api-keys" element={canManageUsers ? <ApiKeysPage /> : <Navigate to="/" replace />} />
-        <Route path="/dynamic-apis" element={canManageUsers ? <DynamicSpaceApisPage /> : <Navigate to="/" replace />} />
+        <Route path="/dynamic-apis" element={<Navigate to="/spaces" replace />} />
         <Route path="/llm-settings" element={canManageLlmSettings ? <LlmSettingsPage /> : <Navigate to="/" replace />} />
         <Route path="/import" element={canEdit ? <ImportPage /> : <Navigate to="/" replace />} />
         <Route path="/" element={canView ? <PageViewer /> : <Navigate to="/login" replace />} />

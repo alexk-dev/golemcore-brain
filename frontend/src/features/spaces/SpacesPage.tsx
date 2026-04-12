@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { createSpace, deleteSpace } from '../../lib/api'
@@ -93,6 +94,9 @@ export function SpacesPage() {
                     </div>
                   </div>
                   <div className="flex gap-2">
+                    <Link className="action-button-secondary" to={'/spaces/' + encodeURIComponent(space.slug) + '/settings'}>
+                      Settings
+                    </Link>
                     <button
                       type="button"
                       className="action-button-secondary"
