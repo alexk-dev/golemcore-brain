@@ -56,14 +56,33 @@ public class HttpLlmProviderCheckAdapter implements LlmProviderCheckPort {
             }
             return new LlmProviderCheckResult(false, messageForStatus(status), status);
         } catch (IOException exception) {
-            log.debug("LLM provider check failed for {}: {}", providerName, exception.getMessage());
-            return new LlmProviderCheckResult(false, "Provider check failed: " + exception.getMessage(), null);
+            String message = networkFailureMessage(exception);
+            log.debug("LLM provider check failed for {}: {}", providerName, message);
+            return new LlmProviderCheckResult(false, message, null);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             return new LlmProviderCheckResult(false, "Provider check interrupted", null);
         } catch (IllegalArgumentException exception) {
             return new LlmProviderCheckResult(false, exception.getMessage(), null);
         }
+    }
+
+    static String networkFailureMessage(IOException exception) {
+        String detail = firstReadableDetail(exception.getMessage());
+        if (detail == null && exception.getCause() != null) {
+            detail = firstReadableDetail(exception.getCause().getMessage());
+        }
+        if (detail == null) {
+            return "Provider check failed: could not reach the provider endpoint";
+        }
+        return "Provider check failed: " + detail;
+    }
+
+    private static String firstReadableDetail(String value) {
+        if (value == null || value.isBlank() || "null".equalsIgnoreCase(value.trim())) {
+            return null;
+        }
+        return value.trim();
     }
 
     private void applyAuthHeaders(HttpRequest.Builder requestBuilder, LlmApiType apiType, String apiKey) {
