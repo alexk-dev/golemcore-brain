@@ -140,7 +140,7 @@ class WikiApplicationServiceTest {
                 "text/plain",
                 new ByteArrayInputStream("asset body".getBytes(StandardCharsets.UTF_8)));
         assertEquals("text/plain", uploadedAsset.getContentType());
-        assertEquals("/api/spaces/default/assets?path=operations/release-guide&name=" + uploadedAsset.getName(),
+        assertEquals("/api/spaces/default/assets?path=operations%2Frelease-guide&name=" + uploadedAsset.getName(),
                 uploadedAsset.getPath());
         assertEquals(1, service.listAssets("operations/release-guide").size());
 
@@ -177,7 +177,7 @@ class WikiApplicationServiceTest {
         assertEquals(1, service.listAssets(assetMove.getPath()).size());
         assertTrue(service.getPage(assetMove.getPath()).getContent()
                 .contains(
-                        "/api/spaces/default/assets?path=operations/release-guide-assets-moved&name=renamed-notes.txt"));
+                        "/api/spaces/default/assets?path=operations%2Frelease-guide-assets-moved&name=renamed-notes.txt"));
 
         WikiAssetContent assetContent = service.openAsset("operations/release-guide", renamedAsset.getName());
         assertEquals("renamed-notes.txt", assetContent.getName());

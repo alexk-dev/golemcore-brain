@@ -947,6 +947,7 @@ public class FileSystemWikiRepository implements WikiRepository {
         }
         return content
                 .replace(assetPathPrefix(normalizedOldPath), assetPathPrefix(normalizedNewPath))
+                .replace(unencodedAssetPathPrefix(normalizedOldPath), assetPathPrefix(normalizedNewPath))
                 .replace(legacyAssetPathPrefix(normalizedOldPath), assetPathPrefix(normalizedNewPath))
                 .replace(encodedLegacyAssetPathPrefix(normalizedOldPath), assetPathPrefix(normalizedNewPath));
     }
@@ -954,11 +955,18 @@ public class FileSystemWikiRepository implements WikiRepository {
     private void rewriteAssetNameReferences(Path markdownPath, String oldAssetPath, String newAssetPath,
             String pagePath, String oldName, String newName) throws IOException {
         String normalizedPagePath = normalizePath(pagePath);
+        String encodedOldName = encodeUrlComponent(oldName);
         String rawMarkdown = Files.readString(markdownPath, StandardCharsets.UTF_8);
         String updatedMarkdown = rawMarkdown
                 .replace(oldAssetPath, newAssetPath)
+                .replace(unencodedAssetPathPrefix(normalizedPagePath) + oldName, newAssetPath)
+                .replace(unencodedAssetPathPrefix(normalizedPagePath) + encodedOldName, newAssetPath)
+                .replace(assetPathPrefix(normalizedPagePath) + oldName, newAssetPath)
+                .replace(assetPathPrefix(normalizedPagePath) + encodedOldName, newAssetPath)
                 .replace(legacyAssetPathPrefix(normalizedPagePath) + oldName, newAssetPath)
+                .replace(legacyAssetPathPrefix(normalizedPagePath) + encodedOldName, newAssetPath)
                 .replace(encodedLegacyAssetPathPrefix(normalizedPagePath) + oldName, newAssetPath)
+                .replace(encodedLegacyAssetPathPrefix(normalizedPagePath) + encodedOldName, newAssetPath)
                 .replace("[" + oldName + "](", "[" + newName + "](");
         if (!rawMarkdown.equals(updatedMarkdown)) {
             Files.writeString(markdownPath, updatedMarkdown, StandardCharsets.UTF_8,
@@ -1248,7 +1256,7 @@ public class FileSystemWikiRepository implements WikiRepository {
         try {
             return WikiAsset.builder()
                     .name(assetPath.getFileName().toString())
-                    .path(assetPathPrefix(nodeReference.getPath()) + assetPath.getFileName().toString())
+                    .path(assetPath(nodeReference.getPath(), assetPath.getFileName().toString()))
                     .size(Files.size(assetPath))
                     .contentType(contentType)
                     .build();
@@ -1257,7 +1265,15 @@ public class FileSystemWikiRepository implements WikiRepository {
         }
     }
 
+    private String assetPath(String pagePath, String assetName) {
+        return assetPathPrefix(pagePath) + encodeUrlComponent(assetName);
+    }
+
     private String assetPathPrefix(String pagePath) {
+        return "/api/spaces/" + activeSpaceSlug() + "/assets?path=" + encodeUrlComponent(pagePath) + "&name=";
+    }
+
+    private String unencodedAssetPathPrefix(String pagePath) {
         return "/api/spaces/" + activeSpaceSlug() + "/assets?path=" + pagePath + "&name=";
     }
 
@@ -1266,18 +1282,18 @@ public class FileSystemWikiRepository implements WikiRepository {
     }
 
     private String encodedLegacyAssetPathPrefix(String pagePath) {
-        return "/api/assets?path=" + pagePath.replace("/", "%2F") + "&name=";
+        return "/api/assets?path=" + encodeUrlComponent(pagePath) + "&name=";
     }
 
     private String activeSpaceSlug() {
         String activeSpaceId = SpaceContextHolder.require();
         return spaceRepository.findById(activeSpaceId)
                 .map(Space::getSlug)
-                .map(this::encodeUrlPathSegment)
-                .orElse(activeSpaceId);
+                .map(this::encodeUrlComponent)
+                .orElseGet(() -> encodeUrlComponent(activeSpaceId));
     }
 
-    private String encodeUrlPathSegment(String value) {
+    private String encodeUrlComponent(String value) {
         return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
