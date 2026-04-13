@@ -212,31 +212,25 @@ public class LlmSettingsService {
         LlmApiType apiType = providerConfig.getApiType() != null
                 ? providerConfig.getApiType()
                 : defaultApiType(providerName);
+        Boolean legacyApi = null;
+        if (apiType == LlmApiType.OPENAI) {
+            if (providerConfig.getLegacyApi() != null) {
+                legacyApi = providerConfig.getLegacyApi();
+            } else if (existing != null && existing.getLegacyApi() != null) {
+                legacyApi = existing.getLegacyApi();
+            } else {
+                legacyApi = false;
+            }
+        }
         return LlmProviderConfig.builder()
                 .apiKey(apiKey)
                 .baseUrl(trimToNull(providerConfig.getBaseUrl()))
                 .requestTimeoutSeconds(normalizeTimeout(providerConfig.getRequestTimeoutSeconds()))
                 .apiType(apiType)
-                .legacyApi(resolveLegacyApi(apiType, providerConfig, existing))
+                .legacyApi(legacyApi)
                 .createdAt(existing != null && existing.getCreatedAt() != null ? existing.getCreatedAt() : now)
                 .updatedAt(now)
                 .build();
-    }
-
-    private Boolean resolveLegacyApi(
-            LlmApiType apiType,
-            LlmProviderConfig providerConfig,
-            LlmProviderConfig existing) {
-        if (apiType != LlmApiType.OPENAI) {
-            return null;
-        }
-        if (providerConfig.getLegacyApi() != null) {
-            return providerConfig.getLegacyApi();
-        }
-        if (existing != null && existing.getLegacyApi() != null) {
-            return existing.getLegacyApi();
-        }
-        return false;
     }
 
     private LlmModelConfig normalizeModel(

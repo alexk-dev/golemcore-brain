@@ -19,6 +19,7 @@ import java.time.Duration;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -28,6 +29,7 @@ public class HttpLlmProviderCheckAdapter implements LlmProviderCheckPort {
 
     private static final String USER_AGENT = "golemcore-brain-llm-settings";
     private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(30);
+    private static final Pattern HTTP_URI_PATTERN = Pattern.compile("(?i)^https?://[^\\s]+$");
 
     private final HttpClient httpClient = HttpClient.newBuilder()
             .followRedirects(HttpClient.Redirect.NORMAL)
@@ -53,6 +55,9 @@ public class HttpLlmProviderCheckAdapter implements LlmProviderCheckPort {
                 return new LlmProviderCheckResult(true, modelListingMessage(modelIds), 200, modelIds);
             }
 
+            if (!HTTP_URI_PATTERN.matcher(uri).matches()) {
+                throw new IllegalArgumentException("LLM endpoint must use HTTP or HTTPS");
+            }
             HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(java.net.URI.create(uri))
                     .GET()
                     .timeout(timeout)
@@ -84,9 +89,13 @@ public class HttpLlmProviderCheckAdapter implements LlmProviderCheckPort {
     }
 
     private List<String> listOpenAiModels(LlmProviderConfig providerConfig, String apiKey, Duration timeout) {
+        String baseUrl = LlmEndpointResolver.canonicalBaseUrl(providerConfig.getBaseUrl(), "https://api.openai.com/v1");
+        if (!HTTP_URI_PATTERN.matcher(baseUrl).matches()) {
+            throw new IllegalArgumentException("LLM endpoint must use HTTP or HTTPS");
+        }
         return OpenAiModelCatalog.builder()
                 .apiKey(apiKey)
-                .baseUrl(LlmEndpointResolver.canonicalBaseUrl(providerConfig.getBaseUrl(), "https://api.openai.com/v1"))
+                .baseUrl(baseUrl)
                 .connectTimeout(timeout)
                 .readTimeout(timeout)
                 .userAgent(USER_AGENT)
