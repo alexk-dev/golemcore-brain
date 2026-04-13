@@ -31,6 +31,7 @@ import type {
 interface ProviderFormState {
   name: string
   apiType: LlmApiType
+  openAiApiMode: OpenAiApiMode
   baseUrl: string
   requestTimeoutSeconds: string
   apiKey: string
@@ -46,11 +47,12 @@ interface ModelFormState {
   dimensions: string
   temperature: string
   chatTuning: 'temperature' | 'reasoning'
-  reasoningEffort: 'none' | 'low' | 'medium' | 'high' | 'xhigh'
+  reasoningEffort: string
 }
 
 type LlmSettingsTab = 'providers' | 'models'
 type LlmSettingsModal = 'provider' | 'model' | null
+type OpenAiApiMode = 'responses' | 'chat_completions'
 
 const EMPTY_SETTINGS: LlmSettings = { providers: {}, models: [], modelRegistry: null }
 const API_TYPES: LlmApiType[] = ['openai', 'anthropic', 'gemini']
@@ -58,7 +60,7 @@ const MODEL_KINDS: LlmModelKind[] = ['chat', 'embedding']
 const DEFAULT_PROVIDER_NAME = 'openai'
 const DEFAULT_CHAT_MODEL_ID = 'gpt-5.4'
 const DEFAULT_EMBEDDING_MODEL_ID = 'text-embedding-3-large'
-const REASONING_EFFORTS = ['none', 'low', 'medium', 'high', 'xhigh'] as const
+const KNOWN_REASONING_EFFORTS = ['none', 'low', 'medium', 'high', 'xhigh'] as const
 
 const KNOWN_BASE_URLS: Record<string, string> = {
   openai: 'https://api.openai.com/v1',
@@ -76,6 +78,7 @@ function emptyProviderForm(): ProviderFormState {
   return {
     name: DEFAULT_PROVIDER_NAME,
     apiType: 'openai',
+    openAiApiMode: 'responses',
     baseUrl: KNOWN_BASE_URLS[DEFAULT_PROVIDER_NAME],
     requestTimeoutSeconds: '300',
     apiKey: '',
@@ -125,14 +128,25 @@ function defaultApiTypeForProvider(name: string): LlmApiType {
   return 'openai'
 }
 
+function openAiApiModeForLegacy(legacyApi: boolean | null | undefined): OpenAiApiMode {
+  return legacyApi ? 'chat_completions' : 'responses'
+}
+
+function openAiApiLabel(legacyApi: boolean | null | undefined): string {
+  return legacyApi ? '/v1/chat/completions' : '/v1/responses'
+}
+
+function detectedModels(result: LlmProviderCheckResult | null | undefined): string[] {
+  return result?.models?.filter((model) => model.trim().length > 0) ?? []
+}
+
 function modelLabel(model: LlmModelConfig): string {
   return model.displayName?.trim() || model.modelId
 }
 
-function normalizeReasoningEffort(value: string | null | undefined): ModelFormState['reasoningEffort'] {
-  return REASONING_EFFORTS.includes(value as ModelFormState['reasoningEffort'])
-    ? value as ModelFormState['reasoningEffort']
-    : 'none'
+function normalizeReasoningEffort(value: string | null | undefined): string {
+  const trimmed = value?.trim()
+  return trimmed && trimmed.length > 0 ? trimmed : 'medium'
 }
 
 export function LlmSettingsPage() {
@@ -275,7 +289,7 @@ export function LlmSettingsPage() {
       name: normalizeProviderName(providerForm.name),
       ...(secret ? { apiKey: secret } : { apiKey: null }),
       apiType: providerForm.apiType,
-      legacyApi: editingProvider ? settings.providers[editingProvider]?.legacyApi ?? false : false,
+      legacyApi: providerForm.apiType === 'openai' ? providerForm.openAiApiMode === 'chat_completions' : null,
       baseUrl: toNullableString(providerForm.baseUrl),
       requestTimeoutSeconds: toNullableNumber(providerForm.requestTimeoutSeconds),
     }
@@ -294,7 +308,7 @@ export function LlmSettingsPage() {
       maxInputTokens: toNullableNumber(modelForm.maxInputTokens),
       dimensions: isEmbedding ? toNullableNumber(modelForm.dimensions) : null,
       temperature: modelForm.kind === 'chat' && !isReasoning ? toNullableNumber(modelForm.temperature) : null,
-      reasoningEffort: isReasoning ? modelForm.reasoningEffort : null,
+      reasoningEffort: isReasoning ? toNullableString(modelForm.reasoningEffort) : null,
     }
   }
 
@@ -404,6 +418,7 @@ export function LlmSettingsPage() {
     setProviderForm({
       name,
       apiType: provider.apiType ?? defaultApiTypeForProvider(name),
+      openAiApiMode: openAiApiModeForLegacy(provider.legacyApi),
       baseUrl: provider.baseUrl ?? '',
       requestTimeoutSeconds: String(provider.requestTimeoutSeconds ?? 300),
       apiKey: '',
@@ -437,6 +452,14 @@ export function LlmSettingsPage() {
     } finally {
       setCheckingProvider(null)
     }
+  }
+
+  const handleDetectModelProvider = async () => {
+    if (modelForm.provider.length === 0) {
+      toast.error('Provider is required')
+      return
+    }
+    await handleCheckProvider(modelForm.provider)
   }
 
   const handleModelSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -519,6 +542,10 @@ export function LlmSettingsPage() {
     }
   }
 
+  const providerFormDetectedModels = detectedModels(providerFormCheckResult)
+  const modelFormDetectedModels = detectedModels(checkResults[modelForm.provider])
+  const modelFormDetectedModelsId = `llm-detected-models-${modelForm.provider || 'provider'}`
+
   return (
     <div className="page-viewer">
       <div className="surface-card p-6">
@@ -600,6 +627,7 @@ export function LlmSettingsPage() {
                   {providerNames.map((name) => {
                     const provider = settings.providers[name]
                     const checkResult = checkResults[name]
+                    const providerModels = detectedModels(checkResult)
                     return (
                       <div key={name} className="rounded-lg border border-surface-border bg-surface-alt/60 px-4 py-3">
                         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -607,6 +635,7 @@ export function LlmSettingsPage() {
                             <div className="font-medium">{name}</div>
                             <div className="text-sm text-muted">
                               <span>{provider.apiType ?? 'openai'}</span>
+                              {provider.apiType === 'openai' || provider.apiType == null ? <span> · {openAiApiLabel(provider.legacyApi)}</span> : null}
                               <span> · {provider.baseUrl ?? 'default endpoint'}</span>
                               <span> · {provider.apiKey?.present ? 'secret configured' : 'secret missing'}</span>
                             </div>
@@ -615,16 +644,22 @@ export function LlmSettingsPage() {
                                 {checkResult.message}{checkResult.statusCode ? ` (${checkResult.statusCode})` : ''}
                               </div>
                             ) : null}
+                            {providerModels.length > 0 ? (
+                              <div className="mt-1 text-xs text-muted">
+                                Detected models: {providerModels.slice(0, 8).join(', ')}
+                                {providerModels.length > 8 ? `, +${providerModels.length - 8} more` : ''}
+                              </div>
+                            ) : null}
                           </div>
                           <div className="flex flex-wrap gap-2">
                             <button
                               type="button"
                               className="action-button-secondary"
-                              aria-label={`Check ${name}`}
+                              aria-label={`Detect ${name} models`}
                               onClick={() => void handleCheckProvider(name)}
                               disabled={checkingProvider === name}
                             >
-                              {checkingProvider === name ? 'Checking...' : 'Check'}
+                              {checkingProvider === name ? 'Detecting...' : 'Detect models'}
                             </button>
                             <button
                               type="button"
@@ -761,11 +796,20 @@ export function LlmSettingsPage() {
             </label>
             {providerForm.apiType === 'openai' ? (
               <label className="field">
-                <span className="text-sm font-medium">API endpoint</span>
-                <select className="field-input" value="responses" disabled>
-                  <option value="responses">/v1/responses</option>
+                <span className="text-sm font-medium">OpenAI chat API</span>
+                <select
+                  aria-label="OpenAI chat API"
+                  className="field-input"
+                  value={providerForm.openAiApiMode}
+                  onChange={(event) => setProviderForm((state) => ({
+                    ...state,
+                    openAiApiMode: event.target.value as OpenAiApiMode,
+                  }))}
+                >
+                  <option value="responses">Responses API (/v1/responses)</option>
+                  <option value="chat_completions">Chat Completions API (/v1/chat/completions)</option>
                 </select>
-                <span className="text-xs text-muted">OpenAI-compatible chat uses Responses API by default.</span>
+                <span className="text-xs text-muted">Use Responses for reasoning models. Use Chat Completions for legacy-compatible providers.</span>
               </label>
             ) : null}
             <label className="field">
@@ -806,9 +850,15 @@ export function LlmSettingsPage() {
               ) : null}
             </label>
             {providerFormCheckResult ? (
-              <span className={providerFormCheckResult.success ? 'text-sm text-accent md:col-span-2' : 'text-sm text-danger md:col-span-2'}>
-                {providerFormCheckResult.message}
-              </span>
+              <div className={providerFormCheckResult.success ? 'text-sm text-accent md:col-span-2' : 'text-sm text-danger md:col-span-2'}>
+                <div>{providerFormCheckResult.message}</div>
+                {providerFormDetectedModels.length > 0 ? (
+                  <div className="mt-1 text-xs text-muted">
+                    Detected models: {providerFormDetectedModels.slice(0, 8).join(', ')}
+                    {providerFormDetectedModels.length > 8 ? `, +${providerFormDetectedModels.length - 8} more` : ''}
+                  </div>
+                ) : null}
+              </div>
             ) : null}
         </form>
       </ModalCard>
@@ -827,6 +877,9 @@ export function LlmSettingsPage() {
             </button>
             <button type="button" className="action-button-secondary" onClick={() => void handleApplyModelCatalogDefaults()} disabled={resolvingModelCatalog || providerNames.length === 0}>
               {resolvingModelCatalog ? 'Applying...' : 'Apply catalog defaults'}
+            </button>
+            <button type="button" className="action-button-secondary" onClick={() => void handleDetectModelProvider()} disabled={checkingProvider === modelForm.provider || providerNames.length === 0}>
+              {checkingProvider === modelForm.provider ? 'Detecting...' : 'Detect models'}
             </button>
             <button type="button" className="action-button-secondary" onClick={() => void handleModelFormCheck()} disabled={checkingModelForm || providerNames.length === 0}>
               {checkingModelForm ? 'Testing...' : 'Test model'}
@@ -866,10 +919,22 @@ export function LlmSettingsPage() {
             <label className="field">
               <span className="text-sm font-medium">Model ID</span>
               <input
+                aria-label="Model ID"
                 className="field-input"
+                list={modelFormDetectedModels.length > 0 ? modelFormDetectedModelsId : undefined}
                 value={modelForm.modelId}
                 onChange={(event) => setModelForm((state) => ({ ...state, modelId: event.target.value }))}
               />
+              {modelFormDetectedModels.length > 0 ? (
+                <>
+                  <datalist id={modelFormDetectedModelsId}>
+                    {modelFormDetectedModels.map((modelId) => (
+                      <option key={modelId} value={modelId} />
+                    ))}
+                  </datalist>
+                  <span className="text-xs text-muted">Pick a detected model or enter another model ID.</span>
+                </>
+              ) : null}
             </label>
             <label className="field">
               <span className="text-sm font-medium">Display name</span>
@@ -930,15 +995,20 @@ export function LlmSettingsPage() {
                 ) : (
                   <label className="field">
                     <span className="text-sm font-medium">Reasoning effort</span>
-                    <select
+                    <input
+                      aria-label="Reasoning effort"
                       className="field-input"
+                      list="llm-reasoning-efforts"
+                      placeholder="medium"
                       value={modelForm.reasoningEffort}
-                      onChange={(event) => setModelForm((state) => ({ ...state, reasoningEffort: event.target.value as 'none' | 'low' | 'medium' | 'high' | 'xhigh' }))}
-                    >
-                      {REASONING_EFFORTS.map((effort) => (
+                      onChange={(event) => setModelForm((state) => ({ ...state, reasoningEffort: event.target.value }))}
+                    />
+                    <datalist id="llm-reasoning-efforts">
+                      {KNOWN_REASONING_EFFORTS.map((effort) => (
                         <option key={effort} value={effort}>{effort}</option>
                       ))}
-                    </select>
+                    </datalist>
+                    <span className="text-xs text-muted">Use a known value or enter a provider-specific value.</span>
                   </label>
                 )}
               </>

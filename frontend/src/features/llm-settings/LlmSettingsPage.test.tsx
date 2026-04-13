@@ -15,6 +15,7 @@ const checkLlmModelMock = vi.fn()
 const createLlmModelMock = vi.fn()
 const updateLlmModelMock = vi.fn()
 const deleteLlmModelMock = vi.fn()
+const resolveModelRegistryMock = vi.fn()
 
 vi.mock('../../lib/api', () => ({
   getLlmSettings: (...args: unknown[]) => getLlmSettingsMock(...args),
@@ -27,6 +28,7 @@ vi.mock('../../lib/api', () => ({
   createLlmModel: (...args: unknown[]) => createLlmModelMock(...args),
   updateLlmModel: (...args: unknown[]) => updateLlmModelMock(...args),
   deleteLlmModel: (...args: unknown[]) => deleteLlmModelMock(...args),
+  resolveModelRegistry: (...args: unknown[]) => resolveModelRegistryMock(...args),
 }))
 
 vi.mock('sonner', () => ({
@@ -54,7 +56,18 @@ describe('LlmSettingsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     getLlmSettingsMock.mockResolvedValue(initialSettings)
-    checkLlmProviderConfigMock.mockResolvedValue({ success: true, message: 'Provider test passed', statusCode: 200 })
+    checkLlmProviderMock.mockResolvedValue({
+      success: true,
+      message: 'Provider responded to model listing (2 models)',
+      statusCode: 200,
+      models: ['gpt-5.4', 'text-embedding-3-large'],
+    })
+    checkLlmProviderConfigMock.mockResolvedValue({
+      success: true,
+      message: 'Provider responded to model listing (2 models)',
+      statusCode: 200,
+      models: ['gpt-5.4', 'text-embedding-3-large'],
+    })
     checkLlmModelMock.mockResolvedValue({ success: true, message: 'Model test passed', statusCode: null })
     createLlmModelMock.mockResolvedValue({
       ...initialSettings,
@@ -134,6 +147,7 @@ describe('LlmSettingsPage', () => {
 
     expect(screen.getByRole('dialog', { name: 'Edit provider: openai' })).toBeInTheDocument()
     expect(screen.getByLabelText('Provider ID')).toBeDisabled()
+    expect(screen.getByLabelText('OpenAI chat API')).toHaveValue('responses')
     expect(screen.getByPlaceholderText('Secret is configured (hidden)')).toHaveValue('')
     expect(screen.getByRole('button', { name: 'Save provider' })).toBeInTheDocument()
     expect(screen.getByText('Save the provider to apply a new API key.'))
@@ -171,6 +185,7 @@ describe('LlmSettingsPage', () => {
     expect(await screen.findByRole('heading', { name: 'AI Models' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Add provider' }))
+    fireEvent.change(screen.getByLabelText('OpenAI chat API'), { target: { value: 'chat_completions' } })
     fireEvent.click(screen.getByRole('button', { name: 'Test provider' }))
     fireEvent.click(screen.getByRole('button', { name: 'Close dialog' }))
     fireEvent.click(screen.getByRole('tab', { name: /Models/ }))
@@ -184,7 +199,7 @@ describe('LlmSettingsPage', () => {
         apiType: 'openai',
         baseUrl: 'https://api.openai.com/v1',
         requestTimeoutSeconds: 300,
-        legacyApi: false,
+        legacyApi: true,
       })
       expect(checkLlmModelMock).toHaveBeenCalledWith({
         provider: 'openai',
@@ -224,7 +239,7 @@ describe('LlmSettingsPage', () => {
 
     expect(await screen.findByRole('heading', { name: 'AI Models' })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Check openai' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Detect openai models' }))
     fireEvent.click(screen.getByRole('tab', { name: /Models/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Test Reasoning Chat' }))
 
@@ -245,14 +260,33 @@ describe('LlmSettingsPage', () => {
     })
   })
 
-  it('creates reasoning chat model configs without temperature', async () => {
+  it('offers detected provider models when creating model configs', async () => {
+    render(<LlmSettingsPage />)
+
+    expect(await screen.findByRole('heading', { name: 'AI Models' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Detect openai models' }))
+
+    await waitFor(() => {
+      expect(screen.getByText((content) => content.includes('Detected models: gpt-5.4'))).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('tab', { name: /Models/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add model' }))
+
+    expect(screen.getByLabelText('Model ID')).toHaveAttribute('list', 'llm-detected-models-openai')
+    expect(screen.getByText('Pick a detected model or enter another model ID.')).toBeInTheDocument()
+  })
+
+  it('creates reasoning chat model configs with custom effort values', async () => {
     render(<LlmSettingsPage />)
 
     expect(await screen.findByRole('heading', { name: 'AI Models' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('tab', { name: /Models/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Add model' }))
     fireEvent.change(screen.getByLabelText('Chat tuning'), { target: { value: 'reasoning' } })
-    fireEvent.change(screen.getByLabelText('Reasoning effort'), { target: { value: 'high' } })
+    expect(screen.getByLabelText('Reasoning effort')).toHaveAttribute('list', 'llm-reasoning-efforts')
+    fireEvent.change(screen.getByLabelText('Reasoning effort'), { target: { value: 'minimal' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create model' }))
 
     await waitFor(() => {
@@ -266,7 +300,7 @@ describe('LlmSettingsPage', () => {
         maxInputTokens: null,
         dimensions: null,
         temperature: null,
-        reasoningEffort: 'high',
+        reasoningEffort: 'minimal',
       })
     })
   })
