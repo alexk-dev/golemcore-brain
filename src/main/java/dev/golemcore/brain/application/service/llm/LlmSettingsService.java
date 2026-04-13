@@ -19,6 +19,10 @@ import dev.golemcore.brain.domain.llm.LlmProviderCheckResult;
 import dev.golemcore.brain.domain.llm.LlmProviderConfig;
 import dev.golemcore.brain.domain.llm.LlmReasoningEffort;
 import dev.golemcore.brain.domain.llm.LlmSettings;
+import dev.golemcore.brain.domain.llm.ModelCatalogEntry;
+import dev.golemcore.brain.domain.llm.ModelReasoningLevel;
+import dev.golemcore.brain.domain.llm.ModelRegistryConfig;
+import dev.golemcore.brain.domain.llm.ModelRegistryResolveResult;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -39,6 +43,7 @@ public class LlmSettingsService {
     private final LlmProviderCheckPort llmProviderCheckPort;
     private final LlmChatPort llmChatPort;
     private final LlmEmbeddingPort llmEmbeddingPort;
+    private final ModelRegistryService modelRegistryService;
 
     public LlmSettings getSettings(AuthContext authContext) {
         requireAdminAccount(authContext);
@@ -163,6 +168,24 @@ public class LlmSettingsService {
         return redact(llmSettingsRepository.save(settings));
     }
 
+    public ModelRegistryConfig getModelRegistryConfig(AuthContext authContext) {
+        requireAdminAccount(authContext);
+        return modelRegistryService.getConfig();
+    }
+
+    public LlmSettings updateModelRegistryConfig(AuthContext authContext, ModelRegistryConfig config) {
+        requireAdminAccount(authContext);
+        return redact(modelRegistryService.updateConfig(config));
+    }
+
+    public ModelRegistryResolveResult resolveModelRegistry(
+            AuthContext authContext,
+            String provider,
+            String modelId) {
+        requireAdminAccount(authContext);
+        return modelRegistryService.resolveDefaults(provider, modelId);
+    }
+
     private void requireAdminAccount(AuthContext authContext) {
         if (authContext.isApiKey()) {
             throw new AuthAccessDeniedException("Admin account session required");
@@ -194,6 +217,8 @@ public class LlmSettingsService {
                 .apiType(providerConfig.getApiType() != null
                         ? providerConfig.getApiType()
                         : defaultApiType(providerName))
+                .legacyApi(providerConfig.getLegacyApi() != null ? providerConfig.getLegacyApi()
+                        : existing != null ? existing.getLegacyApi() : null)
                 .createdAt(existing != null && existing.getCreatedAt() != null ? existing.getCreatedAt() : now)
                 .updatedAt(now)
                 .build();
@@ -213,12 +238,16 @@ public class LlmSettingsService {
         }
         String modelName = requireTrimmed(modelConfig.getModelId(), "model id");
         LlmModelKind kind = modelConfig.getKind() != null ? modelConfig.getKind() : LlmModelKind.CHAT;
+        ModelCatalogEntry catalogEntry = kind == LlmModelKind.CHAT
+                ? modelRegistryService.resolveDefaults(providerName, modelName).defaultSettings()
+                : null;
         String id = existing != null ? existing.getId() : UUID.randomUUID().toString();
         if (enforceUnique) {
             ensureUniqueModel(settings, id, providerName, kind, modelName);
         }
 
         Instant now = Instant.now();
+        boolean supportsTemperature = resolveSupportsTemperature(kind, modelConfig, catalogEntry);
         return LlmModelConfig.builder()
                 .id(id)
                 .provider(providerName)
@@ -226,15 +255,18 @@ public class LlmSettingsService {
                 .displayName(trimToNull(modelConfig.getDisplayName()))
                 .kind(kind)
                 .enabled(modelConfig.getEnabled() == null || modelConfig.getEnabled())
-                .maxInputTokens(normalizePositiveInteger(modelConfig.getMaxInputTokens(), "max input tokens"))
+                .supportsTemperature(supportsTemperature)
+                .maxInputTokens(resolveMaxInputTokens(kind, modelConfig, catalogEntry))
                 .dimensions(kind == LlmModelKind.EMBEDDING
                         ? normalizePositiveInteger(modelConfig.getDimensions(), "embedding dimensions")
                         : null)
-                .temperature(kind == LlmModelKind.CHAT && modelConfig.getReasoningEffort() == null
-                        ? normalizeTemperature(modelConfig.getTemperature())
-                        : null)
+                .temperature(kind == LlmModelKind.CHAT
+                        && modelConfig.getReasoningEffort() == null
+                        && supportsTemperature
+                                ? normalizeTemperature(modelConfig.getTemperature())
+                                : null)
                 .reasoningEffort(kind == LlmModelKind.CHAT
-                        ? normalizeReasoningEffort(modelConfig.getReasoningEffort())
+                        ? resolveReasoningEffort(modelConfig, catalogEntry)
                         : null)
                 .createdAt(existing != null && existing.getCreatedAt() != null ? existing.getCreatedAt() : now)
                 .updatedAt(now)
@@ -265,12 +297,14 @@ public class LlmSettingsService {
                 .baseUrl(provider.getBaseUrl())
                 .requestTimeoutSeconds(provider.getRequestTimeoutSeconds())
                 .apiType(provider.getApiType())
+                .legacyApi(provider.getLegacyApi())
                 .createdAt(provider.getCreatedAt())
                 .updatedAt(provider.getUpdatedAt())
                 .build()));
         return LlmSettings.builder()
                 .providers(providers)
                 .models(new ArrayList<>(normalized.getModels()))
+                .modelRegistry(normalized.getModelRegistry())
                 .build();
     }
 
@@ -283,6 +317,9 @@ public class LlmSettingsService {
         }
         if (settings.getModels() == null) {
             settings.setModels(new ArrayList<>());
+        }
+        if (settings.getModelRegistry() == null) {
+            settings.setModelRegistry(ModelRegistryConfig.builder().build());
         }
         return settings;
     }
@@ -354,6 +391,49 @@ public class LlmSettingsService {
             throw new IllegalArgumentException("temperature must be between 0 and 2");
         }
         return value;
+    }
+
+    private boolean resolveSupportsTemperature(
+            LlmModelKind kind,
+            LlmModelConfig modelConfig,
+            ModelCatalogEntry catalogEntry) {
+        if (kind != LlmModelKind.CHAT) {
+            return false;
+        }
+        if (modelConfig.getSupportsTemperature() != null) {
+            return modelConfig.getSupportsTemperature();
+        }
+        return catalogEntry == null || catalogEntry.getSupportsTemperature() == null
+                || catalogEntry.getSupportsTemperature();
+    }
+
+    private Integer resolveMaxInputTokens(
+            LlmModelKind kind,
+            LlmModelConfig modelConfig,
+            ModelCatalogEntry catalogEntry) {
+        Integer explicit = normalizePositiveInteger(modelConfig.getMaxInputTokens(), "max input tokens");
+        if (explicit != null || kind != LlmModelKind.CHAT || catalogEntry == null) {
+            return explicit;
+        }
+        Integer catalogMax = normalizePositiveInteger(catalogEntry.getMaxInputTokens(), "catalog max input tokens");
+        if (catalogEntry.getReasoning() == null || catalogEntry.getReasoning().getDefaultLevel() == null) {
+            return catalogMax;
+        }
+        ModelReasoningLevel level = catalogEntry.getReasoning().getLevels().get(
+                catalogEntry.getReasoning().getDefaultLevel());
+        if (level == null || level.getMaxInputTokens() == null) {
+            return catalogMax;
+        }
+        return normalizePositiveInteger(level.getMaxInputTokens(), "catalog reasoning max input tokens");
+    }
+
+    private LlmReasoningEffort resolveReasoningEffort(LlmModelConfig modelConfig, ModelCatalogEntry catalogEntry) {
+        LlmReasoningEffort explicit = normalizeReasoningEffort(modelConfig.getReasoningEffort());
+        if (explicit != null || catalogEntry == null || catalogEntry.getReasoning() == null) {
+            return explicit;
+        }
+        LlmReasoningEffort catalogDefault = LlmReasoningEffort.fromJson(catalogEntry.getReasoning().getDefaultLevel());
+        return catalogDefault == LlmReasoningEffort.NONE ? null : normalizeReasoningEffort(catalogDefault);
     }
 
     private LlmReasoningEffort normalizeReasoningEffort(LlmReasoningEffort value) {

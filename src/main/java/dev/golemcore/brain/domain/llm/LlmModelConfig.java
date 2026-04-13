@@ -17,6 +17,7 @@ public class LlmModelConfig {
     private String displayName;
     private LlmModelKind kind;
     private Boolean enabled;
+    private Boolean supportsTemperature;
     private Integer maxInputTokens;
     private Integer dimensions;
     private Double temperature;

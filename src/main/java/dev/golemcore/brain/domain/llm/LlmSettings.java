@@ -20,4 +20,7 @@ public class LlmSettings {
 
     @Builder.Default
     private List<LlmModelConfig> models = new ArrayList<>();
+
+    @Builder.Default
+    private ModelRegistryConfig modelRegistry = ModelRegistryConfig.builder().build();
 }
