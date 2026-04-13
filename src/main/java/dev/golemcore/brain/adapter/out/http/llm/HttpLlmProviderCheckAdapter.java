@@ -1,10 +1,14 @@
 package dev.golemcore.brain.adapter.out.http.llm;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.golemcore.brain.application.port.out.LlmProviderCheckPort;
 import dev.golemcore.brain.domain.Secret;
 import dev.golemcore.brain.domain.llm.LlmApiType;
 import dev.golemcore.brain.domain.llm.LlmProviderCheckResult;
 import dev.golemcore.brain.domain.llm.LlmProviderConfig;
+import dev.langchain4j.model.catalog.ModelDescription;
+import dev.langchain4j.model.openai.OpenAiModelCatalog;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -12,6 +16,10 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -21,11 +29,13 @@ public class HttpLlmProviderCheckAdapter implements LlmProviderCheckPort {
 
     private static final String USER_AGENT = "golemcore-brain-llm-settings";
     private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(30);
+    private static final Pattern HTTP_URI_PATTERN = Pattern.compile("(?i)^https?://[^\\s]+$");
 
     private final HttpClient httpClient = HttpClient.newBuilder()
             .followRedirects(HttpClient.Redirect.NORMAL)
             .connectTimeout(DEFAULT_TIMEOUT)
             .build();
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
     public LlmProviderCheckResult check(String providerName, LlmProviderConfig providerConfig) {
@@ -39,20 +49,29 @@ public class HttpLlmProviderCheckAdapter implements LlmProviderCheckPort {
         String apiKey = Secret.valueOrEmpty(providerConfig.getApiKey());
         String uri = buildModelsUri(apiType, providerConfig.getBaseUrl(), apiKey);
 
-        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(java.net.URI.create(uri))
-                .GET()
-                .timeout(timeout)
-                .header("Accept", "application/json")
-                .header("User-Agent", USER_AGENT);
-        applyAuthHeaders(requestBuilder, apiType, apiKey);
-
         try {
+            if (apiType == LlmApiType.OPENAI) {
+                List<String> modelIds = listOpenAiModels(providerConfig, apiKey, timeout);
+                return new LlmProviderCheckResult(true, modelListingMessage(modelIds), 200, modelIds);
+            }
+
+            if (!HTTP_URI_PATTERN.matcher(uri).matches()) {
+                throw new IllegalArgumentException("LLM endpoint must use HTTP or HTTPS");
+            }
+            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(java.net.URI.create(uri))
+                    .GET()
+                    .timeout(timeout)
+                    .header("Accept", "application/json")
+                    .header("User-Agent", USER_AGENT);
+            applyAuthHeaders(requestBuilder, apiType, apiKey);
+
             HttpResponse<String> response = httpClient.send(
                     requestBuilder.build(),
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             int status = response.statusCode();
             if (status >= 200 && status < 300) {
-                return new LlmProviderCheckResult(true, "Provider responded to model listing", status);
+                List<String> modelIds = extractModelIds(apiType, response.body());
+                return new LlmProviderCheckResult(true, modelListingMessage(modelIds), status, modelIds);
             }
             return new LlmProviderCheckResult(false, messageForStatus(status), status);
         } catch (IOException exception) {
@@ -62,9 +81,31 @@ public class HttpLlmProviderCheckAdapter implements LlmProviderCheckPort {
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             return new LlmProviderCheckResult(false, "Provider check interrupted", null);
-        } catch (IllegalArgumentException exception) {
-            return new LlmProviderCheckResult(false, exception.getMessage(), null);
+        } catch (RuntimeException exception) {
+            String message = runtimeFailureMessage(exception);
+            log.debug("LLM provider check failed for {}: {}", providerName, message);
+            return new LlmProviderCheckResult(false, message, null);
         }
+    }
+
+    private List<String> listOpenAiModels(LlmProviderConfig providerConfig, String apiKey, Duration timeout) {
+        String baseUrl = LlmEndpointResolver.canonicalBaseUrl(providerConfig.getBaseUrl(), "https://api.openai.com/v1");
+        if (!HTTP_URI_PATTERN.matcher(baseUrl).matches()) {
+            throw new IllegalArgumentException("LLM endpoint must use HTTP or HTTPS");
+        }
+        return OpenAiModelCatalog.builder()
+                .apiKey(apiKey)
+                .baseUrl(baseUrl)
+                .connectTimeout(timeout)
+                .readTimeout(timeout)
+                .userAgent(USER_AGENT)
+                .build()
+                .listModels()
+                .stream()
+                .map(ModelDescription::name)
+                .filter(modelId -> modelId != null && !modelId.isBlank())
+                .distinct()
+                .toList();
     }
 
     static String networkFailureMessage(IOException exception) {
@@ -76,6 +117,65 @@ public class HttpLlmProviderCheckAdapter implements LlmProviderCheckPort {
             return "Provider check failed: could not reach the provider endpoint";
         }
         return "Provider check failed: " + detail;
+    }
+
+    static String runtimeFailureMessage(RuntimeException exception) {
+        String detail = firstReadableDetail(exception.getMessage());
+        if (detail == null && exception.getCause() != null) {
+            detail = firstReadableDetail(exception.getCause().getMessage());
+        }
+        if (detail == null) {
+            return "Provider check failed: could not reach the provider endpoint";
+        }
+        return "Provider check failed: " + detail;
+    }
+
+    private List<String> extractModelIds(LlmApiType apiType, String responseBody) {
+        try {
+            JsonNode root = objectMapper.readTree(responseBody);
+            JsonNode listing = apiType == LlmApiType.GEMINI ? root.path("models") : root.path("data");
+            if (!listing.isArray()) {
+                return List.of();
+            }
+            Set<String> modelIds = new LinkedHashSet<>();
+            for (JsonNode modelNode : listing) {
+                String modelId = extractModelId(apiType, modelNode);
+                if (modelId != null) {
+                    modelIds.add(modelId);
+                }
+            }
+            return List.copyOf(modelIds);
+        } catch (IOException exception) {
+            log.debug("Failed to parse LLM provider model listing: {}", exception.getMessage());
+            return List.of();
+        }
+    }
+
+    private String extractModelId(LlmApiType apiType, JsonNode modelNode) {
+        String id = textValue(modelNode.path("id"));
+        if (id != null || apiType != LlmApiType.GEMINI) {
+            return id;
+        }
+        String name = textValue(modelNode.path("name"));
+        if (name == null) {
+            return null;
+        }
+        return name.startsWith("models/") ? name.substring("models/".length()) : name;
+    }
+
+    private String textValue(JsonNode node) {
+        if (node == null || !node.isTextual()) {
+            return null;
+        }
+        String value = node.asText().trim();
+        return value.isEmpty() ? null : value;
+    }
+
+    private String modelListingMessage(List<String> modelIds) {
+        if (modelIds.isEmpty()) {
+            return "Provider responded to model listing";
+        }
+        return "Provider responded to model listing (" + modelIds.size() + " models)";
     }
 
     private static String firstReadableDetail(String value) {

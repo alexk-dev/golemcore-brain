@@ -4,6 +4,7 @@ import dev.golemcore.brain.application.port.out.LlmChatPort;
 import dev.golemcore.brain.application.port.out.LlmEmbeddingPort;
 import dev.golemcore.brain.application.port.out.LlmProviderCheckPort;
 import dev.golemcore.brain.application.port.out.LlmSettingsRepository;
+import dev.golemcore.brain.application.port.out.ModelRegistryRemotePort;
 import dev.golemcore.brain.application.service.auth.AuthService;
 import dev.golemcore.brain.domain.llm.LlmChatResponse;
 import dev.golemcore.brain.domain.llm.LlmEmbeddingResponse;
@@ -89,6 +90,7 @@ class LlmSettingsControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.providers.openai.apiKey.present", is(true)))
                 .andExpect(jsonPath("$.providers.openai.apiKey.value", nullValue()))
+                .andExpect(jsonPath("$.providers.openai.legacyApi", is(false)))
                 .andReturn();
         assertFalse(createResult.getResponse().getContentAsString().contains("sk-secret"));
 
@@ -105,6 +107,7 @@ class LlmSettingsControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.providers.openai.apiKey.present", is(true)))
                 .andExpect(jsonPath("$.providers.openai.apiKey.value", nullValue()))
+                .andExpect(jsonPath("$.providers.openai.legacyApi", is(false)))
                 .andExpect(jsonPath("$.providers.openai.baseUrl", is("https://gateway.example/v1")))
                 .andReturn();
         assertFalse(updateResult.getResponse().getContentAsString().contains("sk-secret"));
@@ -121,7 +124,7 @@ class LlmSettingsControllerTest {
                           "kind": "chat",
                           "enabled": true,
                           "supportsTemperature": false,
-                          "reasoningEffort": "high"
+                          "reasoningEffort": "minimal"
                         }
                         """))
                 .andExpect(status().isCreated())
@@ -130,7 +133,7 @@ class LlmSettingsControllerTest {
                 .andExpect(jsonPath("$.models[0].kind", is("chat")))
                 .andExpect(jsonPath("$.models[0].temperature", nullValue()))
                 .andExpect(jsonPath("$.models[0].supportsTemperature", is(false)))
-                .andExpect(jsonPath("$.models[0].reasoningEffort", is("high")));
+                .andExpect(jsonPath("$.models[0].reasoningEffort", is("minimal")));
 
         mockMvc.perform(post("/api/llm/providers/check")
                 .cookie(adminSession)
@@ -173,6 +176,12 @@ class LlmSettingsControllerTest {
         @Primary
         LlmProviderCheckPort testLlmProviderCheckPort() {
             return (providerName, providerConfig) -> new LlmProviderCheckResult(true, "Provider test completed", 200);
+        }
+
+        @Bean
+        @Primary
+        ModelRegistryRemotePort testModelRegistryRemotePort() {
+            return uri -> null;
         }
 
         @Bean

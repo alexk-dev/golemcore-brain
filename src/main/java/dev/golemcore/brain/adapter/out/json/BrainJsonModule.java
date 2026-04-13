@@ -3,7 +3,6 @@ package dev.golemcore.brain.adapter.out.json;
 import dev.golemcore.brain.domain.Secret;
 import dev.golemcore.brain.domain.llm.LlmApiType;
 import dev.golemcore.brain.domain.llm.LlmModelKind;
-import dev.golemcore.brain.domain.llm.LlmReasoningEffort;
 import java.io.Serial;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
@@ -33,8 +32,6 @@ public class BrainJsonModule extends SimpleModule {
         addDeserializer(LlmApiType.class, new LlmApiTypeDeserializer());
         addSerializer(LlmModelKind.class, new LlmModelKindSerializer());
         addDeserializer(LlmModelKind.class, new LlmModelKindDeserializer());
-        addSerializer(LlmReasoningEffort.class, new LlmReasoningEffortSerializer());
-        addDeserializer(LlmReasoningEffort.class, new LlmReasoningEffortDeserializer());
     }
 
     private static class SecretSerializer extends ValueSerializer<Secret> {
@@ -110,18 +107,4 @@ public class BrainJsonModule extends SimpleModule {
         }
     }
 
-    private static class LlmReasoningEffortSerializer extends ValueSerializer<LlmReasoningEffort> {
-        @Override
-        public void serialize(LlmReasoningEffort value, JsonGenerator generator, SerializationContext context)
-                throws JacksonException {
-            generator.writeString(value == null ? null : value.getValue());
-        }
-    }
-
-    private static class LlmReasoningEffortDeserializer extends ValueDeserializer<LlmReasoningEffort> {
-        @Override
-        public LlmReasoningEffort deserialize(tools.jackson.core.JsonParser parser, DeserializationContext context) {
-            return LlmReasoningEffort.fromJson(parser.getValueAsString(null));
-        }
-    }
 }

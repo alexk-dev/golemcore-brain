@@ -287,7 +287,6 @@ export interface Secret {
 
 export type LlmApiType = 'openai' | 'anthropic' | 'gemini'
 export type LlmModelKind = 'chat' | 'embedding'
-export type LlmReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh'
 
 export interface LlmProviderConfig {
   apiKey: Secret | null
@@ -310,7 +309,7 @@ export interface LlmModelConfig {
   maxInputTokens: number | null
   dimensions: number | null
   temperature: number | null
-  reasoningEffort: LlmReasoningEffort | null
+  reasoningEffort: string | null
   createdAt?: string
   updatedAt?: string
 }
@@ -369,13 +368,14 @@ export interface SaveLlmModelPayload {
   maxInputTokens?: number | null
   dimensions?: number | null
   temperature?: number | null
-  reasoningEffort?: LlmReasoningEffort | null
+  reasoningEffort?: string | null
 }
 
 export interface LlmProviderCheckResult {
   success: boolean
   message: string
   statusCode: number | null
+  models?: string[] | null
 }
 
 export interface DynamicSpaceApiConfig {

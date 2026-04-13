@@ -9,7 +9,6 @@ import dev.golemcore.brain.domain.llm.LlmModelConfig;
 import dev.golemcore.brain.domain.llm.LlmModelKind;
 import dev.golemcore.brain.domain.llm.LlmProviderCheckResult;
 import dev.golemcore.brain.domain.llm.LlmProviderConfig;
-import dev.golemcore.brain.domain.llm.LlmReasoningEffort;
 import dev.golemcore.brain.domain.llm.LlmSettings;
 import dev.golemcore.brain.domain.llm.ModelRegistryConfig;
 import dev.golemcore.brain.domain.llm.ModelRegistryResolveResult;
@@ -204,7 +203,7 @@ public class LlmSettingsController {
         private Integer maxInputTokens;
         private Integer dimensions;
         private Double temperature;
-        private LlmReasoningEffort reasoningEffort;
+        private String reasoningEffort;
     }
 
     @Data

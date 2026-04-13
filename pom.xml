@@ -33,6 +33,7 @@
         <pmd.version>3.28.0</pmd.version>
         <jacoco.version>0.8.14</jacoco.version>
         <jib.version>3.5.1</jib.version>
+        <langchain4j.version>1.12.2</langchain4j.version>
         <lucene.version>9.12.1</lucene.version>
         <sqlite-jdbc.version>3.49.1.0</sqlite-jdbc.version>
         <jib.target.image>ghcr.io/${env.GITHUB_REPOSITORY}</jib.target.image>
@@ -73,6 +74,21 @@
             <groupId>org.xerial</groupId>
             <artifactId>sqlite-jdbc</artifactId>
             <version>${sqlite-jdbc.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j</artifactId>
+            <version>${langchain4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-open-ai</artifactId>
+            <version>${langchain4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-http-client-jdk</artifactId>
+            <version>${langchain4j.version}</version>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
