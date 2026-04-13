@@ -56,6 +56,13 @@ jobs:
       - name: Package application
         run: ./mvnw -DskipTests package
 
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run packaged context-path smoke test
+        run: bash .github/scripts/run-brain-context-smoke.sh
+
   build-app-images:
     name: App (${{ matrix.arch }})
     runs-on: ubuntu-latest

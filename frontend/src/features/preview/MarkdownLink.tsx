@@ -1,8 +1,9 @@
 import type { AnchorHTMLAttributes, ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
+import { isAppApiPath } from '../../lib/basePath'
 import { normalizeWikiPath, resolveWikiLinkPath } from '../../lib/paths'
-import { normalizeAssetUrl } from '../assets/assetUrls'
+import { normalizeAssetUrl, toBrowserAssetUrl } from '../assets/assetUrls'
 
 interface MarkdownLinkProps extends AnchorHTMLAttributes<HTMLAnchorElement> {
   href?: string
@@ -20,7 +21,7 @@ export function MarkdownLink({ href, children, currentPath, ...props }: Markdown
     !normalizedHref.startsWith('http') &&
     !normalizedHref.startsWith('mailto:') &&
     !normalizedHref.startsWith('#') &&
-    !normalizedHref.startsWith('/api/')
+    !isAppApiPath(normalizedHref)
 
   if (isInternal) {
     const nextPath = normalizedHref.startsWith('/')
@@ -34,7 +35,7 @@ export function MarkdownLink({ href, children, currentPath, ...props }: Markdown
   }
 
   return (
-    <a href={normalizedHref} {...props} className="text-accent hover:underline" target="_blank" rel="noreferrer">
+    <a href={toBrowserAssetUrl(normalizedHref)} {...props} className="text-accent hover:underline" target="_blank" rel="noreferrer">
       {children}
     </a>
   )

@@ -6,7 +6,7 @@ import { ModalCard } from '../../components/ModalCard'
 import { deleteAsset, listAssets, renameAsset, uploadAsset } from '../../lib/api'
 import type { WikiAsset } from '../../types'
 import { buildDefaultMarkdownForAsset, buildImageMarkdown, buildLinkMarkdown, buildMediaMarkdown } from './assetMarkdown'
-import { normalizeAsset, normalizeAssetUrl } from './assetUrls'
+import { normalizeAsset, toBrowserAssetUrl } from './assetUrls'
 
 interface AssetManagerDialogProps {
   open: boolean
@@ -260,7 +260,7 @@ export function AssetManagerDialog({
               <div className="mt-2">
                 <a
                   className="text-xs text-accent hover:underline"
-                  href={normalizeAssetUrl(asset.path)}
+                  href={toBrowserAssetUrl(asset.path)}
                   target="_blank"
                   rel="noreferrer"
                   aria-label={`Preview ${asset.name}`}

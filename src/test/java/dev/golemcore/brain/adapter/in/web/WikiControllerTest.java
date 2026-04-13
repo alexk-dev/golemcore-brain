@@ -56,6 +56,9 @@ class WikiControllerTest {
         mockMvc.perform(get("/api/spaces/default/tree"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.kind", is("ROOT")));
+        mockMvc.perform(get("/brain/api/spaces/default/tree").contextPath("/brain"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.kind", is("ROOT")));
 
         mockMvc.perform(post("/api/spaces/default/pages")
                 .contentType("application/json")

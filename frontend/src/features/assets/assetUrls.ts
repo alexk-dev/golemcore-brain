@@ -1,4 +1,5 @@
 import * as api from '../../lib/api'
+import { isAppApiPath, withAppBasePath } from '../../lib/basePath'
 import type { WikiAsset } from '../../types'
 
 function isAbsoluteUrl(url: string): boolean {
@@ -18,6 +19,11 @@ export function normalizeAssetUrl(url: string): string {
     return url
   }
   return buildAssetUrl(url.slice('/api'.length))
+}
+
+export function toBrowserAssetUrl(url: string): string {
+  const normalizedUrl = normalizeAssetUrl(url)
+  return isAppApiPath(normalizedUrl) ? withAppBasePath(normalizedUrl) : normalizedUrl
 }
 
 export function normalizeAsset(asset: WikiAsset): WikiAsset {
