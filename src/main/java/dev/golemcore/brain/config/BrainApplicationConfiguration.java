@@ -10,6 +10,9 @@ import dev.golemcore.brain.application.port.out.LlmChatPort;
 import dev.golemcore.brain.application.port.out.LlmEmbeddingPort;
 import dev.golemcore.brain.application.port.out.LlmProviderCheckPort;
 import dev.golemcore.brain.application.port.out.LlmSettingsRepository;
+import dev.golemcore.brain.application.port.out.ModelRegistryCachePort;
+import dev.golemcore.brain.application.port.out.ModelRegistryDocumentPort;
+import dev.golemcore.brain.application.port.out.ModelRegistryRemotePort;
 import dev.golemcore.brain.application.port.out.SpaceRepository;
 import dev.golemcore.brain.application.port.out.WikiEmbeddingIndexPort;
 import dev.golemcore.brain.application.port.out.WikiFullTextIndexPort;
@@ -23,6 +26,7 @@ import dev.golemcore.brain.application.service.auth.PasswordHasher;
 import dev.golemcore.brain.application.service.dynamicapi.DynamicSpaceApiService;
 import dev.golemcore.brain.application.service.index.WikiIndexingService;
 import dev.golemcore.brain.application.service.llm.LlmSettingsService;
+import dev.golemcore.brain.application.service.llm.ModelRegistryService;
 import dev.golemcore.brain.application.service.space.SpaceService;
 import dev.golemcore.brain.application.service.user.UserManagementService;
 import org.springframework.context.annotation.Bean;
@@ -98,8 +102,27 @@ public class BrainApplicationConfiguration {
             LlmSettingsRepository llmSettingsRepository,
             LlmProviderCheckPort llmProviderCheckPort,
             LlmChatPort llmChatPort,
-            LlmEmbeddingPort llmEmbeddingPort) {
-        return new LlmSettingsService(llmSettingsRepository, llmProviderCheckPort, llmChatPort, llmEmbeddingPort);
+            LlmEmbeddingPort llmEmbeddingPort,
+            ModelRegistryService modelRegistryService) {
+        return new LlmSettingsService(
+                llmSettingsRepository,
+                llmProviderCheckPort,
+                llmChatPort,
+                llmEmbeddingPort,
+                modelRegistryService);
+    }
+
+    @Bean
+    public ModelRegistryService modelRegistryService(
+            LlmSettingsRepository llmSettingsRepository,
+            ModelRegistryRemotePort modelRegistryRemotePort,
+            ModelRegistryCachePort modelRegistryCachePort,
+            ModelRegistryDocumentPort modelRegistryDocumentPort) {
+        return new ModelRegistryService(
+                llmSettingsRepository,
+                modelRegistryRemotePort,
+                modelRegistryCachePort,
+                modelRegistryDocumentPort);
     }
 
     @Bean

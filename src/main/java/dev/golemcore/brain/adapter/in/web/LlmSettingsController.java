@@ -11,6 +11,8 @@ import dev.golemcore.brain.domain.llm.LlmProviderCheckResult;
 import dev.golemcore.brain.domain.llm.LlmProviderConfig;
 import dev.golemcore.brain.domain.llm.LlmReasoningEffort;
 import dev.golemcore.brain.domain.llm.LlmSettings;
+import dev.golemcore.brain.domain.llm.ModelRegistryConfig;
+import dev.golemcore.brain.domain.llm.ModelRegistryResolveResult;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -107,6 +109,28 @@ public class LlmSettingsController {
         return llmSettingsService.deleteModel(resolveContext(request), id);
     }
 
+    @GetMapping("/model-registry")
+    public ModelRegistryConfig getModelRegistry(HttpServletRequest request) {
+        return llmSettingsService.getModelRegistryConfig(resolveContext(request));
+    }
+
+    @PutMapping("/model-registry")
+    public LlmSettings updateModelRegistry(
+            @RequestBody SaveModelRegistryRequest payload,
+            HttpServletRequest request) {
+        return llmSettingsService.updateModelRegistryConfig(resolveContext(request), toModelRegistryConfig(payload));
+    }
+
+    @PostMapping("/model-registry/resolve")
+    public ModelRegistryResolveResult resolveModelRegistry(
+            @Valid @RequestBody ResolveModelRegistryRequest payload,
+            HttpServletRequest request) {
+        return llmSettingsService.resolveModelRegistry(
+                resolveContext(request),
+                payload.getProvider(),
+                payload.getModelId());
+    }
+
     private AuthContext resolveContext(HttpServletRequest request) {
         return authContextResolver.requireAuthenticated(request);
     }
@@ -117,6 +141,7 @@ public class LlmSettingsController {
                 .baseUrl(payload.getBaseUrl())
                 .requestTimeoutSeconds(payload.getRequestTimeoutSeconds())
                 .apiType(payload.getApiType())
+                .legacyApi(payload.getLegacyApi())
                 .build();
     }
 
@@ -127,10 +152,21 @@ public class LlmSettingsController {
                 .displayName(payload.getDisplayName())
                 .kind(payload.getKind())
                 .enabled(payload.getEnabled())
+                .supportsTemperature(payload.getSupportsTemperature())
                 .maxInputTokens(payload.getMaxInputTokens())
                 .dimensions(payload.getDimensions())
                 .temperature(payload.getTemperature())
                 .reasoningEffort(payload.getReasoningEffort())
+                .build();
+    }
+
+    private ModelRegistryConfig toModelRegistryConfig(SaveModelRegistryRequest payload) {
+        if (payload == null) {
+            return ModelRegistryConfig.builder().build();
+        }
+        return ModelRegistryConfig.builder()
+                .repositoryUrl(payload.getRepositoryUrl())
+                .branch(payload.getBranch())
                 .build();
     }
 
@@ -146,6 +182,7 @@ public class LlmSettingsController {
 
         private Integer requestTimeoutSeconds;
         private LlmApiType apiType;
+        private Boolean legacyApi;
     }
 
     @Data
@@ -163,9 +200,30 @@ public class LlmSettingsController {
 
         private LlmModelKind kind;
         private Boolean enabled;
+        private Boolean supportsTemperature;
         private Integer maxInputTokens;
         private Integer dimensions;
         private Double temperature;
         private LlmReasoningEffort reasoningEffort;
+    }
+
+    @Data
+    public static class SaveModelRegistryRequest {
+        @Size(max = 500)
+        private String repositoryUrl;
+
+        @Size(max = 120)
+        private String branch;
+    }
+
+    @Data
+    public static class ResolveModelRegistryRequest {
+        @NotBlank
+        @Size(max = 80)
+        private String provider;
+
+        @NotBlank
+        @Size(max = 240)
+        private String modelId;
     }
 }

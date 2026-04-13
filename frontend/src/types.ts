@@ -260,13 +260,14 @@ export interface Secret {
 
 export type LlmApiType = 'openai' | 'anthropic' | 'gemini'
 export type LlmModelKind = 'chat' | 'embedding'
-export type LlmReasoningEffort = 'low' | 'medium' | 'high'
+export type LlmReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh'
 
 export interface LlmProviderConfig {
   apiKey: Secret | null
   baseUrl: string | null
   requestTimeoutSeconds: number | null
   apiType: LlmApiType | null
+  legacyApi: boolean | null
   createdAt?: string
   updatedAt?: string
 }
@@ -278,6 +279,7 @@ export interface LlmModelConfig {
   displayName: string | null
   kind: LlmModelKind
   enabled: boolean
+  supportsTemperature: boolean | null
   maxInputTokens: number | null
   dimensions: number | null
   temperature: number | null
@@ -286,9 +288,39 @@ export interface LlmModelConfig {
   updatedAt?: string
 }
 
+export interface ModelRegistryConfig {
+  repositoryUrl: string | null
+  branch: string | null
+}
+
+export interface ModelReasoningLevel {
+  maxInputTokens: number | null
+}
+
+export interface ModelReasoningProfile {
+  default: string | null
+  levels: Record<string, ModelReasoningLevel>
+}
+
+export interface ModelCatalogEntry {
+  provider: string | null
+  displayName: string | null
+  supportsVision: boolean | null
+  supportsTemperature: boolean | null
+  maxInputTokens: number | null
+  reasoning: ModelReasoningProfile | null
+}
+
+export interface ModelRegistryResolveResult {
+  defaultSettings: ModelCatalogEntry | null
+  configSource: string | null
+  cacheStatus: string
+}
+
 export interface LlmSettings {
   providers: Record<string, LlmProviderConfig>
   models: LlmModelConfig[]
+  modelRegistry: ModelRegistryConfig | null
 }
 
 export interface SaveLlmProviderPayload {
@@ -297,6 +329,7 @@ export interface SaveLlmProviderPayload {
   baseUrl?: string | null
   requestTimeoutSeconds?: number | null
   apiType?: LlmApiType | null
+  legacyApi?: boolean | null
 }
 
 export interface SaveLlmModelPayload {
@@ -305,6 +338,7 @@ export interface SaveLlmModelPayload {
   displayName?: string | null
   kind?: LlmModelKind | null
   enabled?: boolean | null
+  supportsTemperature?: boolean | null
   maxInputTokens?: number | null
   dimensions?: number | null
   temperature?: number | null

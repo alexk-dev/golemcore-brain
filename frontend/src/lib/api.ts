@@ -10,6 +10,8 @@ import type {
   IssuedApiKey,
   LlmProviderCheckResult,
   LlmSettings,
+  ModelRegistryConfig,
+  ModelRegistryResolveResult,
   MovePagePayload,
   PublicUserView,
   MarkdownImportOptions,
@@ -272,6 +274,24 @@ export function updateLlmModel(id: string, payload: SaveLlmModelPayload): Promis
 export function deleteLlmModel(id: string): Promise<LlmSettings> {
   return readJson<LlmSettings>(`/api/llm/models/${encodeURIComponent(id)}`, {
     method: 'DELETE',
+  })
+}
+
+export function getModelRegistryConfig(): Promise<ModelRegistryConfig> {
+  return readJson<ModelRegistryConfig>('/api/llm/model-registry')
+}
+
+export function updateModelRegistryConfig(payload: ModelRegistryConfig): Promise<LlmSettings> {
+  return readJson<LlmSettings>('/api/llm/model-registry', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function resolveModelRegistry(provider: string, modelId: string): Promise<ModelRegistryResolveResult> {
+  return readJson<ModelRegistryResolveResult>('/api/llm/model-registry/resolve', {
+    method: 'POST',
+    body: JSON.stringify({ provider, modelId }),
   })
 }
 

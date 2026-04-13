@@ -16,6 +16,7 @@ public class LlmProviderConfig {
     private String baseUrl;
     private Integer requestTimeoutSeconds;
     private LlmApiType apiType;
+    private Boolean legacyApi;
     private Instant createdAt;
     private Instant updatedAt;
 }

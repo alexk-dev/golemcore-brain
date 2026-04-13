@@ -120,6 +120,7 @@ class LlmSettingsControllerTest {
                           "displayName": "Reasoning Chat",
                           "kind": "chat",
                           "enabled": true,
+                          "supportsTemperature": false,
                           "reasoningEffort": "high"
                         }
                         """))
@@ -128,6 +129,7 @@ class LlmSettingsControllerTest {
                 .andExpect(jsonPath("$.models[0].modelId", is("gpt-5.4")))
                 .andExpect(jsonPath("$.models[0].kind", is("chat")))
                 .andExpect(jsonPath("$.models[0].temperature", nullValue()))
+                .andExpect(jsonPath("$.models[0].supportsTemperature", is(false)))
                 .andExpect(jsonPath("$.models[0].reasoningEffort", is("high")));
 
         mockMvc.perform(post("/api/llm/providers/check")
@@ -157,6 +159,7 @@ class LlmSettingsControllerTest {
                           "modelId": "gpt-5.4",
                           "kind": "chat",
                           "enabled": true,
+                          "supportsTemperature": false,
                           "reasoningEffort": "medium"
                         }
                         """))

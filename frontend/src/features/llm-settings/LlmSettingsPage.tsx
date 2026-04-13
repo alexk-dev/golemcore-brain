@@ -12,6 +12,7 @@ import {
   deleteLlmModel,
   deleteLlmProvider,
   getLlmSettings,
+  resolveModelRegistry,
   updateLlmModel,
   updateLlmProvider,
 } from '../../lib/api'
@@ -45,19 +46,19 @@ interface ModelFormState {
   dimensions: string
   temperature: string
   chatTuning: 'temperature' | 'reasoning'
-  reasoningEffort: 'low' | 'medium' | 'high'
+  reasoningEffort: 'none' | 'low' | 'medium' | 'high' | 'xhigh'
 }
 
 type LlmSettingsTab = 'providers' | 'models'
 type LlmSettingsModal = 'provider' | 'model' | null
 
-const EMPTY_SETTINGS: LlmSettings = { providers: {}, models: [] }
+const EMPTY_SETTINGS: LlmSettings = { providers: {}, models: [], modelRegistry: null }
 const API_TYPES: LlmApiType[] = ['openai', 'anthropic', 'gemini']
 const MODEL_KINDS: LlmModelKind[] = ['chat', 'embedding']
 const DEFAULT_PROVIDER_NAME = 'openai'
 const DEFAULT_CHAT_MODEL_ID = 'gpt-5.4'
 const DEFAULT_EMBEDDING_MODEL_ID = 'text-embedding-3-large'
-const REASONING_EFFORTS = ['low', 'medium', 'high'] as const
+const REASONING_EFFORTS = ['none', 'low', 'medium', 'high', 'xhigh'] as const
 
 const KNOWN_BASE_URLS: Record<string, string> = {
   openai: 'https://api.openai.com/v1',
@@ -128,6 +129,12 @@ function modelLabel(model: LlmModelConfig): string {
   return model.displayName?.trim() || model.modelId
 }
 
+function normalizeReasoningEffort(value: string | null | undefined): ModelFormState['reasoningEffort'] {
+  return REASONING_EFFORTS.includes(value as ModelFormState['reasoningEffort'])
+    ? value as ModelFormState['reasoningEffort']
+    : 'none'
+}
+
 export function LlmSettingsPage() {
   const currentUser = useUiStore((state) => state.currentUser)
   const isAdmin = currentUser?.role === 'ADMIN'
@@ -144,6 +151,7 @@ export function LlmSettingsPage() {
   const [checkingProviderForm, setCheckingProviderForm] = useState(false)
   const [checkingModelForm, setCheckingModelForm] = useState(false)
   const [checkingSavedModelId, setCheckingSavedModelId] = useState<string | null>(null)
+  const [resolvingModelCatalog, setResolvingModelCatalog] = useState(false)
   const [checkResults, setCheckResults] = useState<Record<string, LlmProviderCheckResult>>({})
   const [modelCheckResults, setModelCheckResults] = useState<Record<string, LlmProviderCheckResult>>({})
   const [providerFormCheckResult, setProviderFormCheckResult] = useState<LlmProviderCheckResult | null>(null)
@@ -267,6 +275,7 @@ export function LlmSettingsPage() {
       name: normalizeProviderName(providerForm.name),
       ...(secret ? { apiKey: secret } : { apiKey: null }),
       apiType: providerForm.apiType,
+      legacyApi: editingProvider ? settings.providers[editingProvider]?.legacyApi ?? false : false,
       baseUrl: toNullableString(providerForm.baseUrl),
       requestTimeoutSeconds: toNullableNumber(providerForm.requestTimeoutSeconds),
     }
@@ -281,6 +290,7 @@ export function LlmSettingsPage() {
       displayName: toNullableString(modelForm.displayName),
       kind: modelForm.kind,
       enabled: modelForm.enabled,
+      supportsTemperature: modelForm.kind === 'chat' ? modelForm.chatTuning === 'temperature' : null,
       maxInputTokens: toNullableNumber(modelForm.maxInputTokens),
       dimensions: isEmbedding ? toNullableNumber(modelForm.dimensions) : null,
       temperature: modelForm.kind === 'chat' && !isReasoning ? toNullableNumber(modelForm.temperature) : null,
@@ -320,6 +330,7 @@ export function LlmSettingsPage() {
     maxInputTokens: model.maxInputTokens,
     dimensions: model.dimensions,
     temperature: model.temperature,
+    supportsTemperature: model.kind === 'chat' ? model.supportsTemperature ?? false : null,
     reasoningEffort: model.reasoningEffort,
   })
 
@@ -352,6 +363,35 @@ export function LlmSettingsPage() {
       kind,
       modelId: kind === 'embedding' ? DEFAULT_EMBEDDING_MODEL_ID : DEFAULT_CHAT_MODEL_ID,
     }))
+  }
+
+  const handleApplyModelCatalogDefaults = async () => {
+    if (modelForm.provider.length === 0 || modelForm.modelId.trim().length === 0) {
+      toast.error('Provider and model ID are required')
+      return
+    }
+    setResolvingModelCatalog(true)
+    try {
+      const result = await resolveModelRegistry(modelForm.provider, modelForm.modelId.trim())
+      const defaults = result.defaultSettings
+      if (!defaults) {
+        toast.error('No catalog defaults found for this model')
+        return
+      }
+      setModelForm((state) => ({
+        ...state,
+        displayName: state.displayName || defaults.displayName || '',
+        maxInputTokens: defaults.maxInputTokens == null ? state.maxInputTokens : String(defaults.maxInputTokens),
+        chatTuning: defaults.reasoning ? 'reasoning' : defaults.supportsTemperature === false ? 'reasoning' : 'temperature',
+        reasoningEffort: normalizeReasoningEffort(defaults.reasoning?.default),
+        temperature: defaults.supportsTemperature === false ? '' : state.temperature,
+      }))
+      toast.success(`Catalog defaults applied (${result.cacheStatus})`)
+    } catch (error) {
+      toast.error((error as Error).message)
+    } finally {
+      setResolvingModelCatalog(false)
+    }
   }
 
   const handleEditProvider = (name: string) => {
@@ -719,6 +759,15 @@ export function LlmSettingsPage() {
                 ))}
               </select>
             </label>
+            {providerForm.apiType === 'openai' ? (
+              <label className="field">
+                <span className="text-sm font-medium">API endpoint</span>
+                <select className="field-input" value="responses" disabled>
+                  <option value="responses">/v1/responses</option>
+                </select>
+                <span className="text-xs text-muted">OpenAI-compatible chat uses Responses API by default.</span>
+              </label>
+            ) : null}
             <label className="field">
               <span className="text-sm font-medium">Base URL</span>
               <input
@@ -775,6 +824,9 @@ export function LlmSettingsPage() {
           <>
             <button type="button" className="action-button-secondary" onClick={closeModelModal} disabled={savingModel}>
               Cancel
+            </button>
+            <button type="button" className="action-button-secondary" onClick={() => void handleApplyModelCatalogDefaults()} disabled={resolvingModelCatalog || providerNames.length === 0}>
+              {resolvingModelCatalog ? 'Applying...' : 'Apply catalog defaults'}
             </button>
             <button type="button" className="action-button-secondary" onClick={() => void handleModelFormCheck()} disabled={checkingModelForm || providerNames.length === 0}>
               {checkingModelForm ? 'Testing...' : 'Test model'}
@@ -881,7 +933,7 @@ export function LlmSettingsPage() {
                     <select
                       className="field-input"
                       value={modelForm.reasoningEffort}
-                      onChange={(event) => setModelForm((state) => ({ ...state, reasoningEffort: event.target.value as 'low' | 'medium' | 'high' }))}
+                      onChange={(event) => setModelForm((state) => ({ ...state, reasoningEffort: event.target.value as 'none' | 'low' | 'medium' | 'high' | 'xhigh' }))}
                     >
                       {REASONING_EFFORTS.map((effort) => (
                         <option key={effort} value={effort}>{effort}</option>

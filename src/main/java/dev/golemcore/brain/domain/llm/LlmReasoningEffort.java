@@ -3,7 +3,7 @@ package dev.golemcore.brain.domain.llm;
 import java.util.Locale;
 
 public enum LlmReasoningEffort {
-    LOW("low"), MEDIUM("medium"), HIGH("high");
+    NONE("none"), LOW("low"), MEDIUM("medium"), HIGH("high"), XHIGH("xhigh");
 
     private final String value;
 

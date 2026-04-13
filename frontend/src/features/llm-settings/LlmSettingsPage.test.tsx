@@ -43,9 +43,11 @@ const initialSettings: LlmSettings = {
       baseUrl: 'https://api.openai.com/v1',
       requestTimeoutSeconds: 300,
       apiType: 'openai',
+      legacyApi: false,
     },
   },
   models: [],
+  modelRegistry: null,
 }
 
 describe('LlmSettingsPage', () => {
@@ -182,6 +184,7 @@ describe('LlmSettingsPage', () => {
         apiType: 'openai',
         baseUrl: 'https://api.openai.com/v1',
         requestTimeoutSeconds: 300,
+        legacyApi: false,
       })
       expect(checkLlmModelMock).toHaveBeenCalledWith({
         provider: 'openai',
@@ -189,6 +192,7 @@ describe('LlmSettingsPage', () => {
         displayName: null,
         kind: 'chat',
         enabled: true,
+        supportsTemperature: false,
         maxInputTokens: null,
         dimensions: null,
         temperature: null,
@@ -232,6 +236,7 @@ describe('LlmSettingsPage', () => {
         displayName: 'Reasoning Chat',
         kind: 'chat',
         enabled: true,
+        supportsTemperature: false,
         maxInputTokens: null,
         dimensions: null,
         temperature: null,
@@ -257,6 +262,7 @@ describe('LlmSettingsPage', () => {
         displayName: null,
         kind: 'chat',
         enabled: true,
+        supportsTemperature: false,
         maxInputTokens: null,
         dimensions: null,
         temperature: null,
@@ -290,6 +296,7 @@ describe('LlmSettingsPage', () => {
         displayName: 'Embedding Large',
         kind: 'embedding',
         enabled: true,
+        supportsTemperature: null,
         maxInputTokens: null,
         dimensions: 3072,
         temperature: null,

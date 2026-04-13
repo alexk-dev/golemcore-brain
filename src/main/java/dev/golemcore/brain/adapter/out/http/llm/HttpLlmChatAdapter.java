@@ -9,6 +9,7 @@ import dev.golemcore.brain.domain.llm.LlmChatRequest;
 import dev.golemcore.brain.domain.llm.LlmChatResponse;
 import dev.golemcore.brain.domain.llm.LlmEmbeddingRequest;
 import dev.golemcore.brain.domain.llm.LlmEmbeddingResponse;
+import dev.golemcore.brain.domain.llm.LlmReasoningEffort;
 import dev.golemcore.brain.domain.llm.LlmToolCall;
 import dev.golemcore.brain.domain.llm.LlmToolDefinition;
 import java.io.IOException;
@@ -101,9 +102,12 @@ public class HttpLlmChatAdapter implements LlmChatPort, LlmEmbeddingPort {
         Duration timeout = Duration.ofSeconds(request.getProvider().getRequestTimeoutSeconds() != null
                 ? request.getProvider().getRequestTimeoutSeconds()
                 : DEFAULT_TIMEOUT.toSeconds());
-        String uri = appendPath(LlmEndpointResolver.canonicalBaseUrl(request.getProvider().getBaseUrl(),
-                "https://api.openai.com/v1"), "/chat/completions");
-        String requestBody = writeJson(toOpenAiRequestBody(request));
+        boolean legacyApi = Boolean.TRUE.equals(request.getProvider().getLegacyApi());
+        String uri = appendPath(
+                LlmEndpointResolver.canonicalBaseUrl(request.getProvider().getBaseUrl(), "https://api.openai.com/v1"),
+                legacyApi ? "/chat/completions" : "/responses");
+        String requestBody = writeJson(
+                legacyApi ? toOpenAiRequestBody(request) : toOpenAiResponsesRequestBody(request));
 
         HttpRequest httpRequest = HttpRequest.newBuilder(URI.create(uri))
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
@@ -119,7 +123,7 @@ public class HttpLlmChatAdapter implements LlmChatPort, LlmEmbeddingPort {
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw new IllegalStateException("LLM chat request failed with HTTP " + response.statusCode());
             }
-            return parseOpenAiResponse(response.body());
+            return legacyApi ? parseOpenAiResponse(response.body()) : parseOpenAiResponsesResponse(response.body());
         } catch (IOException exception) {
             log.debug("LLM chat request failed: {}", exception.getMessage());
             throw new IllegalStateException("LLM chat request failed: " + exception.getMessage(), exception);
@@ -139,13 +143,67 @@ public class HttpLlmChatAdapter implements LlmChatPort, LlmEmbeddingPort {
         return body;
     }
 
+    private Map<String, Object> toOpenAiResponsesRequestBody(LlmChatRequest request) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("model", request.getModel().getModelId());
+        if (request.getSystemPrompt() != null && !request.getSystemPrompt().isBlank()) {
+            body.put("instructions", request.getSystemPrompt());
+        }
+        body.put("input", toOpenAiResponsesInput(request));
+        if (request.getModel().getReasoningEffort() != null
+                && request.getModel().getReasoningEffort() != LlmReasoningEffort.NONE) {
+            body.put("reasoning", Map.of("effort", request.getModel().getReasoningEffort().getValue()));
+        }
+        if (request.getModel().getTemperature() != null
+                && !Boolean.FALSE.equals(request.getModel().getSupportsTemperature())) {
+            body.put("temperature", request.getModel().getTemperature());
+        }
+        if (request.getTools() != null && !request.getTools().isEmpty()) {
+            body.put("tools", request.getTools().stream().map(this::toOpenAiResponsesTool).toList());
+            body.put("tool_choice", "auto");
+        }
+        return body;
+    }
+
+    private List<Map<String, Object>> toOpenAiResponsesInput(LlmChatRequest request) {
+        List<Map<String, Object>> input = new ArrayList<>();
+        for (LlmChatMessage message : request.getMessages()) {
+            if ("tool".equals(message.getRole())) {
+                input.add(Map.of(
+                        "type", "function_call_output",
+                        "call_id", message.getToolCallId(),
+                        "output", message.getContent() != null ? message.getContent() : ""));
+                continue;
+            }
+            if (message.getContent() != null || !message.hasToolCalls()) {
+                input.add(Map.of(
+                        "role", message.getRole(),
+                        "content", message.getContent() != null ? message.getContent() : ""));
+            }
+            if (message.hasToolCalls()) {
+                input.addAll(message.getToolCalls().stream().map(this::toOpenAiResponsesFunctionCall).toList());
+            }
+        }
+        return input;
+    }
+
+    private Map<String, Object> toOpenAiResponsesFunctionCall(LlmToolCall toolCall) {
+        return Map.of(
+                "type", "function_call",
+                "call_id", toolCall.getId(),
+                "name", toolCall.getName(),
+                "arguments", writeJson(toolCall.getArguments() != null ? toolCall.getArguments() : Map.of()));
+    }
+
     private Map<String, Object> toOpenAiRequestBody(LlmChatRequest request) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", request.getModel().getModelId());
         body.put("messages", toOpenAiMessages(request));
-        if (request.getModel().getReasoningEffort() != null) {
+        if (request.getModel().getReasoningEffort() != null
+                && request.getModel().getReasoningEffort() != LlmReasoningEffort.NONE) {
             body.put("reasoning_effort", request.getModel().getReasoningEffort().getValue());
-        } else if (request.getModel().getTemperature() != null) {
+        } else if (request.getModel().getTemperature() != null
+                && !Boolean.FALSE.equals(request.getModel().getSupportsTemperature())) {
             body.put("temperature", request.getModel().getTemperature());
         }
         if (request.getTools() != null && !request.getTools().isEmpty()) {
@@ -180,6 +238,14 @@ public class HttpLlmChatAdapter implements LlmChatPort, LlmEmbeddingPort {
             messages.add(mapped);
         }
         return messages;
+    }
+
+    private Map<String, Object> toOpenAiResponsesTool(LlmToolDefinition tool) {
+        return Map.of(
+                "type", "function",
+                "name", tool.getName(),
+                "description", tool.getDescription(),
+                "parameters", tool.getInputSchema());
     }
 
     private Map<String, Object> toOpenAiTool(LlmToolDefinition tool) {
@@ -227,6 +293,42 @@ public class HttpLlmChatAdapter implements LlmChatPort, LlmEmbeddingPort {
                 .toolCalls(parseToolCalls(asList(message.get("tool_calls"))))
                 .finishReason(asString(choice.get("finish_reason")))
                 .build();
+    }
+
+    private LlmChatResponse parseOpenAiResponsesResponse(String responseBody) {
+        Map<String, Object> body = objectMapper.readValue(responseBody, Map.class);
+        List<Object> output = asList(body.get("output"));
+        StringBuilder content = new StringBuilder();
+        List<LlmToolCall> toolCalls = new ArrayList<>();
+        for (Object rawItem : output) {
+            Map<String, Object> item = asMap(rawItem);
+            String type = asString(item.get("type"));
+            if ("message".equals(type)) {
+                appendResponseMessageText(content, asList(item.get("content")));
+            } else if ("function_call".equals(type)) {
+                toolCalls.add(LlmToolCall.builder()
+                        .id(asString(item.get("call_id")) != null ? asString(item.get("call_id"))
+                                : asString(item.get("id")))
+                        .name(asString(item.get("name")))
+                        .arguments(parseArguments(item.get("arguments")))
+                        .build());
+            }
+        }
+        return LlmChatResponse.builder()
+                .content(content.isEmpty() ? null : content.toString())
+                .toolCalls(toolCalls)
+                .finishReason(asString(body.get("status")))
+                .build();
+    }
+
+    private void appendResponseMessageText(StringBuilder content, List<Object> contentItems) {
+        for (Object rawContent : contentItems) {
+            Map<String, Object> contentItem = asMap(rawContent);
+            String text = asString(contentItem.get("text"));
+            if (text != null) {
+                content.append(text);
+            }
+        }
     }
 
     private List<LlmToolCall> parseToolCalls(List<Object> toolCalls) {
