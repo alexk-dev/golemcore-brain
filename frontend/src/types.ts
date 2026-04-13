@@ -101,6 +101,33 @@ export interface WikiSemanticSearchResult {
   fallbackHits: WikiSearchHit[]
 }
 
+export interface SpaceChatSource {
+  path: string
+  title: string
+  excerpt: string
+}
+
+export interface SpaceChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface SpaceChatRequest {
+  message: string
+  history: SpaceChatMessage[]
+  modelConfigId: string | null
+  summary: string | null
+  turnCount: number | null
+}
+
+export interface SpaceChatResponse {
+  answer: string
+  modelConfigId: string
+  summary: string | null
+  compacted: boolean
+  sources: SpaceChatSource[]
+}
+
 export interface WikiImportItem {
   path: string
   title: string

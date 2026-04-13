@@ -19,6 +19,9 @@ import type {
   SaveLlmProviderPayload,
   SaveDynamicSpaceApiPayload,
   Space,
+  SpaceChatMessage,
+  SpaceChatRequest,
+  SpaceChatResponse,
   UpdatePagePayload,
   UpdateUserPayload,
   UserRole,
@@ -364,6 +367,26 @@ export function semanticSearchPages(query: string): Promise<WikiSemanticSearchRe
   return readJson<WikiSemanticSearchResult>(spaceUrl('/search/semantic'), {
     method: 'POST',
     body: JSON.stringify({ query }),
+  })
+}
+
+export function chatWithSpace(
+  message: string,
+  history: SpaceChatMessage[],
+  modelConfigId?: string,
+  summary?: string | null,
+  turnCount?: number,
+): Promise<SpaceChatResponse> {
+  const payload: SpaceChatRequest = {
+    message,
+    history,
+    modelConfigId: modelConfigId ?? null,
+    summary: summary ?? null,
+    turnCount: turnCount ?? null,
+  }
+  return readJson<SpaceChatResponse>(spaceUrl('/chat'), {
+    method: 'POST',
+    body: JSON.stringify(payload),
   })
 }
 
