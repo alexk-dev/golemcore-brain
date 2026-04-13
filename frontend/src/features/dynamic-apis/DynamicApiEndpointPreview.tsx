@@ -2,7 +2,7 @@ import copy from 'copy-to-clipboard'
 import { Copy } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { buildDynamicApiRunPath } from './dynamicApiUrls'
+import { buildBrowserDynamicApiRunPath } from './dynamicApiUrls'
 
 interface DynamicApiEndpointPreviewProps {
   spaceSlug: string
@@ -34,7 +34,7 @@ export function DynamicApiEndpointPreview({
   requestJson = '{"query":"What should I know from this space?"}',
   showCurl = false,
 }: DynamicApiEndpointPreviewProps) {
-  const endpointPath = buildDynamicApiRunPath(spaceSlug, apiSlug)
+  const endpointPath = buildBrowserDynamicApiRunPath(spaceSlug, apiSlug)
   const curlCommand = buildCurlCommand(endpointPath, requestJson)
 
   return (

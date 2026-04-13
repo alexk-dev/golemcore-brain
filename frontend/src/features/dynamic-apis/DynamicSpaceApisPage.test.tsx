@@ -22,6 +22,15 @@ vi.mock('../../lib/api', () => ({
   deleteDynamicSpaceApi: (...args: unknown[]) => deleteDynamicSpaceApiMock(...args),
 }))
 
+vi.mock('../../lib/basePath', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/basePath')>()
+  return {
+    ...actual,
+    appBasePath: '/brain',
+    withAppBasePath: (path: string, basePath = '/brain') => actual.withAppBasePath(path, basePath),
+  }
+})
+
 vi.mock('sonner', () => ({
   toast: {
     success: vi.fn(),
@@ -85,7 +94,7 @@ describe('DynamicSpaceApisPage', () => {
     })
   })
 
-  it('shows the full run endpoint for each dynamic API', async () => {
+  it('shows the full browser-visible run endpoint for each dynamic API', async () => {
     render(
       <MemoryRouter>
         <DynamicSpaceApisPage />
@@ -93,7 +102,7 @@ describe('DynamicSpaceApisPage', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getAllByText('/api/spaces/docs/dynamic-apis/knowledge-search/run').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('/brain/api/spaces/docs/dynamic-apis/knowledge-search/run').length).toBeGreaterThan(0)
     })
   })
 })

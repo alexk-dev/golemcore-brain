@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { LinkInfo } from './LinkInfo'
@@ -129,5 +130,46 @@ describe('LinkInfo', () => {
     await waitFor(() => {
       expect(refreshPageDataMock).toHaveBeenCalledWith('guides/setup')
     })
+  })
+
+  it('keeps page reference links under the router base path', () => {
+    useViewerStore.setState({
+      linkStatus: {
+        backlinks: [
+          {
+            fromPageId: 'guides/runbook',
+            fromPath: 'guides/runbook',
+            fromTitle: 'Runbook',
+            toPageId: 'guides/setup',
+            toPath: 'guides/setup',
+            toTitle: 'Setup',
+            broken: false,
+          },
+        ],
+        brokenIncoming: [],
+        outgoings: [
+          {
+            fromPageId: 'guides/setup',
+            fromPath: 'guides/setup',
+            fromTitle: 'Setup',
+            toPageId: 'shared/checklist',
+            toPath: 'shared/checklist',
+            toTitle: 'Checklist',
+            broken: false,
+          },
+        ],
+        brokenOutgoings: [],
+      },
+      history: [],
+    })
+
+    render(
+      <MemoryRouter basename="/brain" initialEntries={['/brain/guides/setup']}>
+        <LinkInfo />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('link', { name: 'Runbook' })).toHaveAttribute('href', '/brain/guides/runbook')
+    expect(screen.getByRole('link', { name: 'Checklist' })).toHaveAttribute('href', '/brain/shared/checklist')
   })
 })

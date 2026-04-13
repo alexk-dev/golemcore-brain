@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link2, Link2Off } from 'lucide-react'
+import { Link as RouterLink } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { ModalCard } from '../../components/ModalCard'
 import { getPageHistoryVersion, restorePageHistory } from '../../lib/api'
+import { pathToRoute } from '../../lib/paths'
 import { useTreeStore } from '../../stores/tree'
 import { useUiStore } from '../../stores/ui'
 import { useViewerStore } from '../../stores/viewer'
@@ -115,7 +117,11 @@ export function LinkInfo() {
             <ul>
               {linkStatus.backlinks.map((item) => (
                 <li key={`${item.fromPageId}-${item.toPath}`} className="backlinks__item">
-                  <a href={`/${item.fromPath}`}>{item.fromTitle}</a>
+                  {item.fromPath ? (
+                    <RouterLink to={pathToRoute(item.fromPath)}>{item.fromTitle ?? item.fromPath}</RouterLink>
+                  ) : (
+                    <span>{item.fromTitle ?? 'Unknown page'}</span>
+                  )}
                 </li>
               ))}
             </ul>
@@ -130,7 +136,11 @@ export function LinkInfo() {
               {linkStatus.outgoings.map((item) => (
                 <li key={`${item.fromPageId}-${item.toPath}`} className="backlinks__item">
                   <Link2 className="backlinks__icon" size={14} />
-                  <a href={`/${item.toPath}`}>{item.toTitle}</a>
+                  {item.toPath ? (
+                    <RouterLink to={pathToRoute(item.toPath)}>{item.toTitle ?? item.toPath}</RouterLink>
+                  ) : (
+                    <span>{item.toTitle ?? 'Unknown page'}</span>
+                  )}
                 </li>
               ))}
               {linkStatus.brokenOutgoings.map((item) => (
