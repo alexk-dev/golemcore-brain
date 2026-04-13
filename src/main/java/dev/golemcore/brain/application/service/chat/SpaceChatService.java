@@ -135,11 +135,11 @@ public class SpaceChatService {
     private List<WikiIndexedDocument> selectDocuments(String spaceId, String message) {
         List<String> queryTerms = tokenize(message);
         return wikiDocumentCatalogPort.listDocuments(spaceId).stream()
-                .sorted(Comparator.comparingInt((WikiIndexedDocument document) -> score(document, queryTerms))
-                        .reversed()
-                        .thenComparing(WikiIndexedDocument::getPath))
                 .filter(document -> !isBoilerplateWelcome(document))
                 .filter(document -> score(document, queryTerms) > 0)
+                .sorted(Comparator.comparingInt((WikiIndexedDocument document) -> score(document, queryTerms))
+                        .reversed()
+                        .thenComparing(this::sourcePath))
                 .limit(MAX_CONTEXT_DOCUMENTS)
                 .toList();
     }
@@ -191,9 +191,11 @@ public class SpaceChatService {
                     .content("Conversation summary so far:\n" + summary.trim())
                     .build());
         }
-        Optional.ofNullable(history).orElse(List.of()).stream()
+        List<ChatMessage> allowedHistory = Optional.ofNullable(history).orElse(List.of()).stream()
                 .filter(this::isAllowedHistoryMessage)
-                .limit(12)
+                .toList();
+        allowedHistory.stream()
+                .skip(Math.max(0, allowedHistory.size() - 12))
                 .forEach(message -> messages.add(LlmChatMessage.builder()
                         .role(message.getRole())
                         .content(message.getContent())
@@ -246,9 +248,11 @@ public class SpaceChatService {
         builder.append("Previous summary:\n")
                 .append(previousSummary == null || previousSummary.isBlank() ? "None" : previousSummary.trim())
                 .append("\n\nRecent messages:\n");
-        Optional.ofNullable(history).orElse(List.of()).stream()
+        List<ChatMessage> allowedHistory = Optional.ofNullable(history).orElse(List.of()).stream()
                 .filter(this::isAllowedHistoryMessage)
-                .limit(12)
+                .toList();
+        allowedHistory.stream()
+                .skip(Math.max(0, allowedHistory.size() - 12))
                 .forEach(message -> builder.append(message.getRole())
                         .append(": ")
                         .append(message.getContent().trim())
@@ -271,7 +275,7 @@ public class SpaceChatService {
             WikiIndexedDocument document = documents.get(index);
             builder.append("\n[Source ").append(index + 1).append("] ")
                     .append(document.getTitle()).append("\n")
-                    .append("Path: ").append(document.getPath()).append("\n")
+                    .append("Path: ").append(sourcePath(document)).append("\n")
                     .append(truncate(document.getBody())).append("\n");
         }
         return builder.toString();
@@ -279,10 +283,20 @@ public class SpaceChatService {
 
     private SpaceChatSource toSource(WikiIndexedDocument document) {
         return SpaceChatSource.builder()
-                .path(document.getPath())
+                .path(sourcePath(document))
                 .title(document.getTitle())
                 .excerpt(truncate(document.getBody()))
                 .build();
+    }
+
+    private String sourcePath(WikiIndexedDocument document) {
+        if (document.getPath() != null && !document.getPath().isBlank()) {
+            return document.getPath();
+        }
+        if (document.getId() != null && !document.getId().isBlank()) {
+            return document.getId();
+        }
+        return "";
     }
 
     private String truncate(String value) {

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -78,5 +78,70 @@ describe('SpaceChatPage', () => {
     await waitFor(() => {
       expect(chatWithSpaceMock).toHaveBeenLastCalledWith('Start over?', [], undefined, null, 1)
     })
+  })
+
+  it('keeps the current draft when starting a new chat', () => {
+    render(
+      <MemoryRouter>
+        <SpaceChatPage />
+      </MemoryRouter>,
+    )
+
+    fireEvent.change(screen.getByLabelText('Question'), {
+      target: { value: 'Draft question' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'New chat' }))
+
+    expect(screen.getByLabelText('Question')).toHaveValue('Draft question')
+  })
+
+  it('keeps the current draft when starting a new chat after messages exist', async () => {
+    render(
+      <MemoryRouter>
+        <SpaceChatPage />
+      </MemoryRouter>,
+    )
+
+    fireEvent.change(screen.getByLabelText('Question'), {
+      target: { value: 'What does the roadmap say?' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    expect(await screen.findByText('Use the roadmap page.')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Question'), {
+      target: { value: 'Draft question' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'New chat' }))
+
+    expect(screen.getByLabelText('Question')).toHaveValue('Draft question')
+  })
+
+  it('renders source links for the active space route', async () => {
+    chatWithSpaceMock.mockResolvedValue({
+      answer: 'Read the roadmap page.',
+      modelConfigId: 'chat-model',
+      summary: null,
+      compacted: false,
+      sources: [
+        {
+          path: 'product/roadmap',
+          title: 'Product Roadmap',
+          excerpt: 'Roadmap details',
+        },
+      ],
+    })
+    render(
+      <MemoryRouter>
+        <SpaceChatPage />
+      </MemoryRouter>,
+    )
+
+    fireEvent.change(screen.getByLabelText('Question'), {
+      target: { value: 'Where is the roadmap?' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    const sources = await screen.findByRole('heading', { name: 'Sources' })
+    expect(within(sources.closest('section') as HTMLElement)
+      .getByRole('link', { name: 'Product Roadmap' })).toHaveAttribute('href', '/product/roadmap')
   })
 })

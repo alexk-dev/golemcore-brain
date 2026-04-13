@@ -102,6 +102,80 @@ class SpaceChatServiceTest {
                 .contains("The roadmap update is ready."));
     }
 
+    @Test
+    void shouldUseMostRecentHistoryWhenBuildingContext() {
+        RecordingLlmChatPort chatPort = new RecordingLlmChatPort();
+        SpaceChatService service = new SpaceChatService(
+                new SingleSpaceRepository(),
+                new FixedDocumentCatalog(),
+                new FixedLlmSettingsRepository(),
+                chatPort);
+        List<SpaceChatService.ChatMessage> history = new ArrayList<>();
+        for (int index = 1; index <= 13; index++) {
+            history.add(SpaceChatService.ChatMessage.builder()
+                    .role("user")
+                    .content("recent-message-" + index)
+                    .build());
+        }
+
+        service.chat(viewerContext(), "docs", SpaceChatService.ChatCommand.builder()
+                .message("What is the product roadmap?")
+                .history(history)
+                .build());
+
+        List<String> requestContents = chatPort.requests.getFirst().getMessages().stream()
+                .map(message -> message.getContent())
+                .toList();
+        assertFalse(requestContents.stream().anyMatch("recent-message-1"::equals));
+        assertTrue(requestContents.stream().anyMatch("recent-message-13"::equals));
+    }
+
+    @Test
+    void shouldUseMostRecentHistoryWhenCompactingSummary() {
+        RecordingLlmChatPort chatPort = new RecordingLlmChatPort();
+        chatPort.respondWith("Answer before summary.", "Recent compact summary.");
+        SpaceChatService service = new SpaceChatService(
+                new SingleSpaceRepository(),
+                new FixedDocumentCatalog(),
+                new FixedLlmSettingsRepository(),
+                chatPort);
+        List<SpaceChatService.ChatMessage> history = new ArrayList<>();
+        for (int index = 1; index <= 13; index++) {
+            history.add(SpaceChatService.ChatMessage.builder()
+                    .role("assistant")
+                    .content("compact-message-" + index)
+                    .build());
+        }
+
+        service.chat(viewerContext(), "docs", SpaceChatService.ChatCommand.builder()
+                .message("What is the product roadmap?")
+                .turnCount(6)
+                .history(history)
+                .build());
+
+        String summaryPrompt = chatPort.requests.get(1).getMessages().getFirst().getContent();
+        assertFalse(summaryPrompt.lines().anyMatch(line -> line.endsWith("compact-message-1")));
+        assertTrue(summaryPrompt.lines().anyMatch(line -> line.endsWith("compact-message-13")));
+    }
+
+    @Test
+    void shouldHandleDocumentsWithoutPathsWhenBuildingSources() {
+        RecordingLlmChatPort chatPort = new RecordingLlmChatPort();
+        SpaceChatService service = new SpaceChatService(
+                new SingleSpaceRepository(),
+                new NullPathDocumentCatalog(),
+                new FixedLlmSettingsRepository(),
+                chatPort);
+
+        SpaceChatResponse response = service.chat(viewerContext(), "docs", SpaceChatService.ChatCommand.builder()
+                .message("What is the roadmap?")
+                .build());
+
+        assertEquals("", response.getSources().getFirst().getPath());
+        assertTrue(response.getSources().stream().allMatch(source -> source.getPath() != null));
+        assertFalse(chatPort.requests.getFirst().getMessages().getFirst().getContent().contains("Path: null"));
+    }
+
     private AuthContext viewerContext() {
         return AuthContext.builder()
                 .authenticated(true)
@@ -157,6 +231,28 @@ class SpaceChatServiceTest {
                     .kind(WikiNodeKind.PAGE)
                     .updatedAt(Instant.now())
                     .revision("rev-" + path)
+                    .build();
+        }
+    }
+
+    private static class NullPathDocumentCatalog implements WikiDocumentCatalogPort {
+        @Override
+        public List<WikiIndexedDocument> listDocuments(String spaceId) {
+            return List.of(
+                    document(null, null, "Roadmap", "Roadmap details."),
+                    document("doc-2", "roadmap-notes", "Roadmap Notes", "Roadmap details."));
+        }
+
+        private WikiIndexedDocument document(String id, String path, String title, String body) {
+            return WikiIndexedDocument.builder()
+                    .id(id)
+                    .path(path)
+                    .parentPath("")
+                    .title(title)
+                    .body(body)
+                    .kind(WikiNodeKind.PAGE)
+                    .updatedAt(Instant.now())
+                    .revision("rev-" + id)
                     .build();
         }
     }
