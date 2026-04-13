@@ -20,7 +20,7 @@ import type {
   SaveDynamicSpaceApiPayload,
 } from '../../types'
 import { DynamicApiEndpointPreview } from './DynamicApiEndpointPreview'
-import { buildDynamicApiRunPath } from './dynamicApiUrls'
+import { buildBrowserDynamicApiRunPath } from './dynamicApiUrls'
 
 interface ApiFormState {
   slug: string
@@ -336,7 +336,7 @@ export function DynamicSpaceApisPage({ spaceSlug, embedded = false }: DynamicSpa
                           <div className="min-w-0">
                             <div className="font-medium">{api.name || api.slug}</div>
                             <div className="text-sm text-muted">
-                              <span>{buildDynamicApiRunPath(targetSpaceSlug, api.slug)}</span>
+                              <span>{buildBrowserDynamicApiRunPath(targetSpaceSlug, api.slug)}</span>
                               <span> · {model ? modelLabel(model) : 'missing model'}</span>
                               <span> · {api.enabled ? 'enabled' : 'disabled'}</span>
                             </div>
@@ -415,4 +415,3 @@ export function DynamicSpaceApisPage({ spaceSlug, embedded = false }: DynamicSpa
 
   return embedded ? content : <div className="page-viewer">{content}</div>
 }
-

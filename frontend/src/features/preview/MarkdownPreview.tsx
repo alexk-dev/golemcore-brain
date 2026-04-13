@@ -6,7 +6,8 @@ import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import remarkGfm from 'remark-gfm'
 
-import { normalizeAssetUrl } from '../assets/assetUrls'
+import { isAppApiPath, stripAppBasePath } from '../../lib/basePath'
+import { toBrowserAssetUrl } from '../assets/assetUrls'
 import { MarkdownCodeBlock } from './MarkdownCodeBlock'
 import { MarkdownLink } from './MarkdownLink'
 import { MermaidBlock } from './MermaidBlock'
@@ -46,8 +47,8 @@ function normalizeAssetMediaSrc(src?: string, assetVersion?: number): string | u
   if (!src) {
     return src
   }
-  const normalizedSrc = normalizeAssetUrl(src)
-  if (!normalizedSrc.startsWith('/api/spaces/') || !assetVersion) {
+  const normalizedSrc = toBrowserAssetUrl(src)
+  if (!isAppApiPath(normalizedSrc) || !stripAppBasePath(normalizedSrc).startsWith('/api/spaces/') || !assetVersion) {
     return normalizedSrc
   }
   return `${normalizedSrc}${normalizedSrc.includes('?') ? '&' : '?'}v=${assetVersion}`

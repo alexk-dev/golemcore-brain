@@ -1,9 +1,19 @@
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { setCurrentSpaceSlug } from '../../lib/api'
 import { MarkdownLink } from './MarkdownLink'
+
+vi.mock('../../lib/basePath', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/basePath')>()
+  return {
+    ...actual,
+    appBasePath: '/brain',
+    isAppApiPath: (path: string, basePath = '/brain') => actual.isAppApiPath(path, basePath),
+    withAppBasePath: (path: string, basePath = '/brain') => actual.withAppBasePath(path, basePath),
+  }
+})
 
 describe('MarkdownLink', () => {
   it('resolves relative wiki links against the current path', () => {
@@ -31,7 +41,7 @@ describe('MarkdownLink', () => {
 
     expect(screen.getByRole('link', { name: 'Diagram' })).toHaveAttribute(
       'href',
-      '/api/spaces/default/assets?path=docs/runbook&name=diagram.png',
+      '/brain/api/spaces/default/assets?path=docs/runbook&name=diagram.png',
     )
   })
 })

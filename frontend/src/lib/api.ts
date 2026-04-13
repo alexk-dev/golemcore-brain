@@ -39,6 +39,7 @@ import type {
   WikiSemanticSearchResult,
   WikiTreeNode,
 } from '../types'
+import { withAppBasePath } from './basePath'
 
 type ErrorBody = {
   error?: string
@@ -94,7 +95,8 @@ export function assetUrl(suffix: string, spaceSlug = currentSpaceSlug): string {
 }
 
 async function readJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
-  const response = await fetch(input, {
+  const requestInput = typeof input === 'string' ? withAppBasePath(input) : input
+  const response = await fetch(requestInput, {
     credentials: 'include',
     headers: {
       ...(init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),

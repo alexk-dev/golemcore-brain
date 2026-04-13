@@ -32,7 +32,7 @@ public class SpaceResolverFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
-        String path = request.getRequestURI();
+        String path = requestPathWithinApplication(request);
         Matcher matcher = SPACE_PATH.matcher(path);
         if (matcher.matches()) {
             String slug = matcher.group(1);
@@ -61,6 +61,15 @@ public class SpaceResolverFilter extends OncePerRequestFilter {
     private boolean isManagementEndpoint(String slugCandidate) {
         // Reserved words that aren't slugs: none currently. Kept as a hook.
         return false;
+    }
+
+    private String requestPathWithinApplication(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        String contextPath = request.getContextPath();
+        if (contextPath != null && !contextPath.isBlank() && path.startsWith(contextPath)) {
+            return path.substring(contextPath.length());
+        }
+        return path;
     }
 
     @Override
