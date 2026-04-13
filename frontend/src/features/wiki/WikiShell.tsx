@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { FileSearch, Pencil, Search } from 'lucide-react'
+import { FileSearch, MessageCircle, Pencil, Search } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -98,7 +98,7 @@ export function WikiShell({ children }: WikiShellProps) {
   const canManageUsers = authDisabled || currentUser?.role === 'ADMIN'
   const canAccessAccount = authDisabled || currentUser !== null
   const isAnonymousPublicReader = !authDisabled && publicAccess && currentUser === null
-  const isUtilityRoute = ['login', 'account', 'users', 'import', 'spaces', 'api-keys', 'dynamic-apis', 'llm-settings'].some((route) => currentPath === route || currentPath.startsWith(route + '/'))
+  const isUtilityRoute = ['login', 'account', 'users', 'import', 'spaces', 'api-keys', 'dynamic-apis', 'llm-settings', 'chat'].some((route) => currentPath === route || currentPath.startsWith(route + '/'))
   const editorHasUnsavedChanges =
     isEditorRoute &&
     editorPage !== null &&
@@ -262,6 +262,15 @@ export function WikiShell({ children }: WikiShellProps) {
       onRun: () => setSearchOpen(true),
     },
     {
+      id: 'space-chat',
+      label: 'Chat',
+      title: 'Chat with space',
+      hotkey: 'Mod+Alt+C',
+      hotkeyLabel: 'Ctrl+Alt+C',
+      icon: <MessageCircle size={16} />,
+      onRun: () => navigate('/chat'),
+    },
+    {
       id: 'toggle-sidebar',
       label: 'Toggle sidebar',
       title: 'Toggle sidebar',
@@ -270,7 +279,7 @@ export function WikiShell({ children }: WikiShellProps) {
       hidden: true,
       onRun: toggleSidebar,
     },
-  ], [canEditCurrentPage, currentPage?.path, currentPath, handleEdit, setQuickSwitcherOpen, setSearchOpen, toggleSidebar])
+  ], [canEditCurrentPage, currentPage?.path, currentPath, handleEdit, navigate, setQuickSwitcherOpen, setSearchOpen, toggleSidebar])
 
   useToolbarActions(toolbarActions)
 

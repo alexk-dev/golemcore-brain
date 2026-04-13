@@ -1,6 +1,6 @@
 import { Menu } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 
 import { Sidebar } from '../sidebar/Sidebar'
 import { SpaceSwitcher } from '../spaces/SpaceSwitcher'
@@ -71,6 +71,9 @@ export function AppLayout({
   editorDirty = false,
   onLogout,
 }: AppLayoutProps) {
+  const location = useLocation()
+  const isChatRoute = location.pathname === '/chat'
+
   if (hideHeader) {
     return (
       <div className="min-h-screen bg-background text-foreground">
@@ -107,6 +110,9 @@ export function AppLayout({
           </div>
           <div className="app-layout__editor-toolbar-container">
             <Toolbar />
+            <Link to="/chat" className={isChatRoute ? 'action-button-primary hidden md:inline-flex' : 'action-button-secondary hidden md:inline-flex'}>
+              Chat
+            </Link>
             {canCreate ? (
               <Link to="/import" className="action-button-secondary hidden md:inline-flex">
                 Import

@@ -16,11 +16,13 @@ import dev.golemcore.brain.application.port.out.ModelRegistryRemotePort;
 import dev.golemcore.brain.application.port.out.SpaceRepository;
 import dev.golemcore.brain.application.port.out.WikiEmbeddingIndexPort;
 import dev.golemcore.brain.application.port.out.WikiFullTextIndexPort;
+import dev.golemcore.brain.application.port.out.WikiDocumentCatalogPort;
 import dev.golemcore.brain.application.port.out.WikiRepository;
 import dev.golemcore.brain.application.port.out.auth.SessionRepository;
 import dev.golemcore.brain.application.port.out.auth.UserRepository;
 import dev.golemcore.brain.application.service.WikiApplicationService;
 import dev.golemcore.brain.application.service.apikey.ApiKeyService;
+import dev.golemcore.brain.application.service.chat.SpaceChatService;
 import dev.golemcore.brain.application.service.auth.AuthService;
 import dev.golemcore.brain.application.service.auth.PasswordHasher;
 import dev.golemcore.brain.application.service.dynamicapi.DynamicSpaceApiService;
@@ -78,6 +80,15 @@ public class BrainApplicationConfiguration {
             SpaceRepository spaceRepository,
             ApiKeyTokenPort apiKeyTokenPort) {
         return new ApiKeyService(apiKeyRepository, spaceRepository, apiKeyTokenPort);
+    }
+
+    @Bean
+    public SpaceChatService spaceChatService(
+            SpaceRepository spaceRepository,
+            WikiDocumentCatalogPort wikiDocumentCatalogPort,
+            LlmSettingsRepository llmSettingsRepository,
+            LlmChatPort llmChatPort) {
+        return new SpaceChatService(spaceRepository, wikiDocumentCatalogPort, llmSettingsRepository, llmChatPort);
     }
 
     @Bean

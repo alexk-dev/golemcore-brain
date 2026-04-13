@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { AccountPage } from './features/account/AccountPage'
 import { ApiKeysPage } from './features/api-keys/ApiKeysPage'
 import { LoginPage } from './features/auth/LoginPage'
+import { SpaceChatPage } from './features/chat/SpaceChatPage'
 import { PageEditor } from './features/editor/PageEditor'
 import { ImportPage } from './features/import/ImportPage'
 import { LlmSettingsPage } from './features/llm-settings/LlmSettingsPage'
@@ -25,6 +26,7 @@ function App() {
   const canView = authDisabled || publicAccess || currentUser !== null
   const canManageUsers = authDisabled || currentUser?.role === 'ADMIN'
   const canManageLlmSettings = currentUser?.role === 'ADMIN'
+  const canUseChat = canView
   const canAccessAccount = authDisabled || currentUser !== null
   const needsLoginForEdit = !authDisabled && currentUser === null
 
@@ -48,6 +50,7 @@ function App() {
         <Route path="/spaces/:spaceSlug/settings" element={canManageUsers ? <SpaceSettingsPage /> : <Navigate to="/" replace />} />
         <Route path="/api-keys" element={canManageUsers ? <ApiKeysPage /> : <Navigate to="/" replace />} />
         <Route path="/dynamic-apis" element={<Navigate to="/spaces" replace />} />
+        <Route path="/chat" element={canUseChat ? <SpaceChatPage /> : <Navigate to="/login" replace />} />
         <Route path="/llm-settings" element={canManageLlmSettings ? <LlmSettingsPage /> : <Navigate to="/" replace />} />
         <Route path="/import" element={canEdit ? <ImportPage /> : <Navigate to="/" replace />} />
         <Route path="/500" element={<ServerErrorPage />} />
