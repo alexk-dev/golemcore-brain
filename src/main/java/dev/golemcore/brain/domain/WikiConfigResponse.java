@@ -12,4 +12,5 @@ public class WikiConfigResponse {
     long maxAssetUploadSizeBytes;
     String siteTitle;
     String rootPath;
+    String imageVersion;
 }

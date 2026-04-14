@@ -69,6 +69,7 @@ public class WikiApplicationService {
         return WikiConfigResponse.builder()
                 .siteTitle(brainSettingsPort.getSiteTitle())
                 .rootPath("")
+                .imageVersion(brainSettingsPort.getImageVersion())
                 .publicAccess(true)
                 .authDisabled(true)
                 .hideLinkMetadataSection(false)

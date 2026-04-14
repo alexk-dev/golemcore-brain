@@ -176,6 +176,7 @@ export interface WikiConfig {
   maxAssetUploadSizeBytes: number
   siteTitle: string
   rootPath: string
+  imageVersion: string
 }
 
 export interface WikiPathLookupSegment {

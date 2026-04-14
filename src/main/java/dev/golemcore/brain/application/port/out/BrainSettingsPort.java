@@ -4,6 +4,8 @@ public interface BrainSettingsPort {
 
     String getSiteTitle();
 
+    String getImageVersion();
+
     boolean isAuthDisabled();
 
     boolean isPublicAccess();

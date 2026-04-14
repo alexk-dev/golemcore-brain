@@ -287,6 +287,7 @@ export function WikiShell({ children }: WikiShellProps) {
     <>
       <AppLayout
         siteTitle={config?.siteTitle ?? 'GolemCore Brain'}
+        imageVersion={config?.imageVersion ?? null}
         tree={tree}
         activePath={activePath}
         openPaths={openPaths}

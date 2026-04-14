@@ -1,12 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
-import { chatWithSpace } from '../../lib/api'
+import { chatWithSpace, getLlmSettings } from '../../lib/api'
 import { pathToRoute } from '../../lib/paths'
 import { useSpaceStore } from '../../stores/space'
-import type { SpaceChatMessage, SpaceChatSource } from '../../types'
+import type { LlmModelConfig, SpaceChatMessage, SpaceChatSource } from '../../types'
 
 export function SpaceChatPage() {
   const activeSlug = useSpaceStore((state) => state.activeSlug)
@@ -16,6 +16,23 @@ export function SpaceChatPage() {
   const [isSending, setIsSending] = useState(false)
   const [summary, setSummary] = useState<string | null>(null)
   const [turnCount, setTurnCount] = useState(0)
+  const [chatModels, setChatModels] = useState<LlmModelConfig[]>([])
+  const [selectedModelId, setSelectedModelId] = useState('')
+
+  useEffect(() => {
+    void getLlmSettings()
+      .then((settings) => {
+        const enabledChatModels = settings.models.filter((model) => model.kind === 'chat' && model.enabled)
+        setChatModels(enabledChatModels)
+        setSelectedModelId((current) => current || enabledChatModels[0]?.id || '')
+      })
+      .catch((error: Error) => toast.error(error.message))
+  }, [])
+
+  const selectedModelLabel = useMemo(() => {
+    const selectedModel = chatModels.find((model) => model.id === selectedModelId)
+    return selectedModel?.displayName || selectedModel?.modelId || selectedModelId
+  }, [chatModels, selectedModelId])
 
   const canSend = draft.trim().length > 0 && !isSending
 
@@ -31,7 +48,7 @@ export function SpaceChatPage() {
     setIsSending(true)
     try {
       const nextTurnCount = turnCount + 1
-      const response = await chatWithSpace(question, messages.slice(-12), undefined, summary, nextTurnCount)
+      const response = await chatWithSpace(question, messages.slice(-12), selectedModelId || undefined, summary, nextTurnCount)
       setMessages([...nextMessages, { role: 'assistant', content: response.answer }])
       setSources(response.sources)
       setSummary(response.summary ?? summary)
@@ -51,8 +68,9 @@ export function SpaceChatPage() {
           <div>
             <h1 className="mb-1 text-2xl font-semibold">Chat with {activeSlug}</h1>
             <p className="text-sm text-muted">
-              Ask questions against the current space knowledge base. Answers use the configured enabled chat model.
+              Ask questions against the current space knowledge base. Answers use the selected enabled chat model.
             </p>
+            {selectedModelLabel ? <p className="mt-2 text-xs text-muted">Current model: {selectedModelLabel}</p> : null}
           </div>
           <button
             type="button"
@@ -108,6 +126,23 @@ export function SpaceChatPage() {
           ) : null}
 
           <form className="flex flex-col gap-3 md:flex-row" onSubmit={handleSubmit}>
+            {chatModels.length > 0 ? (
+              <label className="field md:w-64">
+                <span className="mb-2 block text-sm font-medium">Chat model</span>
+                <select
+                  className="field-input w-full"
+                  value={selectedModelId}
+                  onChange={(event) => setSelectedModelId(event.target.value)}
+                  disabled={isSending}
+                >
+                  {chatModels.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.displayName || model.modelId}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <label className="field flex-1">
               <span className="sr-only">Question</span>
               <textarea
