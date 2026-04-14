@@ -456,7 +456,8 @@ class Langchain4jLlmAdapterTest {
         return String.join("", events);
     }
 
-    @SuppressWarnings({ "PMD.TestClassWithoutTestCases", "PMD.AvoidFieldNameMatchingMethodName", "PMD.CloseResource" })
+    @SuppressWarnings({ "PMD.TestClassWithoutTestCases", "PMD.AvoidFieldNameMatchingMethodName", "PMD.CloseResource",
+            "PMD.LooseCoupling" })
     private static class TestServer {
         private final HttpServer server;
         private final ExecutorService executor;

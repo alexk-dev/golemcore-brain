@@ -87,6 +87,60 @@ class LuceneWikiFullTextIndexAdapterTest {
         assertEquals(Map.of("docs/guide", "revision-b"), adapter.listIndexedRevisions("space-b"));
     }
 
+    @Test
+    void shouldSearchByWildcardMasksAcrossTitleBodyAndPath() {
+        WikiProperties properties = new WikiProperties();
+        properties.setStorageRoot(tempDir);
+        LuceneWikiFullTextIndexAdapter adapter = new LuceneWikiFullTextIndexAdapter(properties);
+
+        adapter.applyChanges("space-1", WikiDocumentChangeSet.builder()
+                .spaceId("space-1")
+                .upserts(List.of(
+                        document("solar-system-known-bodies", "Known solar bodies", "Mercury Venus Earth",
+                                "revision-1"),
+                        document("missions/voyager-probes", "Voyager probes", "Interstellar mission notes",
+                                "revision-1"),
+                        document("operations/runbook", "Operations Runbook", "Deployment checklist", "revision-1")))
+                .deletedPaths(List.of())
+                .fullRebuild(false)
+                .build());
+
+        assertEquals(List.of("solar-system-known-bodies"), adapter.search("space-1", "solar*", 10)
+                .stream()
+                .map(WikiSearchHit::getPath)
+                .toList());
+        assertEquals(List.of("missions/voyager-probes"), adapter.search("space-1", "inter*", 10)
+                .stream()
+                .map(WikiSearchHit::getPath)
+                .toList());
+        assertEquals(List.of("operations/runbook"), adapter.search("space-1", "runbo?k", 10)
+                .stream()
+                .map(WikiSearchHit::getPath)
+                .toList());
+    }
+
+    @Test
+    void shouldApplyAllMaskTermsWhenWildcardQueryContainsSeveralTokens() {
+        WikiProperties properties = new WikiProperties();
+        properties.setStorageRoot(tempDir);
+        LuceneWikiFullTextIndexAdapter adapter = new LuceneWikiFullTextIndexAdapter(properties);
+
+        adapter.applyChanges("space-1", WikiDocumentChangeSet.builder()
+                .spaceId("space-1")
+                .upserts(List.of(
+                        document("solar-system-known-bodies", "Known solar bodies", "Mercury Venus Earth",
+                                "revision-1"),
+                        document("solar-energy-notes", "Solar energy", "Panels and batteries", "revision-1")))
+                .deletedPaths(List.of())
+                .fullRebuild(false)
+                .build());
+
+        assertEquals(List.of("solar-system-known-bodies"), adapter.search("space-1", "solar* bod*", 10)
+                .stream()
+                .map(WikiSearchHit::getPath)
+                .toList());
+    }
+
     private WikiIndexedDocument document(String path, String title, String body, String revision) {
         return WikiIndexedDocument.builder()
                 .id(path)

@@ -12,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Locale;
@@ -85,17 +86,21 @@ public class LuceneWikiFullTextIndexAdapter implements WikiFullTextIndexPort {
         if (!hasIndex(spaceId) || query == null || query.isBlank()) {
             return List.of();
         }
+        String normalizedQuery = query.trim();
         try (StandardAnalyzer analyzer = new StandardAnalyzer(); Directory directory = openDirectory(spaceId)) {
             try (DirectoryReader reader = DirectoryReader.open(directory)) {
                 IndexSearcher searcher = new IndexSearcher(reader);
+                if (hasWildcard(normalizedQuery)) {
+                    return wildcardSearch(searcher, reader, normalizedQuery, limit);
+                }
                 MultiFieldQueryParser parser = new MultiFieldQueryParser(
                         new String[] { FIELD_TITLE, FIELD_BODY, FIELD_PATH },
                         analyzer);
-                Query parsedQuery = parser.parse(MultiFieldQueryParser.escape(query.trim()));
+                Query parsedQuery = parser.parse(MultiFieldQueryParser.escape(normalizedQuery));
                 TopDocs topDocs = searcher.search(parsedQuery, Math.max(1, limit));
                 List<WikiSearchHit> hits = new ArrayList<>();
                 for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
-                    hits.add(toSearchHit(searcher.doc(scoreDoc.doc), query));
+                    hits.add(toSearchHit(searcher.doc(scoreDoc.doc), normalizedQuery));
                 }
                 return hits;
             }
@@ -156,6 +161,157 @@ public class LuceneWikiFullTextIndexAdapter implements WikiFullTextIndexPort {
         }
     }
 
+    private List<WikiSearchHit> wildcardSearch(IndexSearcher searcher, DirectoryReader reader, String query, int limit)
+            throws IOException {
+        TopDocs topDocs = searcher.search(new MatchAllDocsQuery(), Math.max(1, reader.numDocs()));
+        List<ScoredSearchHit> scoredHits = new ArrayList<>();
+        for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
+            WikiSearchDocument searchDocument = toSearchDocument(searcher.doc(scoreDoc.doc));
+            int score = wildcardScore(searchDocument, query);
+            if (score > 0) {
+                scoredHits.add(new ScoredSearchHit(toSearchHit(searchDocument, query), score));
+            }
+        }
+        scoredHits.sort(Comparator.comparingInt(ScoredSearchHit::score)
+                .reversed()
+                .thenComparing(scoredHit -> scoredHit.hit().getPath(), String.CASE_INSENSITIVE_ORDER));
+        return scoredHits.stream()
+                .limit(Math.max(1, limit))
+                .map(ScoredSearchHit::hit)
+                .toList();
+    }
+
+    private int wildcardScore(WikiSearchDocument document, String query) {
+        List<String> tokens = tokenizeQuery(query);
+        if (tokens.isEmpty()) {
+            return 0;
+        }
+        int score = 0;
+        for (String token : tokens) {
+            int tokenScore = tokenScore(document, token);
+            if (tokenScore == 0) {
+                return 0;
+            }
+            score += tokenScore;
+        }
+        return score;
+    }
+
+    private int tokenScore(WikiSearchDocument document, String token) {
+        if ("*".equals(token)) {
+            return 1;
+        }
+        String normalizedToken = token.toLowerCase(Locale.ROOT);
+        if (isWildcardToken(token)) {
+            return wildcardTokenScore(document, normalizedToken);
+        }
+        return plainTokenScore(document, normalizedToken);
+    }
+
+    private int wildcardTokenScore(WikiSearchDocument document, String mask) {
+        int score = 0;
+        if (containsMask(normalize(document.getPath()), mask)) {
+            score += 80;
+        }
+        if (containsMask(normalizePathForMask(document.getPath()), mask)) {
+            score += 60;
+        }
+        if (containsMask(normalize(document.getTitle()), mask)) {
+            score += 40;
+        }
+        if (containsMask(normalize(document.getBody()), mask)) {
+            score += 10;
+        }
+        return score;
+    }
+
+    private int plainTokenScore(WikiSearchDocument document, String token) {
+        int score = 0;
+        if (normalize(document.getPath()).contains(token)) {
+            score += 80;
+        }
+        if (normalizePathForMask(document.getPath()).contains(token)) {
+            score += 60;
+        }
+        if (normalize(document.getTitle()).contains(token)) {
+            score += 40;
+        }
+        if (normalize(document.getBody()).contains(token)) {
+            score += 10;
+        }
+        return score;
+    }
+
+    private boolean hasWildcard(String query) {
+        return query.indexOf('*') >= 0 || query.indexOf('?') >= 0;
+    }
+
+    private boolean isWildcardToken(String token) {
+        return token.indexOf('*') >= 0 || token.indexOf('?') >= 0;
+    }
+
+    private boolean containsMask(String value, String mask) {
+        if ("*".equals(mask)) {
+            return true;
+        }
+        for (int index = 0; index <= value.length(); index++) {
+            if (matchesMaskFrom(value, mask, index)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean matchesMaskFrom(String value, String mask, int startIndex) {
+        int valueIndex = startIndex;
+        int maskIndex = 0;
+        int starIndex = -1;
+        int retryValueIndex = startIndex;
+        while (valueIndex < value.length()) {
+            if (maskIndex == mask.length()) {
+                return true;
+            }
+            char maskCharacter = mask.charAt(maskIndex);
+            if (maskCharacter == '?' || maskCharacter == value.charAt(valueIndex)) {
+                maskIndex++;
+                valueIndex++;
+            } else if (maskCharacter == '*') {
+                starIndex = maskIndex;
+                maskIndex++;
+                retryValueIndex = valueIndex;
+                if (maskIndex == mask.length()) {
+                    return true;
+                }
+            } else if (starIndex >= 0) {
+                maskIndex = starIndex + 1;
+                retryValueIndex++;
+                valueIndex = retryValueIndex;
+            } else {
+                return false;
+            }
+        }
+        while (maskIndex < mask.length() && mask.charAt(maskIndex) == '*') {
+            maskIndex++;
+        }
+        return maskIndex == mask.length();
+    }
+
+    private String normalizePathForMask(String path) {
+        return normalize(path).replace('/', ' ').replace('-', ' ').replace('_', ' ');
+    }
+
+    private String normalize(String value) {
+        return value == null ? "" : value.toLowerCase(Locale.ROOT);
+    }
+
+    private List<String> tokenizeQuery(String query) {
+        return List.of(query.trim().split("\\s+"))
+                .stream()
+                .map(String::trim)
+                .filter(token -> !token.isBlank())
+                .toList();
+    }
+
     private Document toLuceneDocument(String spaceId, WikiIndexedDocument document) {
         Document luceneDocument = new Document();
         luceneDocument.add(new StringField(FIELD_SPACE_ID, spaceId, Field.Store.YES));
@@ -171,7 +327,11 @@ public class LuceneWikiFullTextIndexAdapter implements WikiFullTextIndexPort {
     }
 
     private WikiSearchHit toSearchHit(Document document, String query) {
-        WikiSearchDocument searchDocument = WikiSearchDocument.builder()
+        return toSearchHit(toSearchDocument(document), query);
+    }
+
+    private WikiSearchDocument toSearchDocument(Document document) {
+        return WikiSearchDocument.builder()
                 .id(document.get(FIELD_ID))
                 .path(document.get(FIELD_PATH))
                 .parentPath(emptyToNull(document.get(FIELD_PARENT_PATH)))
@@ -179,6 +339,9 @@ public class LuceneWikiFullTextIndexAdapter implements WikiFullTextIndexPort {
                 .body(document.get(FIELD_BODY))
                 .kind(WikiNodeKind.valueOf(document.get(FIELD_KIND)))
                 .build();
+    }
+
+    private WikiSearchHit toSearchHit(WikiSearchDocument searchDocument, String query) {
         return WikiSearchHit.builder()
                 .id(searchDocument.getId())
                 .path(searchDocument.getPath())
@@ -229,5 +392,8 @@ public class LuceneWikiFullTextIndexAdapter implements WikiFullTextIndexPort {
 
     private <T> List<T> safeList(List<T> values) {
         return values == null ? List.of() : values;
+    }
+
+    private record ScoredSearchHit(WikiSearchHit hit, int score) {
     }
 }
