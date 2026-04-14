@@ -409,7 +409,7 @@ export function LlmSettingsPage() {
           ? 'reasoning'
           : defaults.supportsTemperature === false
             ? 'reasoning'
-            : state.chatTuning,
+            : 'temperature',
         reasoningEffort: normalizeReasoningEffort(defaults.reasoning?.default),
         temperature: defaults.supportsTemperature === false ? '' : state.temperature,
       }
