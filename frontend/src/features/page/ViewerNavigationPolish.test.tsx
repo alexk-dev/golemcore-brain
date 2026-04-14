@@ -21,6 +21,7 @@ vi.mock('../../lib/api', () => ({
     maxAssetUploadSizeBytes: 1024,
     siteTitle: 'GolemCore Brain',
     rootPath: '',
+    imageVersion: 'dev',
   })),
   getTree: vi.fn(async () => ({
     id: 'root',

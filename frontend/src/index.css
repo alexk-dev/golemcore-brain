@@ -183,6 +183,10 @@
     @apply ml-auto flex min-h-full items-center gap-1 md:gap-2;
   }
 
+  .app-layout__image-version {
+    @apply max-w-28 truncate rounded-full border border-surface-border bg-background/50 px-2 py-1 text-xs font-medium text-muted;
+  }
+
   .app-layout__header-spacer {
     @apply h-16 w-full md:h-[68px];
   }

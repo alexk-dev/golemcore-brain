@@ -116,12 +116,12 @@ public class FileSystemWikiRepository implements WikiRepository {
             return Optional.of(getRootReference());
         }
 
-        Path sectionPath = spaceRoot().resolve(normalizedPath);
-        if (Files.isDirectory(sectionPath) && Files.exists(sectionPath.resolve(INDEX_FILE_NAME))) {
+        Path sectionPath = spaceRoot().resolve(normalizedPath).normalize();
+        if (isMaterializableSectionDirectory(sectionPath)) {
             return Optional.of(buildSectionReference(sectionPath));
         }
 
-        Path pagePath = spaceRoot().resolve(normalizedPath + MARKDOWN_EXTENSION);
+        Path pagePath = spaceRoot().resolve(normalizedPath + MARKDOWN_EXTENSION).normalize();
         if (Files.isRegularFile(pagePath)) {
             return Optional.of(buildPageReference(pagePath));
         }
@@ -148,7 +148,7 @@ public class FileSystemWikiRepository implements WikiRepository {
         List<WikiNodeReference> references = new ArrayList<>();
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(directory)) {
             for (Path candidate : stream) {
-                if (Files.isDirectory(candidate) && Files.exists(candidate.resolve(INDEX_FILE_NAME))) {
+                if (isMaterializableSectionDirectory(candidate)) {
                     references.add(buildSectionReference(candidate));
                 }
                 if (Files.isRegularFile(candidate)
@@ -181,6 +181,9 @@ public class FileSystemWikiRepository implements WikiRepository {
 
     @Override
     public WikiPageDocument readDocument(WikiNodeReference nodeReference) {
+        if (nodeReference.getKind() == WikiNodeKind.SECTION && !safeExists(nodeReference.getMarkdownPath())) {
+            return synthesizeSectionDocument(nodeReference);
+        }
         return readDocument(nodeReference.getMarkdownPath(), nodeReference);
     }
 
@@ -561,14 +564,15 @@ public class FileSystemWikiRepository implements WikiRepository {
 
     private void snapshotHistory(WikiNodeReference nodeReference, String actor, String reason, String summary)
             throws IOException {
-        if (!nodeReference.getKind().keepsHistory()) {
+        if (!nodeReference.getKind().keepsHistory() || !safeExists(nodeReference.getMarkdownPath())) {
             return;
         }
-        Path historyDirectory = getHistoryDirectory(nodeReference);
+        Path markdownPath = requireSpaceContainedPath(nodeReference.getMarkdownPath());
+        Path historyDirectory = requireSpaceContainedPath(getHistoryDirectory(nodeReference));
         Files.createDirectories(historyDirectory);
         String versionId = Instant.now().toEpochMilli() + "-" + UUID.randomUUID().toString().substring(0, 8);
-        Path historyPath = historyDirectory.resolve(versionId + ".md");
-        Files.copy(nodeReference.getMarkdownPath(), historyPath, StandardCopyOption.REPLACE_EXISTING);
+        Path historyPath = requireSpaceContainedPath(historyDirectory.resolve(versionId + ".md"));
+        Files.copy(markdownPath, historyPath, StandardCopyOption.REPLACE_EXISTING);
         writeHistoryMetadata(historyPath, new HistoryMetadata(
                 Instant.now().toString(),
                 Optional.ofNullable(actor).filter(value -> !value.isBlank()).orElse("Local editor"),
@@ -652,6 +656,33 @@ public class FileSystemWikiRepository implements WikiRepository {
         return nodeReference;
     }
 
+    private boolean isMaterializableSectionDirectory(Path path) {
+        Path safePath = requireSpaceContainedPath(path);
+        return Files.isDirectory(safePath) && !hasHiddenPathSegment(spaceRoot().relativize(safePath));
+    }
+
+    private Path requireSpaceContainedPath(Path path) {
+        Path root = spaceRoot().toAbsolutePath().normalize();
+        Path normalized = path.toAbsolutePath().normalize();
+        if (!normalized.startsWith(root)) {
+            throw new IllegalArgumentException("Path traversal is not allowed");
+        }
+        return normalized;
+    }
+
+    private boolean safeExists(Path path) {
+        return Files.exists(requireSpaceContainedPath(path));
+    }
+
+    private boolean hasHiddenPathSegment(Path relativePath) {
+        for (Path segment : relativePath) {
+            if (segment.getFileName().toString().startsWith(".")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private WikiNodeReference buildSectionReference(Path sectionPath) {
         Path relativePath = spaceRoot().relativize(sectionPath);
         String path = normalizePath(relativePath.toString());
@@ -683,6 +714,22 @@ public class FileSystemWikiRepository implements WikiRepository {
                 .nodePath(pagePath)
                 .parentDirectory(pagePath.getParent())
                 .markdownPath(pagePath)
+                .build();
+    }
+
+    private WikiPageDocument synthesizeSectionDocument(WikiNodeReference nodeReference) {
+        Path nodePath = requireSpaceContainedPath(nodeReference.getNodePath());
+        return WikiPageDocument.builder()
+                .id(nodeReference.getId())
+                .path(nodeReference.getPath())
+                .parentPath(nodeReference.getParentPath())
+                .slug(nodeReference.getSlug())
+                .title(humanizeSlug(nodeReference.getSlug()))
+                .body("")
+                .kind(WikiNodeKind.SECTION)
+                .createdAt(readCreatedInstant(nodePath))
+                .updatedAt(readUpdatedInstant(nodePath))
+                .revision(calculateRevision(""))
                 .build();
     }
 
@@ -823,7 +870,13 @@ public class FileSystemWikiRepository implements WikiRepository {
         Path targetMarkdownPath = sourceReference.getParentDirectory()
                 .resolve(sourceReference.getSlug() + MARKDOWN_EXTENSION);
         requireAvailable(targetMarkdownPath, sourceReference.getSlug());
-        Files.move(sourceReference.getMarkdownPath(), targetMarkdownPath, StandardCopyOption.REPLACE_EXISTING);
+        Path safeTargetMarkdownPath = requireSpaceContainedPath(targetMarkdownPath);
+        if (safeExists(sourceReference.getMarkdownPath())) {
+            Path safeSourceMarkdownPath = requireSpaceContainedPath(sourceReference.getMarkdownPath());
+            Files.move(safeSourceMarkdownPath, safeTargetMarkdownPath, StandardCopyOption.REPLACE_EXISTING);
+        } else {
+            writeMarkdown(safeTargetMarkdownPath, renderMarkdown(humanizeSlug(sourceReference.getSlug()), ""));
+        }
         moveIfExists(getAssetsDirectory(sourceReference),
                 sourceReference.getParentDirectory().resolve(".assets-" + sourceReference.getSlug()));
         moveIfExists(
@@ -899,7 +952,7 @@ public class FileSystemWikiRepository implements WikiRepository {
                 if (fileName.startsWith(".")) {
                     continue;
                 }
-                if (Files.isDirectory(candidate) && Files.exists(candidate.resolve(INDEX_FILE_NAME))) {
+                if (isMaterializableSectionDirectory(candidate)) {
                     WikiNodeReference childReference = buildSectionReference(candidate);
                     rewriteAssetReferencesForReference(childReference, oldRootPath, newRootPath);
                     rewriteAssetReferencesForChildren(candidate, oldRootPath, newRootPath);
@@ -931,10 +984,14 @@ public class FileSystemWikiRepository implements WikiRepository {
     }
 
     private void rewriteMarkdownAssetPath(Path markdownPath, String oldPath, String newPath) throws IOException {
-        String rawMarkdown = Files.readString(markdownPath, StandardCharsets.UTF_8);
+        Path safeMarkdownPath = requireSpaceContainedPath(markdownPath);
+        if (!Files.exists(safeMarkdownPath)) {
+            return;
+        }
+        String rawMarkdown = Files.readString(safeMarkdownPath, StandardCharsets.UTF_8);
         String updatedMarkdown = rewriteAssetPathReferences(rawMarkdown, oldPath, newPath);
         if (!rawMarkdown.equals(updatedMarkdown)) {
-            Files.writeString(markdownPath, updatedMarkdown, StandardCharsets.UTF_8,
+            Files.writeString(safeMarkdownPath, updatedMarkdown, StandardCharsets.UTF_8,
                     StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
         }
     }

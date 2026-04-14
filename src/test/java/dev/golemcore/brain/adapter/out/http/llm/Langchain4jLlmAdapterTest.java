@@ -1,5 +1,6 @@
 package dev.golemcore.brain.adapter.out.http.llm;
 
+import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import dev.golemcore.brain.domain.Secret;
@@ -104,23 +105,17 @@ class Langchain4jLlmAdapterTest {
     @Test
     void shouldParseResponsesFunctionCalls() throws Exception {
         server = TestServer.start(sse(
-                event("response.output_item.added", """
+                event("response.output_item.done", """
                         {
-                          "type": "response.output_item.added",
+                          "type": "response.output_item.done",
                           "item": {
                             "id": "fc-test",
                             "type": "function_call",
                             "call_id": "call-1",
-                            "name": "search_files"
+                            "name": "search_files",
+                            "arguments": "{\\\"query\\\":\\\"roadmap\\\"}"
                           },
                           "output_index": 0
-                        }
-                        """),
-                event("response.function_call_arguments.done", """
-                        {
-                          "type": "response.function_call_arguments.done",
-                          "item_id": "fc-test",
-                          "arguments": "{\\"query\\":\\"roadmap\\"}"
                         }
                         """),
                 event("response.completed", """
@@ -221,6 +216,122 @@ class Langchain4jLlmAdapterTest {
     }
 
     @Test
+    void shouldUseNativeAnthropicMessagesEndpointForAnthropicChat() throws Exception {
+        server = TestServer.start("""
+                {
+                  "id": "msg-test",
+                  "type": "message",
+                  "role": "assistant",
+                  "model": "claude-3-5-sonnet-latest",
+                  "content": [{"type": "text", "text": "Hello from Claude"}],
+                  "stop_reason": "end_turn",
+                  "usage": {"input_tokens": 4, "output_tokens": 3}
+                }
+                """, "application/json");
+        Langchain4jLlmAdapter adapter = new Langchain4jLlmAdapter(new ObjectMapper());
+
+        LlmChatResponse response = adapter.chat(LlmChatRequest.builder()
+                .provider(provider(LlmApiType.ANTHROPIC, null))
+                .model(LlmModelConfig.builder()
+                        .provider("anthropic")
+                        .modelId("claude-3-5-sonnet-latest")
+                        .kind(LlmModelKind.CHAT)
+                        .temperature(0.2d)
+                        .build())
+                .systemPrompt("Be concise.")
+                .messages(List.of(LlmChatMessage.builder().role("user").content("Hello").build()))
+                .tools(List.of(searchFilesTool()))
+                .build());
+
+        assertEquals("Hello from Claude", response.getContent());
+        assertEquals("/v1/messages", server.path());
+        assertEquals("sk-test", server.requestHeader("x-api-key"));
+        assertEquals("2023-06-01", server.requestHeader("anthropic-version"));
+        assertTrue(server.requestBody().contains("\"model\""));
+        assertTrue(server.requestBody().contains("claude-3-5-sonnet-latest"));
+        assertTrue(server.requestBody().contains("\"system\""));
+        assertTrue(server.requestBody().contains("\"tools\""));
+        assertTrue(server.requestBody().matches("(?s).*\"temperature\"\\s*:\\s*0\\.2.*"),
+                server.requestBody());
+    }
+
+    @Test
+    void shouldUseNativeGeminiGenerateContentEndpointForGeminiChat() throws Exception {
+        server = TestServer.start("""
+                {
+                  "candidates": [
+                    {
+                      "content": {
+                        "role": "model",
+                        "parts": [{"text": "Hello from Gemini"}]
+                      },
+                      "finishReason": "STOP"
+                    }
+                  ],
+                  "usageMetadata": {
+                    "promptTokenCount": 3,
+                    "candidatesTokenCount": 3,
+                    "totalTokenCount": 6
+                  },
+                  "modelVersion": "gemini-1.5-flash"
+                }
+                """, "application/json");
+        Langchain4jLlmAdapter adapter = new Langchain4jLlmAdapter(new ObjectMapper());
+
+        LlmChatResponse response = adapter.chat(LlmChatRequest.builder()
+                .provider(provider(LlmApiType.GEMINI, null))
+                .model(LlmModelConfig.builder()
+                        .provider("gemini")
+                        .modelId("gemini-1.5-flash")
+                        .kind(LlmModelKind.CHAT)
+                        .supportsTemperature(false)
+                        .reasoningEffort("medium")
+                        .build())
+                .systemPrompt("Be concise.")
+                .messages(List.of(LlmChatMessage.builder().role("user").content("Hello").build()))
+                .tools(List.of(searchFilesTool()))
+                .build());
+
+        assertEquals("Hello from Gemini", response.getContent());
+        assertEquals("/v1beta/models/gemini-1.5-flash:generateContent", server.path());
+        assertEquals("sk-test", server.requestHeader("x-goog-api-key"));
+        assertTrue(server.requestBody().contains("\"systemInstruction\""));
+        assertTrue(server.requestBody().contains("\"functionDeclarations\""));
+        assertTrue(server.requestBody().contains("\"thinkingBudget\""));
+        assertTrue(server.requestBody().contains("8192"));
+        assertFalse(server.requestBody().contains("\"temperature\""));
+    }
+
+    @Test
+    void shouldUseNativeGeminiEmbeddingEndpointForGeminiEmbeddings() throws Exception {
+        server = TestServer.start("""
+                {
+                  "embeddings": [
+                    {"values": [0.5, 0.75]}
+                  ]
+                }
+                """, "application/json");
+        Langchain4jLlmAdapter adapter = new Langchain4jLlmAdapter(new ObjectMapper());
+
+        LlmEmbeddingResponse response = adapter.embed(LlmEmbeddingRequest.builder()
+                .provider(provider(LlmApiType.GEMINI, null))
+                .model(LlmModelConfig.builder()
+                        .provider("gemini")
+                        .modelId("text-embedding-004")
+                        .kind(LlmModelKind.EMBEDDING)
+                        .dimensions(2)
+                        .build())
+                .inputs(List.of("hello"))
+                .build());
+
+        assertEquals(List.of(List.of(0.5d, 0.75d)), response.getEmbeddings());
+        assertEquals("/v1beta/models/text-embedding-004:batchEmbedContents", server.path());
+        assertEquals("sk-test", server.requestHeader("x-goog-api-key"));
+        assertTrue(server.requestBody().contains("\"outputDimensionality\""));
+        assertTrue(server.requestBody().contains("2"));
+    }
+
+    @Test
     void shouldUseLangchain4jForEmbeddings() throws Exception {
         server = TestServer.start("""
                 {
@@ -316,13 +427,24 @@ class Langchain4jLlmAdapterTest {
     }
 
     private LlmProviderConfig provider(Boolean legacyApi) {
+        return provider(LlmApiType.OPENAI, legacyApi);
+    }
+
+    private LlmProviderConfig provider(LlmApiType apiType, Boolean legacyApi) {
         return LlmProviderConfig.builder()
                 .apiKey(Secret.of("sk-test"))
-                .apiType(LlmApiType.OPENAI)
-                .baseUrl(server.baseUrl())
+                .apiType(apiType)
+                .baseUrl(baseUrl(apiType))
                 .legacyApi(legacyApi)
                 .requestTimeoutSeconds(30)
                 .build();
+    }
+
+    private String baseUrl(LlmApiType apiType) {
+        return switch (apiType) {
+        case ANTHROPIC, OPENAI -> server.baseUrl("v1");
+        case GEMINI -> server.baseUrl("v1beta");
+        };
     }
 
     private static String event(String name, String data) {
@@ -340,6 +462,7 @@ class Langchain4jLlmAdapterTest {
         private final ExecutorService executor;
         private volatile String capturedRequestBody;
         private volatile String capturedPath;
+        private volatile Headers capturedHeaders;
 
         private TestServer(HttpServer server, ExecutorService executor) {
             this.server = server;
@@ -356,12 +479,19 @@ class Langchain4jLlmAdapterTest {
             return testServer;
         }
 
-        String baseUrl() {
-            return "http://127.0.0.1:" + server.getAddress().getPort() + "/v1";
+        String baseUrl(String apiVersion) {
+            return "http://127.0.0.1:" + server.getAddress().getPort() + "/" + apiVersion;
         }
 
         String requestBody() {
             return capturedRequestBody;
+        }
+
+        String requestHeader(String name) {
+            if (capturedHeaders == null) {
+                return null;
+            }
+            return capturedHeaders.getFirst(name);
         }
 
         String path() {
@@ -375,9 +505,10 @@ class Langchain4jLlmAdapterTest {
 
         private void handle(HttpExchange exchange, String responseBody, String contentType) throws IOException {
             capturedPath = exchange.getRequestURI().getPath();
+            capturedHeaders = exchange.getRequestHeaders();
             capturedRequestBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
             byte[] bytes = responseBody.getBytes(StandardCharsets.UTF_8);
-            exchange.getResponseHeaders().add("Content-Type", contentType);
+            exchange.getResponseHeaders().set("Content-Type", contentType);
             exchange.sendResponseHeaders(200, bytes.length);
             exchange.getResponseBody().write(bytes);
             exchange.close();
