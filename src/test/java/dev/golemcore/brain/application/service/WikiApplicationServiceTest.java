@@ -49,6 +49,17 @@ class WikiApplicationServiceTest {
     }
 
     @Test
+    void shouldExposeImageVersionInConfig() {
+        WikiProperties properties = new WikiProperties();
+        properties.setStorageRoot(tempDir.resolve("version-wiki"));
+        properties.setSeedDemoContent(false);
+        properties.setImageVersion("2026.04.14-test");
+        WikiApplicationService service = createService(properties);
+
+        assertEquals("2026.04.14-test", service.getConfig().getImageVersion());
+    }
+
+    @Test
     void shouldCreateLoadSearchMoveCopyDeleteLinksLookupEnsureAndAssets() throws Exception {
         WikiApplicationService service = createService();
 
@@ -350,6 +361,10 @@ class WikiApplicationServiceTest {
         WikiProperties properties = new WikiProperties();
         properties.setStorageRoot(tempDir.resolve("wiki"));
         properties.setSeedDemoContent(false);
+        return createService(properties);
+    }
+
+    private WikiApplicationService createService(WikiProperties properties) {
         FileSpaceRepository spaceRepository = new FileSpaceRepository(properties);
         spaceRepository.initialize();
         Space defaultSpace = spaceRepository.findBySlug(properties.getDefaultSpaceSlug()).orElseThrow();

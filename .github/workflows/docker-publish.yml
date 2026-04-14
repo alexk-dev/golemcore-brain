@@ -116,18 +116,22 @@ jobs:
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
           APP_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
           ARCH="${{ matrix.arch }}"
+          IMAGE_VERSION="${SHORT_SHA}"
 
           echo "app-image=${APP_IMAGE}:${SHORT_SHA}-${ARCH}" >> "${GITHUB_OUTPUT}"
 
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             VERSION="${{ github.ref_name }}"
             VERSION="${VERSION#v}"
+            IMAGE_VERSION="${VERSION}"
             echo "extra-tags=latest-${ARCH},${VERSION}-${ARCH}" >> "${GITHUB_OUTPUT}"
           elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             echo "extra-tags=latest-${ARCH}" >> "${GITHUB_OUTPUT}"
           else
             echo "extra-tags=" >> "${GITHUB_OUTPUT}"
           fi
+
+          echo "image-version=${IMAGE_VERSION}" >> "${GITHUB_OUTPUT}"
 
       - name: Build and push app image (${{ matrix.arch }})
         env:
@@ -140,6 +144,7 @@ jobs:
             -DskipTests
             -Djib.platform.arch=${{ matrix.arch }}
             -Djib.target.image=${{ steps.tags.outputs.app-image }}
+            -Dbrain.image.version=${{ steps.tags.outputs.image-version }}
             -Djib.to.auth.username=${{ github.actor }}
             -Djib.to.auth.password=${{ secrets.GITHUB_TOKEN }}
           )

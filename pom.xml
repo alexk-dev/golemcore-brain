@@ -40,6 +40,7 @@
         <jib.from.image>eclipse-temurin:25-jre-alpine</jib.from.image>
         <jib.platform.arch>amd64</jib.platform.arch>
         <skip.frontend>false</skip.frontend>
+        <brain.image.version>${project.version}</brain.image.version>
     </properties>
 
     <dependencies>
@@ -310,6 +311,9 @@
                         <ports>
                             <port>8080</port>
                         </ports>
+                        <environment>
+                            <BRAIN_IMAGE_VERSION>${brain.image.version}</BRAIN_IMAGE_VERSION>
+                        </environment>
                         <creationTime>USE_CURRENT_TIMESTAMP</creationTime>
                     </container>
                 </configuration>

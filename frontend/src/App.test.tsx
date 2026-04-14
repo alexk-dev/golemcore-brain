@@ -21,6 +21,7 @@ vi.mock('./lib/api', () => ({
     maxAssetUploadSizeBytes: 1024,
     siteTitle: 'GolemCore Brain',
     rootPath: '',
+    imageVersion: 'sha-1234567',
   })),
   getTree: vi.fn(async () => ({
     id: 'root',
@@ -120,6 +121,16 @@ describe('App', () => {
       publicAccess: true,
       currentUser: null,
     })
+  })
+
+  it('renders a subtle image version marker from config', async () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByTitle('Image version sha-1234567')).toHaveTextContent('sha-1234567')
   })
 
   it('renders the shell and loads the root page without crashing', async () => {
