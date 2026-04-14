@@ -201,8 +201,8 @@ public class HttpLlmProviderCheckAdapter implements LlmProviderCheckPort {
     private String buildModelsUri(LlmApiType apiType, String configuredBaseUrl, String apiKey) {
         return switch (apiType) {
         case ANTHROPIC -> appendPath(
-                LlmEndpointResolver.canonicalBaseUrl(configuredBaseUrl, "https://api.anthropic.com"),
-                "/v1/models");
+                LlmEndpointResolver.canonicalBaseUrl(configuredBaseUrl, "https://api.anthropic.com/v1"),
+                "/models");
         case GEMINI -> appendPath(
                 LlmEndpointResolver.canonicalBaseUrl(
                         configuredBaseUrl,

@@ -4,11 +4,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { SpaceChatPage } from './SpaceChatPage'
 import { useSpaceStore } from '../../stores/space'
+import type { LlmModelConfig } from '../../types'
 
 const chatWithSpaceMock = vi.fn()
+const getLlmSettingsMock = vi.fn()
 
 vi.mock('../../lib/api', () => ({
   chatWithSpace: (...args: unknown[]) => chatWithSpaceMock(...args),
+  getLlmSettings: () => getLlmSettingsMock(),
 }))
 
 vi.mock('sonner', () => ({
@@ -17,11 +20,43 @@ vi.mock('sonner', () => ({
   },
 }))
 
+function chatModel(overrides: Partial<LlmModelConfig> & Pick<LlmModelConfig, 'id' | 'modelId'>): LlmModelConfig {
+  return {
+    provider: 'openai',
+    displayName: null,
+    kind: 'chat',
+    enabled: true,
+    supportsTemperature: null,
+    maxInputTokens: null,
+    dimensions: null,
+    temperature: null,
+    reasoningEffort: null,
+    ...overrides,
+  }
+}
+
 describe('SpaceChatPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     useSpaceStore.setState({
       activeSlug: 'docs',
+    })
+    getLlmSettingsMock.mockResolvedValue({
+      providers: {},
+      models: [
+        chatModel({ id: 'chat-model', modelId: 'gpt-4o', displayName: 'Fast Chat' }),
+        chatModel({
+          id: 'deep-chat',
+          provider: 'anthropic',
+          modelId: 'claude-sonnet',
+          displayName: 'Deep Chat',
+          supportsTemperature: false,
+          maxInputTokens: 200000,
+        }),
+        chatModel({ id: 'disabled-chat', modelId: 'disabled', displayName: 'Disabled Chat', enabled: false }),
+        chatModel({ id: 'embedding-model', modelId: 'text-embedding', displayName: 'Embedding', kind: 'embedding' }),
+      ],
+      modelRegistry: null,
     })
     chatWithSpaceMock.mockResolvedValue({
       answer: 'Use the roadmap page.',
@@ -40,6 +75,7 @@ describe('SpaceChatPage', () => {
     )
 
     expect(screen.getByRole('button', { name: 'New chat' })).toBeInTheDocument()
+    await screen.findByLabelText('Chat model')
 
     fireEvent.change(screen.getByLabelText('Question'), {
       target: { value: 'What does the roadmap say?' },
@@ -47,7 +83,7 @@ describe('SpaceChatPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 
     await waitFor(() => {
-      expect(chatWithSpaceMock).toHaveBeenCalledWith('What does the roadmap say?', [], undefined, null, 1)
+      expect(chatWithSpaceMock).toHaveBeenCalledWith('What does the roadmap say?', [], 'chat-model', null, 1)
     })
     expect(await screen.findByText('Use the roadmap page.')).toBeInTheDocument()
 
@@ -63,7 +99,7 @@ describe('SpaceChatPage', () => {
           { role: 'user', content: 'What does the roadmap say?' },
           { role: 'assistant', content: 'Use the roadmap page.' },
         ],
-        undefined,
+        'chat-model',
         'Roadmap question summary.',
         2,
       )
@@ -76,16 +112,43 @@ describe('SpaceChatPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 
     await waitFor(() => {
-      expect(chatWithSpaceMock).toHaveBeenLastCalledWith('Start over?', [], undefined, null, 1)
+      expect(chatWithSpaceMock).toHaveBeenLastCalledWith('Start over?', [], 'chat-model', null, 1)
     })
   })
 
-  it('keeps the current draft when starting a new chat', () => {
+  it('lets users choose among enabled chat models', async () => {
     render(
       <MemoryRouter>
         <SpaceChatPage />
       </MemoryRouter>,
     )
+
+    const modelSelect = await screen.findByLabelText('Chat model')
+    expect(modelSelect).toHaveValue('chat-model')
+    expect(screen.getByRole('option', { name: 'Fast Chat' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Deep Chat' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Disabled Chat' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Embedding' })).not.toBeInTheDocument()
+
+    fireEvent.change(modelSelect, { target: { value: 'deep-chat' } })
+    fireEvent.change(screen.getByLabelText('Question'), {
+      target: { value: 'Use the deep model' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    await waitFor(() => {
+      expect(chatWithSpaceMock).toHaveBeenCalledWith('Use the deep model', [], 'deep-chat', null, 1)
+    })
+  })
+
+  it('keeps the current draft when starting a new chat', async () => {
+    render(
+      <MemoryRouter>
+        <SpaceChatPage />
+      </MemoryRouter>,
+    )
+
+    await screen.findByLabelText('Chat model')
 
     fireEvent.change(screen.getByLabelText('Question'), {
       target: { value: 'Draft question' },
@@ -101,6 +164,8 @@ describe('SpaceChatPage', () => {
         <SpaceChatPage />
       </MemoryRouter>,
     )
+
+    await screen.findByLabelText('Chat model')
 
     fireEvent.change(screen.getByLabelText('Question'), {
       target: { value: 'What does the roadmap say?' },
@@ -134,6 +199,8 @@ describe('SpaceChatPage', () => {
         <SpaceChatPage />
       </MemoryRouter>,
     )
+
+    await screen.findByLabelText('Chat model')
 
     fireEvent.change(screen.getByLabelText('Question'), {
       target: { value: 'Where is the roadmap?' },

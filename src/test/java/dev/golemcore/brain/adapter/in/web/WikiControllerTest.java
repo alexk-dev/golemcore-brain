@@ -51,6 +51,7 @@ class WikiControllerTest {
         mockMvc.perform(get("/api/config"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.siteTitle", is(wikiProperties.getSiteTitle())))
+                .andExpect(jsonPath("$.imageVersion", is("dev")))
                 .andExpect(jsonPath("$.authDisabled", is(true)));
 
         mockMvc.perform(get("/api/spaces/default/tree"))

@@ -1,6 +1,6 @@
 import { Menu } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 
 import { Sidebar } from '../sidebar/Sidebar'
 import { SpaceSwitcher } from '../spaces/SpaceSwitcher'
@@ -11,6 +11,7 @@ import { UserMenu } from './UserMenu'
 interface AppLayoutProps {
   children: ReactNode
   siteTitle: string
+  imageVersion?: string | null
   tree: WikiTreeNode | null
   activePath: string
   openPaths: string[]
@@ -43,6 +44,7 @@ interface AppLayoutProps {
 export function AppLayout({
   children,
   siteTitle,
+  imageVersion,
   tree,
   activePath,
   openPaths,
@@ -71,8 +73,7 @@ export function AppLayout({
   editorDirty = false,
   onLogout,
 }: AppLayoutProps) {
-  const location = useLocation()
-  const isChatRoute = location.pathname === '/chat'
+  const displayImageVersion = imageVersion && imageVersion !== 'dev' ? imageVersion : null
 
   if (hideHeader) {
     return (
@@ -110,15 +111,17 @@ export function AppLayout({
           </div>
           <div className="app-layout__editor-toolbar-container">
             <Toolbar />
-            <Link to="/chat" className={isChatRoute ? 'action-button-primary hidden md:inline-flex' : 'action-button-secondary hidden md:inline-flex'}>
-              Chat
-            </Link>
             {canCreate ? (
               <Link to="/import" className="action-button-secondary hidden md:inline-flex">
                 Import
               </Link>
             ) : null}
             <SpaceSwitcher className="action-button-secondary hidden md:inline-flex" />
+            {displayImageVersion ? (
+              <span className="app-layout__image-version hidden xl:inline-flex" title={`Image version ${displayImageVersion}`}>
+                {displayImageVersion}
+              </span>
+            ) : null}
             {currentUsername ? (
               <UserMenu
                 username={currentUsername}
@@ -145,25 +148,25 @@ export function AppLayout({
               onClick={onToggleSidebar}
             />
             <div className="app-layout__sidebar-container app-layout__sidebar-container--overlay" id="sidebar-container">
-            <Sidebar
-              tree={tree}
-              activePath={activePath}
-              openPaths={openPaths}
-              canCreate={canCreate}
-              canEdit={canEditCurrent || canCreate}
-              onNavigate={onNavigate}
-              onToggle={onToggleNode}
-              onCreate={onCreate}
-              onEdit={onEdit}
-              onMove={onMove}
-              onCopy={onCopy}
-              onDelete={onDelete}
-              onSort={onSort}
-              onConvert={onConvert}
-              onExpandAll={onExpandAll}
-              onCollapseAll={onCollapseAll}
-              onOpenSearch={onOpenSearch}
-            />
+              <Sidebar
+                tree={tree}
+                activePath={activePath}
+                openPaths={openPaths}
+                canCreate={canCreate}
+                canEdit={canEditCurrent || canCreate}
+                onNavigate={onNavigate}
+                onToggle={onToggleNode}
+                onCreate={onCreate}
+                onEdit={onEdit}
+                onMove={onMove}
+                onCopy={onCopy}
+                onDelete={onDelete}
+                onSort={onSort}
+                onConvert={onConvert}
+                onExpandAll={onExpandAll}
+                onCollapseAll={onCollapseAll}
+                onOpenSearch={onOpenSearch}
+              />
             </div>
           </>
         ) : null}

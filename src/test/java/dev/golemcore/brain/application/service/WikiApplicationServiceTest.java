@@ -14,6 +14,7 @@ import dev.golemcore.brain.domain.WikiAsset;
 import dev.golemcore.brain.domain.WikiAssetContent;
 import dev.golemcore.brain.domain.WikiLinkStatus;
 import dev.golemcore.brain.domain.WikiNodeKind;
+import dev.golemcore.brain.domain.WikiNodeReference;
 import dev.golemcore.brain.domain.WikiPage;
 import dev.golemcore.brain.domain.WikiPathLookupResult;
 import dev.golemcore.brain.domain.WikiIndexedDocument;
@@ -45,6 +46,17 @@ class WikiApplicationServiceTest {
     @AfterEach
     void tearDown() {
         SpaceContextHolder.clear();
+    }
+
+    @Test
+    void shouldExposeImageVersionInConfig() {
+        WikiProperties properties = new WikiProperties();
+        properties.setStorageRoot(tempDir.resolve("version-wiki"));
+        properties.setSeedDemoContent(false);
+        properties.setImageVersion("2026.04.14-test");
+        WikiApplicationService service = createService(properties);
+
+        assertEquals("2026.04.14-test", service.getConfig().getImageVersion());
     }
 
     @Test
@@ -191,6 +203,61 @@ class WikiApplicationServiceTest {
     }
 
     @Test
+    void shouldTreatDirectoryWithoutIndexAsSyntheticSectionUntilExplicitlyUpdated() throws Exception {
+        WikiProperties properties = new WikiProperties();
+        properties.setStorageRoot(tempDir.resolve("manual-section-wiki"));
+        properties.setSeedDemoContent(false);
+        FileSpaceRepository spaceRepository = new FileSpaceRepository(properties);
+        spaceRepository.initialize();
+        Space defaultSpace = spaceRepository.findBySlug(properties.getDefaultSpaceSlug()).orElseThrow();
+        SpaceContextHolder.set(defaultSpace.getId());
+        FileSystemWikiRepository repository = new FileSystemWikiRepository(properties, spaceRepository);
+        repository.initialize();
+        Path sectionPath = properties.getStorageRoot().resolve("spaces").resolve(defaultSpace.getId())
+                .resolve("manual-notes");
+        Path sectionIndexPath = sectionPath.resolve("index.md");
+        Files.createDirectories(sectionPath);
+        WikiApplicationService service = new WikiApplicationService(
+                repository,
+                properties,
+                new WikiIndexingService(
+                        repository,
+                        new LuceneWikiFullTextIndexAdapter(properties),
+                        new SqliteWikiEmbeddingIndexAdapter(properties),
+                        new InMemoryLlmSettingsRepository(),
+                        new NoopEmbeddingPort()));
+
+        WikiPage syntheticSection = service.getPage("manual-notes");
+
+        assertEquals(WikiNodeKind.SECTION, syntheticSection.getKind());
+        assertEquals("Manual Notes", syntheticSection.getTitle());
+        assertEquals("", syntheticSection.getContent());
+        assertFalse(Files.exists(sectionIndexPath));
+
+        WikiPage createdPage = service.createPage(WikiApplicationService.CreatePageCommand.builder()
+                .parentPath("manual-notes")
+                .title("Imported Note")
+                .slug("imported-note")
+                .content("Created under manually provisioned section")
+                .kind(WikiNodeKind.PAGE)
+                .build());
+
+        assertEquals("manual-notes/imported-note", createdPage.getPath());
+        assertFalse(Files.exists(sectionIndexPath));
+
+        WikiPage updatedSection = service.updatePage(WikiApplicationService.UpdatePageCommand.builder()
+                .path("manual-notes")
+                .title("Manual Notes")
+                .slug("manual-notes")
+                .content("Landing content")
+                .build());
+
+        assertEquals("manual-notes", updatedSection.getPath());
+        assertEquals("Landing content", updatedSection.getContent());
+        assertTrue(Files.exists(sectionIndexPath));
+    }
+
+    @Test
     void shouldConvertBetweenPageAndEmptySectionWhileKeepingAssets() throws Exception {
         WikiApplicationService service = createService();
         service.createPage(WikiApplicationService.CreatePageCommand.builder()
@@ -260,6 +327,31 @@ class WikiApplicationServiceTest {
     }
 
     @Test
+    void shouldRejectSyntheticSectionReferenceOutsideSpaceRoot() {
+        WikiProperties properties = new WikiProperties();
+        properties.setStorageRoot(tempDir.resolve("wiki-security"));
+        properties.setSeedDemoContent(false);
+        FileSpaceRepository spaceRepository = new FileSpaceRepository(properties);
+        spaceRepository.initialize();
+        Space defaultSpace = spaceRepository.findBySlug(properties.getDefaultSpaceSlug()).orElseThrow();
+        SpaceContextHolder.set(defaultSpace.getId());
+        FileSystemWikiRepository repository = new FileSystemWikiRepository(properties, spaceRepository);
+        repository.initialize();
+        WikiNodeReference maliciousReference = WikiNodeReference.builder()
+                .id("evil")
+                .path("evil")
+                .parentPath("")
+                .slug("evil")
+                .kind(WikiNodeKind.SECTION)
+                .nodePath(properties.getStorageRoot().resolve("outside"))
+                .parentDirectory(properties.getStorageRoot())
+                .markdownPath(properties.getStorageRoot().resolve("outside").resolve("index.md"))
+                .build();
+
+        assertThrows(IllegalArgumentException.class, () -> repository.readDocument(maliciousReference));
+    }
+
+    @Test
     void shouldRejectPathTraversal() {
         WikiApplicationService service = createService();
         assertThrows(IllegalArgumentException.class, () -> service.getPage("../etc/passwd"));
@@ -269,6 +361,10 @@ class WikiApplicationServiceTest {
         WikiProperties properties = new WikiProperties();
         properties.setStorageRoot(tempDir.resolve("wiki"));
         properties.setSeedDemoContent(false);
+        return createService(properties);
+    }
+
+    private WikiApplicationService createService(WikiProperties properties) {
         FileSpaceRepository spaceRepository = new FileSpaceRepository(properties);
         spaceRepository.initialize();
         Space defaultSpace = spaceRepository.findBySlug(properties.getDefaultSpaceSlug()).orElseThrow();

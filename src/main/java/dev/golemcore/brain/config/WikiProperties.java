@@ -12,6 +12,7 @@ public class WikiProperties implements BrainSettingsPort {
 
     private Path storageRoot = Paths.get("data", "wiki");
     private String siteTitle = "GolemCore Brain";
+    private String imageVersion = "dev";
     private boolean seedDemoContent = true;
     private boolean authDisabled = false;
     private boolean publicAccess = false;

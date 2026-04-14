@@ -23,6 +23,7 @@ import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.http.client.HttpClientBuilder;
 import dev.langchain4j.http.client.jdk.JdkHttpClientBuilder;
+import dev.langchain4j.model.anthropic.AnthropicChatModel;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
@@ -36,6 +37,9 @@ import dev.langchain4j.model.chat.request.json.JsonSchemaElement;
 import dev.langchain4j.model.chat.request.json.JsonStringSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
+import dev.langchain4j.model.googleai.GeminiThinkingConfig;
+import dev.langchain4j.model.googleai.GoogleAiEmbeddingModel;
+import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.OpenAiEmbeddingModel;
 import dev.langchain4j.model.openai.OpenAiResponsesStreamingChatModel;
@@ -59,6 +63,7 @@ import tools.jackson.databind.ObjectMapper;
 public class Langchain4jLlmAdapter implements LlmChatPort, LlmEmbeddingPort {
 
     private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(300);
+    private static final int ANTHROPIC_THINKING_RESPONSE_TOKEN_BUFFER = 1024;
     private static final String SCHEMA_KEY_PROPERTIES = "properties";
 
     private final ObjectMapper objectMapper;
@@ -72,17 +77,22 @@ public class Langchain4jLlmAdapter implements LlmChatPort, LlmEmbeddingPort {
         LlmApiType apiType = request.getProvider().getApiType() != null
                 ? request.getProvider().getApiType()
                 : LlmApiType.OPENAI;
-        if (apiType != LlmApiType.OPENAI) {
-            throw new IllegalArgumentException("Embedding indexing currently supports OpenAI-compatible APIs");
+        if (apiType == LlmApiType.ANTHROPIC) {
+            throw new IllegalArgumentException("Embedding indexing is not supported by Anthropic chat APIs");
         }
 
         List<String> inputs = request.getInputs() != null ? request.getInputs() : List.of();
         if (inputs.isEmpty()) {
             return LlmEmbeddingResponse.builder().embeddings(List.of()).build();
         }
-        List<Embedding> embeddings = createEmbeddingModel(request)
-                .embedAll(inputs.stream().map(TextSegment::from).toList())
+        List<Embedding> embeddings = switch (apiType) {
+        case GEMINI -> createGeminiEmbeddingModel(request).embedAll(inputs.stream().map(TextSegment::from).toList())
                 .content();
+        case OPENAI -> createOpenAiEmbeddingModel(request).embedAll(inputs.stream().map(TextSegment::from).toList())
+                .content();
+        case ANTHROPIC -> throw new IllegalArgumentException(
+                "Embedding indexing is not supported by Anthropic chat APIs");
+        };
         return LlmEmbeddingResponse.builder()
                 .embeddings(embeddings.stream()
                         .map(embedding -> embedding.vectorAsList().stream()
@@ -100,14 +110,14 @@ public class Langchain4jLlmAdapter implements LlmChatPort, LlmEmbeddingPort {
         LlmApiType apiType = request.getProvider().getApiType() != null
                 ? request.getProvider().getApiType()
                 : LlmApiType.OPENAI;
-        if (apiType != LlmApiType.OPENAI) {
-            throw new IllegalArgumentException("Dynamic API agent loop currently supports OpenAI-compatible chat APIs");
-        }
-
         ChatRequest chatRequest = toLangchainChatRequest(request);
-        ChatResponse response = Boolean.TRUE.equals(request.getProvider().getLegacyApi())
+        ChatResponse response = switch (apiType) {
+        case ANTHROPIC -> createAnthropicChatModel(request).chat(chatRequest);
+        case GEMINI -> createGeminiChatModel(request).chat(chatRequest);
+        case OPENAI -> Boolean.TRUE.equals(request.getProvider().getLegacyApi())
                 ? createLegacyChatModel(request).chat(chatRequest)
                 : chatViaResponsesApi(createResponsesStreamingModel(request), chatRequest);
+        };
         return toLlmChatResponse(response);
     }
 
@@ -145,7 +155,41 @@ public class Langchain4jLlmAdapter implements LlmChatPort, LlmEmbeddingPort {
         return builder.build();
     }
 
-    private OpenAiEmbeddingModel createEmbeddingModel(LlmEmbeddingRequest request) {
+    private ChatModel createAnthropicChatModel(LlmChatRequest request) {
+        LlmProviderConfig provider = request.getProvider();
+        AnthropicChatModel.AnthropicChatModelBuilder builder = AnthropicChatModel.builder()
+                .apiKey(Secret.valueOrEmpty(provider.getApiKey()))
+                .modelName(request.getModel().getModelId())
+                .baseUrl(anthropicBaseUrl(provider))
+                .timeout(requestTimeout(provider))
+                .maxRetries(0)
+                .logRequests(false)
+                .logResponses(false);
+        if (supportsTemperature(request) && request.getModel().getTemperature() != null) {
+            builder.temperature(request.getModel().getTemperature());
+        }
+        applyAnthropicReasoning(builder, request);
+        return builder.build();
+    }
+
+    private ChatModel createGeminiChatModel(LlmChatRequest request) {
+        LlmProviderConfig provider = request.getProvider();
+        GoogleAiGeminiChatModel.GoogleAiGeminiChatModelBuilder builder = GoogleAiGeminiChatModel.builder()
+                .apiKey(Secret.valueOrEmpty(provider.getApiKey()))
+                .modelName(request.getModel().getModelId())
+                .baseUrl(geminiBaseUrl(provider))
+                .timeout(requestTimeout(provider))
+                .maxRetries(0)
+                .logRequests(false)
+                .logResponses(false);
+        if (supportsTemperature(request) && request.getModel().getTemperature() != null) {
+            builder.temperature(request.getModel().getTemperature());
+        }
+        applyGeminiReasoning(builder, request);
+        return builder.build();
+    }
+
+    private OpenAiEmbeddingModel createOpenAiEmbeddingModel(LlmEmbeddingRequest request) {
         OpenAiEmbeddingModel.OpenAiEmbeddingModelBuilder builder = OpenAiEmbeddingModel.builder()
                 .apiKey(Secret.valueOrEmpty(request.getProvider().getApiKey()))
                 .modelName(request.getModel().getModelId())
@@ -156,6 +200,21 @@ public class Langchain4jLlmAdapter implements LlmChatPort, LlmEmbeddingPort {
                 .logResponses(false);
         if (request.getModel().getDimensions() != null) {
             builder.dimensions(request.getModel().getDimensions());
+        }
+        return builder.build();
+    }
+
+    private GoogleAiEmbeddingModel createGeminiEmbeddingModel(LlmEmbeddingRequest request) {
+        GoogleAiEmbeddingModel.GoogleAiEmbeddingModelBuilder builder = GoogleAiEmbeddingModel.builder()
+                .apiKey(Secret.valueOrEmpty(request.getProvider().getApiKey()))
+                .modelName(request.getModel().getModelId())
+                .baseUrl(geminiBaseUrl(request.getProvider()))
+                .timeout(requestTimeout(request.getProvider()))
+                .maxRetries(0)
+                .logRequests(false)
+                .logResponses(false);
+        if (request.getModel().getDimensions() != null) {
+            builder.outputDimensionality(request.getModel().getDimensions());
         }
         return builder.build();
     }
@@ -483,6 +542,58 @@ public class Langchain4jLlmAdapter implements LlmChatPort, LlmEmbeddingPort {
         }
     }
 
+    private void applyAnthropicReasoning(AnthropicChatModel.AnthropicChatModelBuilder builder, LlmChatRequest request) {
+        if (!hasReasoningEffort(request)) {
+            return;
+        }
+        Integer thinkingBudget = anthropicThinkingBudget(request.getModel().getReasoningEffort().trim());
+        if (thinkingBudget == null) {
+            return;
+        }
+        builder.thinkingType("enabled");
+        builder.thinkingBudgetTokens(thinkingBudget);
+        builder.maxTokens(thinkingBudget + ANTHROPIC_THINKING_RESPONSE_TOKEN_BUFFER);
+    }
+
+    private Integer anthropicThinkingBudget(String reasoningEffort) {
+        return switch (reasoningEffort.toLowerCase(Locale.ROOT)) {
+        case "minimal" -> 1024;
+        case "low" -> 2048;
+        case "medium" -> 8192;
+        case "high" -> 24576;
+        case "xhigh" -> 32768;
+        default -> null;
+        };
+    }
+
+    private void applyGeminiReasoning(
+            GoogleAiGeminiChatModel.GoogleAiGeminiChatModelBuilder builder,
+            LlmChatRequest request) {
+        if (!hasReasoningEffort(request)) {
+            return;
+        }
+        String reasoningEffort = request.getModel().getReasoningEffort().trim();
+        GeminiThinkingConfig.Builder thinkingBuilder = GeminiThinkingConfig.builder();
+        Integer thinkingBudget = geminiThinkingBudget(reasoningEffort);
+        if (thinkingBudget != null) {
+            thinkingBuilder.thinkingBudget(thinkingBudget);
+        } else {
+            thinkingBuilder.thinkingLevel(reasoningEffort);
+        }
+        builder.thinkingConfig(thinkingBuilder.build());
+    }
+
+    private Integer geminiThinkingBudget(String reasoningEffort) {
+        return switch (reasoningEffort.toLowerCase(Locale.ROOT)) {
+        case "minimal" -> 512;
+        case "low" -> 1024;
+        case "medium" -> 8192;
+        case "high" -> 24576;
+        case "xhigh" -> 32768;
+        default -> null;
+        };
+    }
+
     private boolean hasReasoningEffort(LlmChatRequest request) {
         String reasoningEffort = request.getModel().getReasoningEffort();
         return reasoningEffort != null && !reasoningEffort.isBlank() && !"none".equalsIgnoreCase(reasoningEffort);
@@ -500,6 +611,15 @@ public class Langchain4jLlmAdapter implements LlmChatPort, LlmEmbeddingPort {
 
     private String openAiBaseUrl(LlmProviderConfig provider) {
         return LlmEndpointResolver.canonicalBaseUrl(provider.getBaseUrl(), "https://api.openai.com/v1");
+    }
+
+    private String anthropicBaseUrl(LlmProviderConfig provider) {
+        return LlmEndpointResolver.canonicalBaseUrl(provider.getBaseUrl(), "https://api.anthropic.com/v1");
+    }
+
+    private String geminiBaseUrl(LlmProviderConfig provider) {
+        return LlmEndpointResolver.canonicalBaseUrl(provider.getBaseUrl(),
+                "https://generativelanguage.googleapis.com/v1beta");
     }
 
     private String nonNullText(String text) {
