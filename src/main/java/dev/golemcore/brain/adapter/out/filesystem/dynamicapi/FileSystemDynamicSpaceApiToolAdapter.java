@@ -17,6 +17,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -67,7 +68,8 @@ public class FileSystemDynamicSpaceApiToolAdapter implements DynamicSpaceApiTool
                         "properties", Map.of(
                                 "query", Map.of(
                                         "type", "string",
-                                        "description", "Case-insensitive search query"),
+                                        "description",
+                                        "Case-insensitive search query. Supports * and ? wildcard masks."),
                                 "maxResults", Map.of(
                                         "type", "integer",
                                         "description", "Maximum result count, 1-25")),
@@ -111,7 +113,7 @@ public class FileSystemDynamicSpaceApiToolAdapter implements DynamicSpaceApiTool
         }
         int maxResults = Math.min(MAX_SEARCH_LIMIT, Math.max(1, intArgument(arguments, "maxResults",
                 DEFAULT_SEARCH_LIMIT)));
-        String normalizedQuery = query.toLowerCase(Locale.ROOT);
+        MaskMatcher matcher = new MaskMatcher(query);
         Path root = spaceRoot(spaceId);
         List<Map<String, Object>> matches = new ArrayList<>();
         try (Stream<Path> stream = Files.walk(root)) {
@@ -128,9 +130,8 @@ public class FileSystemDynamicSpaceApiToolAdapter implements DynamicSpaceApiTool
                 String content = readSmallFile(path);
                 String relativePath = normalizeSeparators(root.relativize(path).toString());
                 String title = extractTitle(content, relativePath);
-                String haystack = (relativePath + "\n" + title + "\n" + content).toLowerCase(Locale.ROOT);
-                int matchIndex = haystack.indexOf(normalizedQuery);
-                if (matchIndex >= 0) {
+                String haystack = relativePath + "\n" + title + "\n" + content;
+                if (matcher.matches(haystack)) {
                     matches.add(Map.of(
                             "path", relativePath,
                             "wikiPath", toWikiPath(relativePath),
@@ -212,6 +213,56 @@ public class FileSystemDynamicSpaceApiToolAdapter implements DynamicSpaceApiTool
             return LlmToolResult.success("Listed " + entries.size() + " entries", data);
         } catch (IOException exception) {
             return LlmToolResult.failure("Failed to list directory: " + exception.getMessage());
+        }
+    }
+
+    private static class MaskMatcher {
+        private final String query;
+        private final Pattern pattern;
+
+        MaskMatcher(String query) {
+            this.query = query.trim().toLowerCase(Locale.ROOT);
+            this.pattern = buildPattern(this.query);
+        }
+
+        boolean matches(String value) {
+            String normalizedValue = value.toLowerCase(Locale.ROOT);
+            return hasWildcard(query)
+                    ? pattern.matcher(normalizedValue).find()
+                    : normalizedValue.contains(query);
+        }
+
+        private static Pattern buildPattern(String query) {
+            if (hasWildcard(query)) {
+                return Pattern.compile(globToRegex(query));
+            }
+            return Pattern.compile(Pattern.quote(query));
+        }
+
+        private static boolean hasWildcard(String query) {
+            return query.indexOf('*') >= 0 || query.indexOf('?') >= 0;
+        }
+
+        private static String globToRegex(String query) {
+            StringBuilder regex = new StringBuilder();
+            for (int index = 0; index < query.length(); index++) {
+                char character = query.charAt(index);
+                if (character == '*') {
+                    regex.append(".*");
+                } else if (character == '?') {
+                    regex.append('.');
+                } else {
+                    appendEscapedRegexCharacter(regex, character);
+                }
+            }
+            return regex.toString();
+        }
+
+        private static void appendEscapedRegexCharacter(StringBuilder regex, char character) {
+            if ("\\.[]{}()+-^$|".indexOf(character) >= 0) {
+                regex.append('\\');
+            }
+            regex.append(character);
         }
     }
 

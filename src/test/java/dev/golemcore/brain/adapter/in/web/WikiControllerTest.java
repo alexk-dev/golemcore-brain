@@ -160,6 +160,14 @@ class WikiControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].path", is("operations/release-runbook")));
 
+        mockMvc.perform(get("/api/spaces/default/search").param("q", "release* runbo*"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].path", is("operations/release-runbook")));
+
+        mockMvc.perform(get("/api/spaces/default/search").param("q", "*"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(greaterThan(0))));
+
         mockMvc.perform(get("/api/spaces/default/links").param("path", "operations/release-runbook"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.outgoings", hasSize(1)))

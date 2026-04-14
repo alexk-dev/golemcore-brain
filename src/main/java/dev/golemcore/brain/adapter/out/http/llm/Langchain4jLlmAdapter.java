@@ -50,6 +50,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import lombok.RequiredArgsConstructor;
@@ -344,24 +345,24 @@ public class Langchain4jLlmAdapter implements LlmChatPort, LlmEmbeddingPort {
         if (tool.getInputSchema() == null) {
             return null;
         }
-        Map<String, Object> properties = stringObjectMap(tool.getInputSchema().get(SCHEMA_KEY_PROPERTIES),
+        Optional<Map<String, Object>> properties = stringObjectMap(tool.getInputSchema().get(SCHEMA_KEY_PROPERTIES),
                 tool.getName(), SCHEMA_KEY_PROPERTIES);
-        if (properties == null) {
+        if (properties.isEmpty()) {
             return null;
         }
         JsonObjectSchema.Builder schemaBuilder = JsonObjectSchema.builder();
-        for (Map.Entry<String, Object> entry : properties.entrySet()) {
-            Map<String, Object> paramSchema = stringObjectMap(entry.getValue(), tool.getName(),
+        for (Map.Entry<String, Object> entry : properties.get().entrySet()) {
+            Optional<Map<String, Object>> paramSchema = stringObjectMap(entry.getValue(), tool.getName(),
                     SCHEMA_KEY_PROPERTIES + "." + entry.getKey());
-            if (paramSchema == null) {
+            if (paramSchema.isEmpty()) {
                 continue;
             }
             schemaBuilder.addProperty(entry.getKey(), toJsonSchemaElement(tool.getName(),
-                    SCHEMA_KEY_PROPERTIES + "." + entry.getKey(), paramSchema));
+                    SCHEMA_KEY_PROPERTIES + "." + entry.getKey(), paramSchema.get()));
         }
-        List<String> required = stringList(tool.getInputSchema().get("required"), tool.getName(), "required");
-        if (required != null && !required.isEmpty()) {
-            schemaBuilder.required(required);
+        Optional<List<String>> required = stringList(tool.getInputSchema().get("required"), tool.getName(), "required");
+        if (required.isPresent() && !required.get().isEmpty()) {
+            schemaBuilder.required(required.get());
         }
         return schemaBuilder.build();
     }
@@ -369,9 +370,9 @@ public class Langchain4jLlmAdapter implements LlmChatPort, LlmEmbeddingPort {
     private JsonSchemaElement toJsonSchemaElement(String toolName, String path, Map<String, Object> paramSchema) {
         String type = stringValue(paramSchema.get("type"), toolName, path + ".type");
         String description = stringValue(paramSchema.get("description"), toolName, path + ".description");
-        List<String> enumValues = stringList(paramSchema.get("enum"), toolName, path + ".enum");
-        if (enumValues != null && !enumValues.isEmpty()) {
-            JsonEnumSchema.Builder builder = JsonEnumSchema.builder().enumValues(enumValues);
+        Optional<List<String>> enumValues = stringList(paramSchema.get("enum"), toolName, path + ".enum");
+        if (enumValues.isPresent() && !enumValues.get().isEmpty()) {
+            JsonEnumSchema.Builder builder = JsonEnumSchema.builder().enumValues(enumValues.get());
             if (description != null && !description.isBlank()) {
                 builder.description(description);
             }
@@ -397,9 +398,9 @@ public class Langchain4jLlmAdapter implements LlmChatPort, LlmEmbeddingPort {
         if (description != null && !description.isBlank()) {
             builder.description(description);
         }
-        Map<String, Object> items = stringObjectMap(paramSchema.get("items"), toolName, path + ".items");
-        if (items != null) {
-            builder.items(toJsonSchemaElement(toolName, path + ".items", items));
+        Optional<Map<String, Object>> items = stringObjectMap(paramSchema.get("items"), toolName, path + ".items");
+        if (items.isPresent()) {
+            builder.items(toJsonSchemaElement(toolName, path + ".items", items.get()));
         }
         return builder.build();
     }
@@ -434,15 +435,15 @@ public class Langchain4jLlmAdapter implements LlmChatPort, LlmEmbeddingPort {
         if (description != null && !description.isBlank()) {
             builder.description(description);
         }
-        Map<String, Object> properties = stringObjectMap(paramSchema.get(SCHEMA_KEY_PROPERTIES), toolName,
+        Optional<Map<String, Object>> properties = stringObjectMap(paramSchema.get(SCHEMA_KEY_PROPERTIES), toolName,
                 path + "." + SCHEMA_KEY_PROPERTIES);
-        if (properties != null) {
-            for (Map.Entry<String, Object> entry : properties.entrySet()) {
-                Map<String, Object> nestedSchema = stringObjectMap(entry.getValue(), toolName,
+        if (properties.isPresent()) {
+            for (Map.Entry<String, Object> entry : properties.get().entrySet()) {
+                Optional<Map<String, Object>> nestedSchema = stringObjectMap(entry.getValue(), toolName,
                         path + "." + SCHEMA_KEY_PROPERTIES + "." + entry.getKey());
-                if (nestedSchema != null) {
+                if (nestedSchema.isPresent()) {
                     builder.addProperty(entry.getKey(), toJsonSchemaElement(toolName,
-                            path + "." + SCHEMA_KEY_PROPERTIES + "." + entry.getKey(), nestedSchema));
+                            path + "." + SCHEMA_KEY_PROPERTIES + "." + entry.getKey(), nestedSchema.get()));
                 }
             }
         }
@@ -486,13 +487,13 @@ public class Langchain4jLlmAdapter implements LlmChatPort, LlmEmbeddingPort {
         return objectMapper.readValue(rawArguments, Map.class);
     }
 
-    private Map<String, Object> stringObjectMap(Object rawValue, String toolName, String path) {
+    private Optional<Map<String, Object>> stringObjectMap(Object rawValue, String toolName, String path) {
         if (!(rawValue instanceof Map<?, ?> rawMap)) {
             if (rawValue != null) {
                 log.warn("[LLM] Invalid schema object for tool '{}' at {}: {}", toolName, path,
                         rawValue.getClass().getSimpleName());
             }
-            return null;
+            return Optional.empty();
         }
         Map<String, Object> casted = new LinkedHashMap<>();
         for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
@@ -502,16 +503,16 @@ public class Langchain4jLlmAdapter implements LlmChatPort, LlmEmbeddingPort {
                 log.warn("[LLM] Dropping non-string schema key for tool '{}' at {}", toolName, path);
             }
         }
-        return casted;
+        return Optional.of(casted);
     }
 
-    private List<String> stringList(Object rawValue, String toolName, String path) {
+    private Optional<List<String>> stringList(Object rawValue, String toolName, String path) {
         if (!(rawValue instanceof List<?> rawList)) {
             if (rawValue != null) {
                 log.warn("[LLM] Invalid schema list for tool '{}' at {}: {}", toolName, path,
                         rawValue.getClass().getSimpleName());
             }
-            return null;
+            return Optional.empty();
         }
         List<String> values = new ArrayList<>(rawList.size());
         for (Object item : rawList) {
@@ -521,7 +522,7 @@ public class Langchain4jLlmAdapter implements LlmChatPort, LlmEmbeddingPort {
                 log.warn("[LLM] Dropping non-string schema list item for tool '{}' at {}", toolName, path);
             }
         }
-        return values;
+        return Optional.of(values);
     }
 
     private String stringValue(Object rawValue, String toolName, String path) {
