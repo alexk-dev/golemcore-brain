@@ -30,7 +30,7 @@ final class LlmEndpointResolver {
         return switch (host.toLowerCase(Locale.ROOT)) {
         case "api.openai.com" -> "https://api.openai.com/v1";
         case "openrouter.ai" -> "https://openrouter.ai/api/v1";
-        case "api.anthropic.com" -> "https://api.anthropic.com";
+        case "api.anthropic.com" -> "https://api.anthropic.com/v1";
         case "generativelanguage.googleapis.com" -> "https://generativelanguage.googleapis.com/v1beta";
         case "api.groq.com" -> "https://api.groq.com/openai/v1";
         case "api.deepseek.com" -> "https://api.deepseek.com/v1";
