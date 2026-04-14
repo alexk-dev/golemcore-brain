@@ -1,0 +1,19 @@
+services:
+  brain:
+    image: ghcr.io/alexk-dev/golemcore-brain:latest
+    container_name: golemcore-brain
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      BRAIN_STORAGE_ROOT: /data/wiki
+      BRAIN_SITE_TITLE: ${BRAIN_SITE_TITLE:-GolemCore Brain}
+      BRAIN_ADMIN_USERNAME: ${BRAIN_ADMIN_USERNAME:-admin}
+      BRAIN_ADMIN_PASSWORD: ${BRAIN_ADMIN_PASSWORD:?Set BRAIN_ADMIN_PASSWORD before starting}
+      BRAIN_JWT_SECRET: ${BRAIN_JWT_SECRET:?Set BRAIN_JWT_SECRET before starting}
+    volumes:
+      - brain-data:/data/wiki
+
+volumes:
+  brain-data:
