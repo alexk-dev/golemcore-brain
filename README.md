@@ -60,6 +60,16 @@ java -jar target/golemcore-brain-*.jar
 
 The app starts on `http://localhost:8080`.
 
+To run the published container image with Docker Compose:
+
+```bash
+export BRAIN_ADMIN_PASSWORD='replace-this-password'
+export BRAIN_JWT_SECRET="$(openssl rand -hex 32)"
+docker compose up -d
+```
+
+The example [docker-compose.yml](docker-compose.yml) stores wiki data in a named Docker volume and exposes the app on `http://localhost:8080`.
+
 For frontend-only development:
 
 ```bash
