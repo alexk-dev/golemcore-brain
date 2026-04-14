@@ -69,6 +69,11 @@ describe('LlmSettingsPage', () => {
       models: ['gpt-5.4', 'text-embedding-3-large'],
     })
     checkLlmModelMock.mockResolvedValue({ success: true, message: 'Model test passed', statusCode: null })
+    resolveModelRegistryMock.mockResolvedValue({
+      defaultSettings: null,
+      configSource: null,
+      cacheStatus: 'miss',
+    })
     createLlmModelMock.mockResolvedValue({
       ...initialSettings,
       models: [
@@ -260,22 +265,48 @@ describe('LlmSettingsPage', () => {
     })
   })
 
-  it('offers detected provider models when creating model configs', async () => {
+  it('opens detected model picker and copies selected model defaults', async () => {
+    resolveModelRegistryMock.mockResolvedValue({
+      defaultSettings: {
+        provider: 'openai',
+        displayName: 'GPT 5.4',
+        supportsVision: null,
+        supportsTemperature: false,
+        maxInputTokens: 128000,
+        reasoning: {
+          default: 'high',
+          levels: {},
+        },
+      },
+      configSource: 'remote',
+      cacheStatus: 'hit',
+    })
     render(<LlmSettingsPage />)
 
     expect(await screen.findByRole('heading', { name: 'AI Models' })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Detect openai models' }))
-
-    await waitFor(() => {
-      expect(screen.getByText((content) => content.includes('Detected models: gpt-5.4'))).toBeInTheDocument()
-    })
-
     fireEvent.click(screen.getByRole('tab', { name: /Models/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Add model' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Detect models' }))
 
-    expect(screen.getByLabelText('Model ID')).toHaveAttribute('list', 'llm-detected-models-openai')
-    expect(screen.getByText('Pick a detected model or enter another model ID.')).toBeInTheDocument()
+    expect(await screen.findByRole('dialog', { name: 'Detected models for openai' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Filter detected models')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Filter detected models'), { target: { value: '5.4' } })
+    expect(screen.getByRole('button', { name: 'Select gpt-5.4' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Select text-embedding-3-large' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select gpt-5.4' }))
+
+    await waitFor(() => {
+      expect(resolveModelRegistryMock).toHaveBeenCalledWith('openai', 'gpt-5.4')
+    })
+    expect(screen.queryByRole('dialog', { name: 'Detected models for openai' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Model ID')).toHaveValue('gpt-5.4')
+    expect(screen.getByLabelText('Display name')).toHaveValue('GPT 5.4')
+    expect(screen.getByLabelText('Max input tokens')).toHaveValue(128000)
+    expect(screen.getByLabelText('Chat tuning')).toHaveValue('reasoning')
+    expect(screen.getByLabelText('Reasoning effort')).toHaveValue('high')
   })
 
   it('creates reasoning chat model configs with custom effort values', async () => {

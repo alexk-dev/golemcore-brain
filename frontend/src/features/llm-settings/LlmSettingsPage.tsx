@@ -23,6 +23,7 @@ import type {
   LlmModelKind,
   LlmProviderCheckResult,
   LlmSettings,
+  ModelCatalogEntry,
   SaveLlmModelPayload,
   SaveLlmProviderPayload,
   Secret,
@@ -170,6 +171,9 @@ export function LlmSettingsPage() {
   const [modelCheckResults, setModelCheckResults] = useState<Record<string, LlmProviderCheckResult>>({})
   const [providerFormCheckResult, setProviderFormCheckResult] = useState<LlmProviderCheckResult | null>(null)
   const [modelFormCheckResult, setModelFormCheckResult] = useState<LlmProviderCheckResult | null>(null)
+  const [isModelPickerOpen, setModelPickerOpen] = useState(false)
+  const [modelPickerFilter, setModelPickerFilter] = useState('')
+  const [selectingDetectedModel, setSelectingDetectedModel] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<LlmSettingsTab>('providers')
   const [activeModal, setActiveModal] = useState<LlmSettingsModal>(null)
 
@@ -183,6 +187,15 @@ export function LlmSettingsPage() {
     [settings.models],
   )
   const hasConnectedProvider = providerNames.some((name) => settings.providers[name]?.apiKey?.present)
+  const detectedModelChoices = useMemo(
+    () => detectedModels(checkResults[modelForm.provider]),
+    [checkResults, modelForm.provider],
+  )
+  const filteredDetectedModelChoices = useMemo(() => {
+    const query = modelPickerFilter.trim().toLowerCase()
+    if (query.length === 0) return detectedModelChoices
+    return detectedModelChoices.filter((modelId) => modelId.toLowerCase().includes(query))
+  }, [detectedModelChoices, modelPickerFilter])
 
   useEffect(() => {
     if (!isAdmin) {
@@ -230,6 +243,8 @@ export function LlmSettingsPage() {
 
   const closeModelModal = () => {
     resetModelForm()
+    setModelPickerOpen(false)
+    setModelPickerFilter('')
     setActiveModal(null)
   }
 
@@ -379,6 +394,28 @@ export function LlmSettingsPage() {
     }))
   }
 
+  const applyModelCatalogDefaultsToForm = (
+    modelId: string,
+    defaults: ModelCatalogEntry | null | undefined,
+  ) => {
+    setModelForm((state) => {
+      const selectedState = { ...state, modelId }
+      if (!defaults) return selectedState
+      return {
+        ...selectedState,
+        displayName: state.displayName || defaults.displayName || '',
+        maxInputTokens: defaults.maxInputTokens == null ? state.maxInputTokens : String(defaults.maxInputTokens),
+        chatTuning: defaults.reasoning
+          ? 'reasoning'
+          : defaults.supportsTemperature === false
+            ? 'reasoning'
+            : state.chatTuning,
+        reasoningEffort: normalizeReasoningEffort(defaults.reasoning?.default),
+        temperature: defaults.supportsTemperature === false ? '' : state.temperature,
+      }
+    })
+  }
+
   const handleApplyModelCatalogDefaults = async () => {
     if (modelForm.provider.length === 0 || modelForm.modelId.trim().length === 0) {
       toast.error('Provider and model ID are required')
@@ -392,14 +429,7 @@ export function LlmSettingsPage() {
         toast.error('No catalog defaults found for this model')
         return
       }
-      setModelForm((state) => ({
-        ...state,
-        displayName: state.displayName || defaults.displayName || '',
-        maxInputTokens: defaults.maxInputTokens == null ? state.maxInputTokens : String(defaults.maxInputTokens),
-        chatTuning: defaults.reasoning ? 'reasoning' : defaults.supportsTemperature === false ? 'reasoning' : 'temperature',
-        reasoningEffort: normalizeReasoningEffort(defaults.reasoning?.default),
-        temperature: defaults.supportsTemperature === false ? '' : state.temperature,
-      }))
+      applyModelCatalogDefaultsToForm(modelForm.modelId.trim(), defaults)
       toast.success(`Catalog defaults applied (${result.cacheStatus})`)
     } catch (error) {
       toast.error((error as Error).message)
@@ -459,7 +489,48 @@ export function LlmSettingsPage() {
       toast.error('Provider is required')
       return
     }
-    await handleCheckProvider(modelForm.provider)
+    const providerName = modelForm.provider
+    setCheckingProvider(providerName)
+    try {
+      const result = await checkLlmProvider(providerName)
+      setCheckResults((state) => ({ ...state, [providerName]: result }))
+      const modelIds = detectedModels(result)
+      if (result.success && modelIds.length > 0) {
+        setModelPickerFilter('')
+        setModelPickerOpen(true)
+        toast.success(result.message)
+      } else if (result.success) {
+        toast.error('Provider responded, but no models were returned')
+      } else {
+        toast.error(result.message)
+      }
+    } catch (error) {
+      toast.error((error as Error).message)
+    } finally {
+      setCheckingProvider(null)
+    }
+  }
+
+  const handleSelectDetectedModel = async (modelId: string) => {
+    const providerName = modelForm.provider
+    setSelectingDetectedModel(modelId)
+    setModelFormCheckResult(null)
+    try {
+      const result = await resolveModelRegistry(providerName, modelId)
+      applyModelCatalogDefaultsToForm(modelId, result.defaultSettings)
+      setModelPickerOpen(false)
+      if (result.defaultSettings) {
+        toast.success('Selected ' + modelId + ' and applied catalog defaults (' + result.cacheStatus + ')')
+      } else {
+        toast.success('Selected ' + modelId)
+      }
+    } catch (error) {
+      applyModelCatalogDefaultsToForm(modelId, null)
+      setModelPickerOpen(false)
+      toast.error((error as Error).message)
+    } finally {
+      setSelectingDetectedModel(null)
+    }
   }
 
   const handleModelSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -543,8 +614,6 @@ export function LlmSettingsPage() {
   }
 
   const providerFormDetectedModels = detectedModels(providerFormCheckResult)
-  const modelFormDetectedModels = detectedModels(checkResults[modelForm.provider])
-  const modelFormDetectedModelsId = `llm-detected-models-${modelForm.provider || 'provider'}`
 
   return (
     <div className="page-viewer">
@@ -921,20 +990,10 @@ export function LlmSettingsPage() {
               <input
                 aria-label="Model ID"
                 className="field-input"
-                list={modelFormDetectedModels.length > 0 ? modelFormDetectedModelsId : undefined}
                 value={modelForm.modelId}
                 onChange={(event) => setModelForm((state) => ({ ...state, modelId: event.target.value }))}
               />
-              {modelFormDetectedModels.length > 0 ? (
-                <>
-                  <datalist id={modelFormDetectedModelsId}>
-                    {modelFormDetectedModels.map((modelId) => (
-                      <option key={modelId} value={modelId} />
-                    ))}
-                  </datalist>
-                  <span className="text-xs text-muted">Pick a detected model or enter another model ID.</span>
-                </>
-              ) : null}
+              <span className="text-xs text-muted">Use Detect models to browse provider models, or enter another model ID.</span>
             </label>
             <label className="field">
               <span className="text-sm font-medium">Display name</span>
@@ -1027,6 +1086,55 @@ export function LlmSettingsPage() {
               </span>
             ) : null}
         </form>
+      </ModalCard>
+
+      <ModalCard
+        open={isModelPickerOpen}
+        title={`Detected models for ${modelForm.provider}`}
+        description="Filter the provider model list, then select a model to copy its ID and catalog defaults into the model form."
+        onOpenChange={(open) => {
+          setModelPickerOpen(open)
+          if (!open) setModelPickerFilter('')
+        }}
+        footer={
+          <button type="button" className="action-button-secondary" onClick={() => setModelPickerOpen(false)}>
+            Close
+          </button>
+        }
+      >
+        <label className="field">
+          <span className="text-sm font-medium">Filter by name</span>
+          <input
+            aria-label="Filter detected models"
+            className="field-input"
+            value={modelPickerFilter}
+            placeholder="Type part of a model name"
+            onChange={(event) => setModelPickerFilter(event.target.value)}
+          />
+        </label>
+        <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+          {filteredDetectedModelChoices.length > 0 ? (
+            filteredDetectedModelChoices.map((modelId) => (
+              <button
+                key={modelId}
+                type="button"
+                className="flex w-full items-center justify-between gap-3 rounded-lg border border-surface-border bg-surface-alt/60 px-3 py-2 text-left text-sm transition hover:border-accent hover:text-accent"
+                aria-label={`Select ${modelId}`}
+                onClick={() => void handleSelectDetectedModel(modelId)}
+                disabled={selectingDetectedModel !== null}
+              >
+                <span className="min-w-0 truncate font-mono">{modelId}</span>
+                <span className="shrink-0 text-xs text-muted">
+                  {selectingDetectedModel === modelId ? 'Applying...' : 'Select'}
+                </span>
+              </button>
+            ))
+          ) : (
+            <div className="rounded-lg border border-surface-border bg-surface-alt/60 px-3 py-2 text-sm text-muted">
+              No detected models match this filter.
+            </div>
+          )}
+        </div>
       </ModalCard>
     </div>
   )
