@@ -17,7 +17,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -218,51 +217,66 @@ public class FileSystemDynamicSpaceApiToolAdapter implements DynamicSpaceApiTool
 
     private static class MaskMatcher {
         private final String query;
-        private final Pattern pattern;
 
         MaskMatcher(String query) {
             this.query = query.trim().toLowerCase(Locale.ROOT);
-            this.pattern = buildPattern(this.query);
         }
 
         boolean matches(String value) {
             String normalizedValue = value.toLowerCase(Locale.ROOT);
             return hasWildcard(query)
-                    ? pattern.matcher(normalizedValue).find()
+                    ? containsMask(normalizedValue, query)
                     : normalizedValue.contains(query);
-        }
-
-        private static Pattern buildPattern(String query) {
-            if (hasWildcard(query)) {
-                return Pattern.compile(globToRegex(query));
-            }
-            return Pattern.compile(Pattern.quote(query));
         }
 
         private static boolean hasWildcard(String query) {
             return query.indexOf('*') >= 0 || query.indexOf('?') >= 0;
         }
 
-        private static String globToRegex(String query) {
-            StringBuilder regex = new StringBuilder();
-            for (int index = 0; index < query.length(); index++) {
-                char character = query.charAt(index);
-                if (character == '*') {
-                    regex.append(".*");
-                } else if (character == '?') {
-                    regex.append('.');
-                } else {
-                    appendEscapedRegexCharacter(regex, character);
+        private static boolean containsMask(String value, String mask) {
+            if ("*".equals(mask)) {
+                return true;
+            }
+            for (int index = 0; index <= value.length(); index++) {
+                if (matchesMaskFrom(value, mask, index)) {
+                    return true;
                 }
             }
-            return regex.toString();
+            return false;
         }
 
-        private static void appendEscapedRegexCharacter(StringBuilder regex, char character) {
-            if ("\\.[]{}()+-^$|".indexOf(character) >= 0) {
-                regex.append('\\');
+        private static boolean matchesMaskFrom(String value, String mask, int startIndex) {
+            int valueIndex = startIndex;
+            int maskIndex = 0;
+            int starIndex = -1;
+            int retryValueIndex = startIndex;
+            while (valueIndex < value.length()) {
+                if (maskIndex == mask.length()) {
+                    return true;
+                }
+                char maskCharacter = mask.charAt(maskIndex);
+                if (maskCharacter == '?' || maskCharacter == value.charAt(valueIndex)) {
+                    maskIndex++;
+                    valueIndex++;
+                } else if (maskCharacter == '*') {
+                    starIndex = maskIndex;
+                    maskIndex++;
+                    retryValueIndex = valueIndex;
+                    if (maskIndex == mask.length()) {
+                        return true;
+                    }
+                } else if (starIndex >= 0) {
+                    maskIndex = starIndex + 1;
+                    retryValueIndex++;
+                    valueIndex = retryValueIndex;
+                } else {
+                    return false;
+                }
             }
-            regex.append(character);
+            while (maskIndex < mask.length() && mask.charAt(maskIndex) == '*') {
+                maskIndex++;
+            }
+            return maskIndex == mask.length();
         }
     }
 

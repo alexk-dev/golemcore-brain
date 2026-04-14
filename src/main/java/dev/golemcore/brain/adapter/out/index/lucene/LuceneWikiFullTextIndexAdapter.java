@@ -17,7 +17,6 @@ import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
-import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
@@ -202,25 +201,25 @@ public class LuceneWikiFullTextIndexAdapter implements WikiFullTextIndexPort {
         if ("*".equals(token)) {
             return 1;
         }
+        String normalizedToken = token.toLowerCase(Locale.ROOT);
         if (isWildcardToken(token)) {
-            Pattern pattern = Pattern.compile(globToRegex(token.toLowerCase(Locale.ROOT)));
-            return wildcardTokenScore(document, pattern);
+            return wildcardTokenScore(document, normalizedToken);
         }
-        return plainTokenScore(document, token.toLowerCase(Locale.ROOT));
+        return plainTokenScore(document, normalizedToken);
     }
 
-    private int wildcardTokenScore(WikiSearchDocument document, Pattern pattern) {
+    private int wildcardTokenScore(WikiSearchDocument document, String mask) {
         int score = 0;
-        if (pattern.matcher(normalize(document.getPath())).find()) {
+        if (containsMask(normalize(document.getPath()), mask)) {
             score += 80;
         }
-        if (pattern.matcher(normalizePathForMask(document.getPath())).find()) {
+        if (containsMask(normalizePathForMask(document.getPath()), mask)) {
             score += 60;
         }
-        if (pattern.matcher(normalize(document.getTitle())).find()) {
+        if (containsMask(normalize(document.getTitle()), mask)) {
             score += 40;
         }
-        if (pattern.matcher(normalize(document.getBody())).find()) {
+        if (containsMask(normalize(document.getBody()), mask)) {
             score += 10;
         }
         return score;
@@ -251,26 +250,50 @@ public class LuceneWikiFullTextIndexAdapter implements WikiFullTextIndexPort {
         return token.indexOf('*') >= 0 || token.indexOf('?') >= 0;
     }
 
-    private String globToRegex(String token) {
-        StringBuilder regex = new StringBuilder();
-        for (int index = 0; index < token.length(); index++) {
-            char character = token.charAt(index);
-            if (character == '*') {
-                regex.append(".*");
-            } else if (character == '?') {
-                regex.append('.');
-            } else {
-                appendEscapedRegexCharacter(regex, character);
+    private boolean containsMask(String value, String mask) {
+        if ("*".equals(mask)) {
+            return true;
+        }
+        for (int index = 0; index <= value.length(); index++) {
+            if (matchesMaskFrom(value, mask, index)) {
+                return true;
             }
         }
-        return regex.toString();
+        return false;
     }
 
-    private void appendEscapedRegexCharacter(StringBuilder regex, char character) {
-        if ("\\.[]{}()+-^$|".indexOf(character) >= 0) {
-            regex.append('\\');
+    private boolean matchesMaskFrom(String value, String mask, int startIndex) {
+        int valueIndex = startIndex;
+        int maskIndex = 0;
+        int starIndex = -1;
+        int retryValueIndex = startIndex;
+        while (valueIndex < value.length()) {
+            if (maskIndex == mask.length()) {
+                return true;
+            }
+            char maskCharacter = mask.charAt(maskIndex);
+            if (maskCharacter == '?' || maskCharacter == value.charAt(valueIndex)) {
+                maskIndex++;
+                valueIndex++;
+            } else if (maskCharacter == '*') {
+                starIndex = maskIndex;
+                maskIndex++;
+                retryValueIndex = valueIndex;
+                if (maskIndex == mask.length()) {
+                    return true;
+                }
+            } else if (starIndex >= 0) {
+                maskIndex = starIndex + 1;
+                retryValueIndex++;
+                valueIndex = retryValueIndex;
+            } else {
+                return false;
+            }
         }
-        regex.append(character);
+        while (maskIndex < mask.length() && mask.charAt(maskIndex) == '*') {
+            maskIndex++;
+        }
+        return maskIndex == mask.length();
     }
 
     private String normalizePathForMask(String path) {
