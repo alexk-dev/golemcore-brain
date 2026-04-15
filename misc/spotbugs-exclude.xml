@@ -2,44 +2,44 @@
 <FindBugsFilter>
     <Match>
         <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2" />
-        <Class name="~dev\.golemcore\.brain\..*" />
+        <Class name="~me\.golemcore\.brain\..*" />
     </Match>
 
     <Match>
         <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2" />
         <Not>
-            <Class name="~dev\.golemcore\.brain\.domain\.model\..*" />
+            <Class name="~me\.golemcore\.brain\.domain\.model\..*" />
         </Not>
     </Match>
 
     <Match>
         <Bug pattern="REC_CATCH_EXCEPTION" />
         <Or>
-            <Class name="~dev\.golemcore\.brain\.adapter\..*" />
-            <Class name="~dev\.golemcore\.brain\.domain\.service\..*" />
+            <Class name="~me\.golemcore\.brain\.adapter\..*" />
+            <Class name="~me\.golemcore\.brain\.domain\.service\..*" />
         </Or>
     </Match>
 
     <Match>
         <Bug pattern="THROWS_METHOD_THROWS_RUNTIMEEXCEPTION" />
         <Or>
-            <Class name="~dev\.golemcore\.brain\.adapter\..*" />
-            <Class name="~dev\.golemcore\.brain\.domain\.service\..*" />
+            <Class name="~me\.golemcore\.brain\.adapter\..*" />
+            <Class name="~me\.golemcore\.brain\.domain\.service\..*" />
         </Or>
     </Match>
 
     <Match>
         <Bug pattern="THROWS_METHOD_THROWS_CLAUSE_BASIC_EXCEPTION" />
         <Or>
-            <Class name="~dev\.golemcore\.brain\.adapter\..*" />
-            <Class name="~dev\.golemcore\.brain\.domain\.service\..*" />
+            <Class name="~me\.golemcore\.brain\.adapter\..*" />
+            <Class name="~me\.golemcore\.brain\.domain\.service\..*" />
         </Or>
     </Match>
 
     <!-- Path.getFileName() is flagged nullable but never null within DirectoryStream iteration -->
     <Match>
         <Bug pattern="NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE" />
-        <Class name="~dev\.golemcore\.brain\.adapter\.out\.filesystem\..*" />
+        <Class name="~me\.golemcore\.brain\.adapter\.out\.filesystem\..*" />
     </Match>
 
     <!-- Single-pass lookupPath string building; micro-optimization not worth refactoring -->
