@@ -45,6 +45,6 @@
     <!-- Single-pass lookupPath string building; micro-optimization not worth refactoring -->
     <Match>
         <Bug pattern="SBSC_USE_STRINGBUFFER_CONCATENATION" />
-        <Class name="dev.golemcore.brain.application.service.WikiApplicationService" />
+        <Class name="me.golemcore.brain.application.service.WikiApplicationService" />
     </Match>
 </FindBugsFilter>
