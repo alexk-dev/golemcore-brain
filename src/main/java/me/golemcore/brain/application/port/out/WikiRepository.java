@@ -1,0 +1,85 @@
+/*
+ * Copyright 2026 Aleksei Kuleshov
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * Contact: alex@kuleshov.tech
+ */
+
+package me.golemcore.brain.application.port.out;
+
+import me.golemcore.brain.domain.WikiAsset;
+import me.golemcore.brain.domain.WikiAssetContent;
+import me.golemcore.brain.domain.WikiIndexedDocument;
+import me.golemcore.brain.domain.WikiNodeReference;
+import me.golemcore.brain.domain.WikiPageDocument;
+import me.golemcore.brain.domain.WikiPageHistoryEntry;
+import java.io.InputStream;
+import java.util.List;
+import java.util.Optional;
+
+public interface WikiRepository extends WikiDocumentCatalogPort {
+
+    void initialize();
+
+    /**
+     * Ensure filesystem storage for a space exists (create the root dir and a
+     * welcome page, optionally seed demo content). Idempotent.
+     */
+    void initializeSpace(String spaceId);
+
+    Optional<WikiNodeReference> findReference(String path);
+
+    WikiNodeReference getRootReference();
+
+    List<WikiNodeReference> listChildren(WikiNodeReference parentReference);
+
+    WikiPageDocument readDocument(WikiNodeReference nodeReference);
+
+    WikiPageDocument createPage(String parentPath, String title, String slug, String content,
+            me.golemcore.brain.domain.WikiNodeKind kind);
+
+    WikiPageDocument updatePage(String path, String title, String slug, String content, String expectedRevision,
+            String actor, String reason, String summary);
+
+    void deletePage(String path);
+
+    WikiPageDocument movePage(String path, String targetParentPath, String targetSlug, String beforeSlug);
+
+    WikiPageDocument copyPage(String path, String targetParentPath, String targetSlug, String beforeSlug);
+
+    WikiPageDocument convertPage(String path, me.golemcore.brain.domain.WikiNodeKind targetKind);
+
+    void sortChildren(String path, List<String> orderedSlugs);
+
+    List<WikiNodeReference> flatten();
+
+    @Override
+    List<WikiIndexedDocument> listDocuments(String spaceId);
+
+    List<WikiPageHistoryEntry> listPageHistory(String path);
+
+    WikiPageDocument restorePageVersion(String path, String versionId, String actor, String reason, String summary);
+
+    me.golemcore.brain.domain.WikiPageHistoryVersion readPageHistoryVersion(String path, String versionId);
+
+    List<WikiAsset> listAssets(String path);
+
+    WikiAsset saveAsset(String path, String fileName, String contentType, InputStream inputStream);
+
+    WikiAsset renameAsset(String path, String oldName, String newName);
+
+    void deleteAsset(String path, String assetName);
+
+    WikiAssetContent openAsset(String path, String assetName);
+}

@@ -114,3 +114,7 @@ Common settings:
 ./mvnw test
 cd frontend && npm run lint && npm run build
 ```
+
+## License
+
+GolemCore Brain is licensed under the [Apache License 2.0](LICENSE).
