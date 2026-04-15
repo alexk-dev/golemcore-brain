@@ -44,11 +44,16 @@ import me.golemcore.brain.application.service.chat.SpaceChatService;
 import me.golemcore.brain.application.service.auth.AuthService;
 import me.golemcore.brain.application.service.auth.PasswordHasher;
 import me.golemcore.brain.application.service.dynamicapi.DynamicSpaceApiService;
+import me.golemcore.brain.application.service.index.WikiIndexReconciliationScheduler;
 import me.golemcore.brain.application.service.index.WikiIndexingService;
 import me.golemcore.brain.application.service.llm.LlmSettingsService;
 import me.golemcore.brain.application.service.llm.ModelRegistryService;
 import me.golemcore.brain.application.service.space.SpaceService;
 import me.golemcore.brain.application.service.user.UserManagementService;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -83,13 +88,32 @@ public class BrainApplicationConfiguration {
             WikiFullTextIndexPort wikiFullTextIndexPort,
             WikiEmbeddingIndexPort wikiEmbeddingIndexPort,
             LlmSettingsRepository llmSettingsRepository,
-            LlmEmbeddingPort llmEmbeddingPort) {
+            LlmEmbeddingPort llmEmbeddingPort,
+            Executor wikiIndexingExecutor) {
         return new WikiIndexingService(
                 wikiRepository,
                 wikiFullTextIndexPort,
                 wikiEmbeddingIndexPort,
                 llmSettingsRepository,
-                llmEmbeddingPort);
+                llmEmbeddingPort,
+                wikiIndexingExecutor);
+    }
+
+    @Bean(destroyMethod = "shutdown")
+    public java.util.concurrent.ExecutorService wikiIndexingExecutor() {
+        AtomicInteger counter = new AtomicInteger();
+        ThreadFactory threadFactory = runnable -> {
+            Thread thread = new Thread(runnable, "brain-indexer-" + counter.incrementAndGet());
+            thread.setDaemon(true);
+            return thread;
+        };
+        return Executors.newSingleThreadExecutor(threadFactory);
+    }
+
+    @Bean
+    public WikiIndexReconciliationScheduler wikiIndexReconciliationScheduler(
+            SpaceRepository spaceRepository, WikiIndexingService wikiIndexingService) {
+        return new WikiIndexReconciliationScheduler(spaceRepository, wikiIndexingService);
     }
 
     @Bean

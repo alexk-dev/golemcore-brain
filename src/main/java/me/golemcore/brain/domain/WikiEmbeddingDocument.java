@@ -26,5 +26,8 @@ import lombok.Value;
 @Builder
 public class WikiEmbeddingDocument {
     WikiIndexedDocument document;
+    int chunkIndex;
+    String chunkText;
+    String embeddingModelId;
     List<Double> vector;
 }

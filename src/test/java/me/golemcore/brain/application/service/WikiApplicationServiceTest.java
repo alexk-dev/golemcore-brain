@@ -243,7 +243,8 @@ class WikiApplicationServiceTest {
                         new LuceneWikiFullTextIndexAdapter(properties),
                         new SqliteWikiEmbeddingIndexAdapter(properties),
                         new InMemoryLlmSettingsRepository(),
-                        new NoopEmbeddingPort()));
+                        new NoopEmbeddingPort(),
+                        Runnable::run));
 
         WikiPage syntheticSection = service.getPage("manual-notes");
 
@@ -394,7 +395,8 @@ class WikiApplicationServiceTest {
                 new LuceneWikiFullTextIndexAdapter(properties),
                 new SqliteWikiEmbeddingIndexAdapter(properties),
                 new InMemoryLlmSettingsRepository(),
-                new NoopEmbeddingPort());
+                new NoopEmbeddingPort(),
+                Runnable::run);
         WikiApplicationService service = new WikiApplicationService(repository, properties, indexingService);
         assertTrue(Files.exists(
                 properties.getStorageRoot().resolve("spaces").resolve(defaultSpace.getId()).resolve("index.md")));

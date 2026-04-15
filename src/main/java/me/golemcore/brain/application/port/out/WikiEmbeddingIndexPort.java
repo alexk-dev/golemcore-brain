@@ -22,6 +22,7 @@ import me.golemcore.brain.domain.WikiDocumentChangeSet;
 import me.golemcore.brain.domain.WikiEmbeddingSearchHit;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public interface WikiEmbeddingIndexPort {
     void applyChanges(String spaceId, WikiDocumentChangeSet changeSet);
@@ -33,4 +34,12 @@ public interface WikiEmbeddingIndexPort {
     Map<String, String> listIndexedRevisions(String spaceId);
 
     int count(String spaceId);
+
+    /**
+     * Returns the embedding model id recorded on any stored chunk for the space, or
+     * empty if the space has no stored embeddings. Callers treat a mismatch against
+     * the currently-configured model as a signal to rebuild the embedding index for
+     * that space.
+     */
+    Optional<String> findStoredEmbeddingModelId(String spaceId);
 }

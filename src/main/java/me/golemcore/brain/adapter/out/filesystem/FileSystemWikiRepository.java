@@ -682,7 +682,8 @@ public class FileSystemWikiRepository implements WikiRepository {
 
     private boolean isMaterializableSectionDirectory(Path path) {
         Path safePath = requireSpaceContainedPath(path);
-        return Files.isDirectory(safePath) && !hasHiddenPathSegment(spaceRoot().relativize(safePath));
+        Path normalizedRoot = spaceRoot().toAbsolutePath().normalize();
+        return Files.isDirectory(safePath) && !hasHiddenPathSegment(normalizedRoot.relativize(safePath));
     }
 
     private Path requireSpaceContainedPath(Path path) {
