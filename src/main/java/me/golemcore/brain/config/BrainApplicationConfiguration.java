@@ -179,8 +179,11 @@ public class BrainApplicationConfiguration {
     }
 
     @Bean
-    public SpaceService spaceService(SpaceRepository spaceRepository, WikiRepository wikiRepository) {
-        return new SpaceService(spaceRepository, wikiRepository);
+    public SpaceService spaceService(
+            SpaceRepository spaceRepository,
+            WikiRepository wikiRepository,
+            WikiIndexingService wikiIndexingService) {
+        return new SpaceService(spaceRepository, wikiRepository, wikiIndexingService);
     }
 
     @Bean

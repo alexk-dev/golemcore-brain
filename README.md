@@ -26,9 +26,9 @@ Use it for:
 - **Organized spaces** - keep teams, projects, customers, or environments separated in one running instance.
 - **Fast editing flow** - create, edit, rename, move, copy, reorder, convert, and delete pages from the UI.
 - **Assets where the docs live** - upload images and files, manage them from the page, and insert them into Markdown.
-- **Search that can be rebuilt** - index title and body content from the files, with optional semantic search when embeddings are configured.
+- **Search that can be rebuilt** - index title and body content from the files, with optional hybrid vector search when embeddings are configured.
 - **Roles and access control** - use admin, editor, and viewer roles, public read-only mode, and API keys for programmatic access.
-- **LLM-ready workflows** - configure model providers once, then use them for semantic indexing, space chat, and space-scoped Dynamic APIs.
+- **LLM-ready workflows** - configure model providers once, then use them for embedding indexing, space chat, and space-scoped Dynamic APIs.
 - **Simple self-hosting** - run a Spring Boot application with the frontend bundled into the same artifact.
 
 ## How Content Is Stored
@@ -107,6 +107,60 @@ Common settings:
 - `BRAIN_PUBLIC_ACCESS` - enables read-only public access when set to `true`
 - `BRAIN_SESSION_TTL_SECONDS` - session lifetime
 - `BRAIN_DEFAULT_SPACE_SLUG` and `BRAIN_DEFAULT_SPACE_NAME` - initial space identity
+
+## Public Integration API
+
+Use a session cookie from `POST /api/auth/login` or an API key with `Authorization: Bearer <token>`. Viewer access can read space content and search. Editor access can mutate pages, imports, and assets. Space admin access manages space-scoped automation. Global admin access manages spaces, global API keys, and reindex operations.
+
+| Method | Path | Access | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/api/config` | Public | Read site configuration and default space metadata. |
+| `GET` | `/api/auth/config` | Public | Read authentication mode and current user summary when a session is present. |
+| `POST` | `/api/auth/login` | Public | Create a session cookie from username/email and password. |
+| `POST` | `/api/auth/logout` | Authenticated | Revoke the current session cookie. |
+| `POST` | `/api/auth/password` | Authenticated | Change the current user's password and clear the old session. |
+| `GET` | `/api/auth/me` | Authenticated | Read the current authenticated user state. |
+| `GET` | `/api/spaces` | Viewer | List spaces visible to the caller. |
+| `POST` | `/api/spaces` | Admin | Create a space. Body: `slug`, optional `name`. |
+| `DELETE` | `/api/spaces/{slug}` | Global admin | Delete a space registration; filesystem content is retained for manual purge. |
+| `GET` | `/api/spaces/{slug}/tree` | Viewer | Read the space page tree. |
+| `GET` | `/api/spaces/{slug}/page?path=...` | Viewer | Read a page by path. |
+| `GET` | `/api/spaces/{slug}/pages/by-path?path=...` | Viewer | Read a page by path; stable alias for integrations. |
+| `GET` | `/api/spaces/{slug}/pages/lookup?path=...` | Viewer | Resolve path segments and existence metadata. |
+| `POST` | `/api/spaces/{slug}/pages` | Editor | Create a page. Body: `parentPath`, `title`, optional `slug`, `content`, `kind`. |
+| `POST` | `/api/spaces/{slug}/pages/ensure` | Editor | Create or return a page at an exact path. Body: `path`, `targetTitle`. |
+| `PUT` | `/api/spaces/{slug}/page?path=...` | Editor | Update page title, slug, content, and revision guard. |
+| `DELETE` | `/api/spaces/{slug}/page?path=...` | Editor | Delete a page or section. |
+| `POST` | `/api/spaces/{slug}/page/move?path=...` | Editor | Move or rename a page. |
+| `POST` | `/api/spaces/{slug}/page/copy?path=...` | Editor | Copy a page into another section. |
+| `POST` | `/api/spaces/{slug}/page/convert?path=...` | Editor | Convert a page between page and section forms. |
+| `PUT` | `/api/spaces/{slug}/section/sort?path=...` | Editor | Persist child order for a section. |
+| `GET` | `/api/spaces/{slug}/page/history?path=...` | Viewer | List stored page versions. |
+| `GET` | `/api/spaces/{slug}/page/history/version?path=...&versionId=...` | Viewer | Read one stored page version. |
+| `POST` | `/api/spaces/{slug}/page/history/restore?path=...&versionId=...` | Editor | Restore a stored page version. |
+| `POST` | `/api/spaces/{slug}/search` | Viewer | Search pages. Body: `query`, `mode` (`auto`, `fts`, `hybrid`), optional `limit`. |
+| `GET` | `/api/spaces/{slug}/search/status` | Viewer | Read full-text and embedding index readiness. |
+| `POST` | `/api/spaces/{slug}/import/markdown/plan` | Editor | Upload a Markdown archive and preview import actions. Multipart: `file`, optional `options`. |
+| `POST` | `/api/spaces/{slug}/import/markdown/apply` | Editor | Upload a Markdown archive and apply selected import actions. |
+| `GET` | `/api/spaces/{slug}/links?path=...` | Viewer | Validate links from a page. |
+| `GET` | `/api/spaces/{slug}/pages/assets?path=...` | Editor | List assets attached to a page. |
+| `POST` | `/api/spaces/{slug}/pages/assets?path=...` | Editor | Upload an asset for a page. Multipart: `file`. |
+| `PUT` | `/api/spaces/{slug}/pages/assets/rename?path=...` | Editor | Rename a page asset. Body: `oldName`, `newName`. |
+| `DELETE` | `/api/spaces/{slug}/pages/assets?path=...&name=...` | Editor | Delete a page asset. |
+| `GET` | `/api/spaces/{slug}/assets?path=...&name=...` | Viewer | Download or render a page asset. |
+| `POST` | `/api/spaces/{slug}/chat` | Viewer | Ask the space chat model. Body: `message`, optional `modelConfigId`, `summary`, `turnCount`, `history`. |
+| `GET` | `/api/spaces/{slug}/dynamic-apis` | Space admin | List configured Dynamic APIs in a space. |
+| `POST` | `/api/spaces/{slug}/dynamic-apis` | Space admin | Create a Dynamic API configuration. |
+| `PUT` | `/api/spaces/{slug}/dynamic-apis/{apiId}` | Space admin | Update a Dynamic API configuration. |
+| `DELETE` | `/api/spaces/{slug}/dynamic-apis/{apiId}` | Space admin | Delete a Dynamic API configuration. |
+| `POST` | `/api/spaces/{slug}/dynamic-apis/{apiSlug}/run` | Viewer | Execute an enabled Dynamic API with a JSON payload. |
+| `GET` | `/api/api-keys` | Global admin | List global API keys. |
+| `POST` | `/api/api-keys` | Global admin | Issue a global API key. Body: `name`, optional `roles`, `expiresAt`. |
+| `GET` | `/api/spaces/{slug}/api-keys` | Space admin | List API keys scoped to one space. |
+| `POST` | `/api/spaces/{slug}/api-keys` | Space admin | Issue a space-scoped API key. |
+| `DELETE` | `/api/api-keys/{keyId}` | Global or space admin | Revoke a global key or a key scoped to an administered space. |
+| `POST` | `/api/admin/spaces/{slug}/reindex` | Global admin | Queue a full search reindex for one space. |
+| `POST` | `/api/admin/spaces/reindex` | Global admin | Queue a full search reindex for all spaces. |
 
 ## Checks
 

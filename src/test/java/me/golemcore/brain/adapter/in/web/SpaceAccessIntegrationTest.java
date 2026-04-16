@@ -35,6 +35,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.MvcResult;
 import tools.jackson.databind.ObjectMapper;
 
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -81,8 +82,25 @@ class SpaceAccessIntegrationTest {
                 .andExpect(jsonPath("$.error", is("Authentication required")));
 
         Cookie adminSession = login("admin", "admin");
+        createSpace(adminSession, "reindex", "Reindex Space");
         createSpace(adminSession, "engineering", "Engineering");
         createSpace(adminSession, "support", "Support");
+
+        mockMvc.perform(get("/api/spaces/reindex/tree").cookie(adminSession))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/spaces/engineering/reindex").cookie(adminSession))
+                .andExpect(status().is4xxClientError());
+        mockMvc.perform(post("/api/spaces/reindex").cookie(adminSession))
+                .andExpect(status().is4xxClientError());
+
+        mockMvc.perform(post("/api/admin/spaces/engineering/reindex").cookie(adminSession))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status", is("queued")))
+                .andExpect(jsonPath("$.spacesQueued", is(1)));
+        mockMvc.perform(post("/api/admin/spaces/reindex").cookie(adminSession))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status", is("queued")))
+                .andExpect(jsonPath("$.spacesQueued", greaterThanOrEqualTo(3)));
 
         createPage(adminSession, "engineering", "", "Operations", "ops", "Engineering operations", "SECTION")
                 .andExpect(status().isOk());
@@ -105,23 +123,41 @@ class SpaceAccessIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content", is("Beta token belongs to support")));
 
-        mockMvc.perform(get("/api/spaces/engineering/search")
+        mockMvc.perform(post("/api/spaces/engineering/search")
                 .cookie(adminSession)
-                .param("q", "Alpha"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "query": "Alpha",
+                          "mode": "fts"
+                        }
+                        """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(1)))
-                .andExpect(jsonPath("$[0].path", is("ops/runbook")));
-        mockMvc.perform(get("/api/spaces/engineering/search")
+                .andExpect(jsonPath("$.hits", hasSize(1)))
+                .andExpect(jsonPath("$.hits[0].path", is("ops/runbook")));
+        mockMvc.perform(post("/api/spaces/engineering/search")
                 .cookie(adminSession)
-                .param("q", "Beta"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "query": "Beta",
+                          "mode": "fts"
+                        }
+                        """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(0)));
-        mockMvc.perform(get("/api/spaces/support/search")
+                .andExpect(jsonPath("$.hits", hasSize(0)));
+        mockMvc.perform(post("/api/spaces/support/search")
                 .cookie(adminSession)
-                .param("q", "Beta"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "query": "Beta",
+                          "mode": "fts"
+                        }
+                        """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(1)))
-                .andExpect(jsonPath("$[0].path", is("ops/runbook")));
+                .andExpect(jsonPath("$.hits", hasSize(1)))
+                .andExpect(jsonPath("$.hits[0].path", is("ops/runbook")));
 
         MvcResult issuedKeyResult = mockMvc.perform(post("/api/spaces/engineering/api-keys")
                 .cookie(adminSession)
@@ -136,6 +172,10 @@ class SpaceAccessIntegrationTest {
                 .andReturn();
         String token = extractString(issuedKeyResult, "token");
         String keyId = extractApiKeyId(issuedKeyResult);
+
+        mockMvc.perform(post("/api/admin/spaces/engineering/reindex").header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error", is("Global admin required to manage spaces")));
 
         mockMvc.perform(get("/api/spaces").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())

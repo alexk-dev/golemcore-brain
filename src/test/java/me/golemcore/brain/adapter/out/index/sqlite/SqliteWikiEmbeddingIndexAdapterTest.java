@@ -30,12 +30,15 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SqliteWikiEmbeddingIndexAdapterTest {
@@ -132,13 +135,10 @@ class SqliteWikiEmbeddingIndexAdapterTest {
                 .fullRebuild(false)
                 .build());
 
-        try {
-            adapter.search("space-1", List.of(1.0d, 0.0d, 0.0d), 10);
-            assertTrue(false, "expected IllegalStateException for dimension mismatch");
-        } catch (IllegalStateException expected) {
-            assertTrue(expected.getMessage().toLowerCase().contains("dimension"),
-                    "message should mention dimension: " + expected.getMessage());
-        }
+        IllegalStateException thrown = assertThrows(IllegalStateException.class,
+                () -> adapter.search("space-1", List.of(1.0d, 0.0d, 0.0d), 10));
+        assertTrue(thrown.getMessage().toLowerCase(Locale.ROOT).contains("dimension"),
+                "message should mention dimension: " + thrown.getMessage());
     }
 
     @Test
@@ -206,6 +206,94 @@ class SqliteWikiEmbeddingIndexAdapterTest {
         assertEquals(List.of("docs/reindexed"), adapter.listIndexedPaths("space-1"));
         List<WikiEmbeddingSearchHit> hits = adapter.search("space-1", List.of(0.0d, 1.0d), 10);
         assertEquals("docs/reindexed", hits.getFirst().getPath());
+    }
+
+    @Test
+    void shouldAddModelColumnBeforeCreatingModelIndexForChunkedLegacySchema() throws Exception {
+        WikiProperties properties = new WikiProperties();
+        properties.setStorageRoot(tempDir);
+        Path dbPath = tempDir.resolve(".indexes/embeddings/embeddings.sqlite");
+        Files.createDirectories(dbPath.getParent());
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + dbPath.toAbsolutePath());
+                Statement statement = connection.createStatement()) {
+            statement.execute("create table wiki_embeddings ("
+                    + "space_id text not null, "
+                    + "path text not null, "
+                    + "chunk_index integer not null default 0, "
+                    + "id text not null, "
+                    + "parent_path text, "
+                    + "title text not null, "
+                    + "body text not null, "
+                    + "chunk_text text, "
+                    + "kind text not null, "
+                    + "revision text, "
+                    + "updated_at integer not null, "
+                    + "vector blob not null, "
+                    + "primary key (space_id, path, chunk_index))");
+            statement.execute("insert into wiki_embeddings "
+                    + "(space_id, path, chunk_index, id, parent_path, title, body, chunk_text, kind, revision, "
+                    + "updated_at, vector) "
+                    + "values ('space-1','docs/legacy',0,'docs/legacy','docs','Legacy','body','body','PAGE',"
+                    + "'rev-legacy',0,X'00')");
+        }
+
+        SqliteWikiEmbeddingIndexAdapter adapter = new SqliteWikiEmbeddingIndexAdapter(properties);
+
+        assertEquals(1, adapter.count("space-1"));
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + dbPath.toAbsolutePath());
+                Statement statement = connection.createStatement()) {
+            assertEquals(List.of("space_id", "embedding_model_id"),
+                    indexedColumns(statement, "idx_wiki_embeddings_space_model"));
+        }
+    }
+
+    @Test
+    void shouldUseBoundedIndexedProbeForStoredModelId() throws Exception {
+        WikiProperties properties = new WikiProperties();
+        properties.setStorageRoot(tempDir);
+        SqliteWikiEmbeddingIndexAdapter adapter = new SqliteWikiEmbeddingIndexAdapter(properties);
+
+        adapter.applyChanges("space-1", WikiDocumentChangeSet.builder()
+                .spaceId("space-1")
+                .embeddingUpserts(List.of(embedding("docs/guide", "Guide", List.of(1.0d, 0.0d))))
+                .deletedPaths(List.of())
+                .fullRebuild(false)
+                .build());
+
+        Path dbPath = tempDir.resolve(".indexes/embeddings/embeddings.sqlite");
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + dbPath.toAbsolutePath());
+                Statement statement = connection.createStatement()) {
+            assertEquals(List.of("space_id", "embedding_model_id"),
+                    indexedColumns(statement, "idx_wiki_embeddings_space_model"));
+            assertTrue(SqliteWikiEmbeddingIndexAdapter.STORED_MODEL_ID_PROBE_SQL
+                    .toLowerCase(Locale.ROOT)
+                    .contains("limit 2"));
+
+            String plan = explainQueryPlan(statement,
+                    SqliteWikiEmbeddingIndexAdapter.STORED_MODEL_ID_PROBE_SQL.replace("?", "'space-1'"));
+            assertTrue(plan.toLowerCase(Locale.ROOT).contains("idx_wiki_embeddings_space_model"),
+                    "model id probe should use the covering model index, got: " + plan);
+        }
+    }
+
+    private List<String> indexedColumns(Statement statement, String indexName) throws Exception {
+        List<String> columns = new ArrayList<>();
+        try (var resultSet = statement.executeQuery("pragma index_info('" + indexName + "')")) {
+            while (resultSet.next()) {
+                columns.add(resultSet.getString("name"));
+            }
+        }
+        return columns;
+    }
+
+    private String explainQueryPlan(Statement statement, String sql) throws Exception {
+        StringBuilder plan = new StringBuilder();
+        try (var resultSet = statement.executeQuery("explain query plan " + sql)) {
+            while (resultSet.next()) {
+                plan.append(resultSet.getString("detail")).append('\n');
+            }
+        }
+        return plan.toString();
     }
 
     private WikiEmbeddingDocument chunk(String path, int chunkIndex, String chunkText, List<Double> vector) {

@@ -20,7 +20,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
-import { createSpace, deleteSpace } from '../../lib/api'
+import { createSpace, deleteSpace, reindexAllSpaces, reindexSpace } from '../../lib/api'
 import { useSpaceStore } from '../../stores/space'
 import { useUiStore } from '../../stores/ui'
 import { CreateSpaceDialog } from './CreateSpaceDialog'
@@ -35,6 +35,8 @@ export function SpacesPage() {
   const reloadSpaces = useSpaceStore((state) => state.reloadSpaces)
   const [createOpen, setCreateOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [reindexingAll, setReindexingAll] = useState(false)
+  const [reindexingSlug, setReindexingSlug] = useState<string | null>(null)
 
   useEffect(() => {
     if (isAdmin) {
@@ -75,6 +77,30 @@ export function SpacesPage() {
     }
   }
 
+  const handleReindexSpace = async (slug: string) => {
+    setReindexingSlug(slug)
+    try {
+      await reindexSpace(slug)
+      toast.success('Reindex queued')
+    } catch (error) {
+      toast.error((error as Error).message)
+    } finally {
+      setReindexingSlug(null)
+    }
+  }
+
+  const handleReindexAllSpaces = async () => {
+    setReindexingAll(true)
+    try {
+      await reindexAllSpaces()
+      toast.success('Full reindex queued')
+    } catch (error) {
+      toast.error((error as Error).message)
+    } finally {
+      setReindexingAll(false)
+    }
+  }
+
   return (
     <div className="page-viewer">
       <div className="surface-card p-6">
@@ -85,13 +111,23 @@ export function SpacesPage() {
               Each space is an isolated workspace of files. Create a space to group related content.
             </p>
           </div>
-          <button
-            type="button"
-            className="action-button-primary"
-            onClick={() => setCreateOpen(true)}
-          >
-            Create space
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="action-button-secondary"
+              onClick={() => void handleReindexAllSpaces()}
+              disabled={reindexingAll}
+            >
+              Full reindex
+            </button>
+            <button
+              type="button"
+              className="action-button-primary"
+              onClick={() => setCreateOpen(true)}
+            >
+              Create space
+            </button>
+          </div>
         </div>
 
         <div className="mb-3 text-lg font-medium">Existing spaces</div>
@@ -115,6 +151,14 @@ export function SpacesPage() {
                     <Link className="action-button-secondary" to={'/spaces/' + encodeURIComponent(space.slug) + '/settings'}>
                       Settings
                     </Link>
+                    <button
+                      type="button"
+                      className="action-button-secondary"
+                      onClick={() => void handleReindexSpace(space.slug)}
+                      disabled={reindexingSlug === space.slug || reindexingAll}
+                    >
+                      Reindex
+                    </button>
                     <button
                       type="button"
                       className="action-button-secondary"

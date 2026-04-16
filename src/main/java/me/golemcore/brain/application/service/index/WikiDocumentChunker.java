@@ -28,7 +28,7 @@ import java.util.List;
  * semantics for embeddings — cleaving a sentence mid-word materially hurts
  * dense retrieval quality.
  */
-public class WikiDocumentChunker {
+public final class WikiDocumentChunker {
 
     private final int chunkSize;
     private final int overlap;
@@ -57,7 +57,8 @@ public class WikiDocumentChunker {
         List<Chunk> chunks = new ArrayList<>();
         int index = 0;
         for (String text : packed) {
-            chunks.add(new Chunk(index++, text));
+            chunks.add(new Chunk(index, text));
+            index++;
         }
         return chunks;
     }

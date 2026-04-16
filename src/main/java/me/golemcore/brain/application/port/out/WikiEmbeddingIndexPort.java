@@ -36,10 +36,11 @@ public interface WikiEmbeddingIndexPort {
     int count(String spaceId);
 
     /**
-     * Returns the embedding model id recorded on any stored chunk for the space, or
-     * empty if the space has no stored embeddings. Callers treat a mismatch against
-     * the currently-configured model as a signal to rebuild the embedding index for
-     * that space.
+     * Returns the embedding model id only when every stored chunk for the space has
+     * the same non-blank id. Returns empty when the space has no embeddings, has
+     * legacy chunks without a model id, or contains mixed model ids. Callers treat
+     * an empty result with a non-empty index as stale and rebuild the embedding
+     * index for that space.
      */
     Optional<String> findStoredEmbeddingModelId(String spaceId);
 }

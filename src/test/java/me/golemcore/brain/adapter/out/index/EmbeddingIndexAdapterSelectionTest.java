@@ -31,6 +31,7 @@ import org.springframework.test.context.DynamicPropertySource;
 
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
+@SuppressWarnings("PMD.TestClassWithoutTestCases")
 class EmbeddingIndexAdapterSelectionTest {
 
     @SpringBootTest(properties = { "brain.indexing.embedding-adapter=sqlite" })

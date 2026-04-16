@@ -39,11 +39,14 @@ import java.sql.Statement;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.List;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -55,6 +58,8 @@ public class SqliteWikiEmbeddingIndexAdapter implements WikiEmbeddingIndexPort {
 
     private static final String INDEX_ROOT = ".indexes/embeddings";
     private static final String DATABASE_FILE = "embeddings.sqlite";
+    static final String STORED_MODEL_ID_PROBE_SQL = "select distinct embedding_model_id "
+            + "from wiki_embeddings where space_id = ? limit 2";
 
     private final WikiProperties wikiProperties;
 
@@ -73,7 +78,7 @@ public class SqliteWikiEmbeddingIndexAdapter implements WikiEmbeddingIndexPort {
                 for (String deletedPath : safeList(changeSet.getDeletedPaths())) {
                     deletePath(connection, spaceId, deletedPath);
                 }
-                java.util.Set<String> wipedPaths = new java.util.HashSet<>();
+                Set<String> wipedPaths = new HashSet<>();
                 for (WikiEmbeddingDocument embeddingDocument : safeList(changeSet.getEmbeddingUpserts())) {
                     String path = embeddingDocument.getDocument().getPath();
                     if (wipedPaths.add(path)) {
@@ -97,7 +102,7 @@ public class SqliteWikiEmbeddingIndexAdapter implements WikiEmbeddingIndexPort {
         try (Connection connection = openConnection()) {
             initializeSchema(connection);
             List<StoredEmbeddingDocument> documents = readSpaceDocuments(connection, spaceId);
-            LinkedHashMap<String, WikiEmbeddingSearchHit> bestByPath = new LinkedHashMap<>();
+            Map<String, WikiEmbeddingSearchHit> bestByPath = new LinkedHashMap<>();
             for (StoredEmbeddingDocument document : documents) {
                 WikiEmbeddingSearchHit hit = toHit(document, embedding);
                 WikiEmbeddingSearchHit current = bestByPath.get(hit.getPath());
@@ -214,20 +219,24 @@ public class SqliteWikiEmbeddingIndexAdapter implements WikiEmbeddingIndexPort {
             statement.execute("create index if not exists idx_wiki_embeddings_space "
                     + "on wiki_embeddings(space_id)");
         }
-        addColumnIfMissing(connection, "embedding_model_id", "text");
+        addEmbeddingModelIdColumnIfMissing(connection);
+        try (Statement statement = connection.createStatement()) {
+            statement.execute("create index if not exists idx_wiki_embeddings_space_model "
+                    + "on wiki_embeddings(space_id, embedding_model_id)");
+        }
     }
 
-    private void addColumnIfMissing(Connection connection, String columnName, String columnType) throws SQLException {
+    private void addEmbeddingModelIdColumnIfMissing(Connection connection) throws SQLException {
         try (Statement statement = connection.createStatement();
                 ResultSet info = statement.executeQuery("pragma table_info(wiki_embeddings)")) {
             while (info.next()) {
-                if (columnName.equalsIgnoreCase(info.getString("name"))) {
+                if ("embedding_model_id".equalsIgnoreCase(info.getString("name"))) {
                     return;
                 }
             }
         }
         try (Statement statement = connection.createStatement()) {
-            statement.execute("alter table wiki_embeddings add column " + columnName + " " + columnType);
+            statement.execute("alter table wiki_embeddings add column embedding_model_id text");
         }
     }
 
@@ -290,16 +299,21 @@ public class SqliteWikiEmbeddingIndexAdapter implements WikiEmbeddingIndexPort {
         }
         try (Connection connection = openConnection()) {
             initializeSchema(connection);
-            try (PreparedStatement statement = connection.prepareStatement(
-                    "select embedding_model_id from wiki_embeddings "
-                            + "where space_id = ? and embedding_model_id is not null limit 1")) {
+            try (PreparedStatement statement = connection.prepareStatement(STORED_MODEL_ID_PROBE_SQL)) {
                 statement.setString(1, spaceId);
                 try (ResultSet resultSet = statement.executeQuery()) {
-                    if (resultSet.next()) {
+                    Set<String> modelIds = new LinkedHashSet<>();
+                    while (resultSet.next()) {
                         String value = resultSet.getString(1);
-                        return value == null || value.isBlank() ? Optional.empty() : Optional.of(value);
+                        if (value == null || value.isBlank()) {
+                            return Optional.empty();
+                        }
+                        modelIds.add(value.strip());
+                        if (modelIds.size() > 1) {
+                            return Optional.empty();
+                        }
                     }
-                    return Optional.empty();
+                    return modelIds.stream().findFirst();
                 }
             }
         } catch (SQLException exception) {

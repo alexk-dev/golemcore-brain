@@ -26,7 +26,7 @@ import me.golemcore.brain.adapter.in.web.dto.EnsurePagePayload;
 import me.golemcore.brain.adapter.in.web.dto.MarkdownImportOptionsPayload;
 import me.golemcore.brain.adapter.in.web.dto.MovePagePayload;
 import me.golemcore.brain.adapter.in.web.dto.RenameAssetPayload;
-import me.golemcore.brain.adapter.in.web.dto.SemanticSearchPayload;
+import me.golemcore.brain.adapter.in.web.dto.SearchPayload;
 import me.golemcore.brain.adapter.in.web.dto.SortChildrenPayload;
 import me.golemcore.brain.adapter.in.web.dto.UpdatePagePayload;
 import me.golemcore.brain.application.service.WikiApplicationService;
@@ -39,8 +39,7 @@ import me.golemcore.brain.domain.WikiPage;
 import me.golemcore.brain.domain.WikiPageHistoryEntry;
 import me.golemcore.brain.domain.WikiPageHistoryVersion;
 import me.golemcore.brain.domain.WikiPathLookupResult;
-import me.golemcore.brain.domain.WikiSearchHit;
-import me.golemcore.brain.domain.WikiSemanticSearchResult;
+import me.golemcore.brain.domain.WikiSearchResult;
 import me.golemcore.brain.domain.WikiSearchStatus;
 import me.golemcore.brain.domain.WikiTreeNode;
 import me.golemcore.brain.domain.auth.AuthContext;
@@ -67,6 +66,10 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+/**
+ * Space-scoped wiki API used by the web UI and external integrations to manage
+ * Markdown pages, assets, imports, links, and search.
+ */
 @RestController
 @RequestMapping("/api/spaces/{slug}")
 @RequiredArgsConstructor
@@ -209,24 +212,21 @@ public class WikiController {
                 .build());
     }
 
-    @GetMapping("/search")
-    public List<WikiSearchHit> search(@PathVariable String slug,
-            @RequestParam(name = "q", defaultValue = "") String query, HttpServletRequest request) {
+    @PostMapping("/search")
+    public WikiSearchResult search(@PathVariable String slug,
+            @Valid @RequestBody SearchPayload payload, HttpServletRequest request) {
         requireView(request);
-        return wikiApplicationService.search(query);
+        return wikiApplicationService.search(WikiApplicationService.SearchCommand.builder()
+                .query(payload.getQuery())
+                .mode(payload.getMode())
+                .limit(payload.getLimit())
+                .build());
     }
 
     @GetMapping("/search/status")
     public WikiSearchStatus getSearchStatus(@PathVariable String slug, HttpServletRequest request) {
         requireView(request);
         return wikiApplicationService.getSearchStatus();
-    }
-
-    @PostMapping("/search/semantic")
-    public WikiSemanticSearchResult semanticSearch(@PathVariable String slug,
-            @Valid @RequestBody SemanticSearchPayload payload, HttpServletRequest request) {
-        requireView(request);
-        return wikiApplicationService.semanticSearch(payload.getQuery());
     }
 
     @PostMapping(value = "/import/markdown/plan", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

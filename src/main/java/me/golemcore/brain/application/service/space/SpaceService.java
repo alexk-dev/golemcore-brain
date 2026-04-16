@@ -22,6 +22,7 @@ import me.golemcore.brain.application.exception.WikiNotFoundException;
 import me.golemcore.brain.application.port.out.SpaceRepository;
 import me.golemcore.brain.application.port.out.WikiRepository;
 import me.golemcore.brain.application.service.auth.AuthAccessDeniedException;
+import me.golemcore.brain.application.service.index.WikiIndexingService;
 import me.golemcore.brain.domain.auth.AuthContext;
 import me.golemcore.brain.domain.auth.UserRole;
 import me.golemcore.brain.domain.space.Space;
@@ -39,6 +40,7 @@ public class SpaceService {
 
     private final SpaceRepository spaceRepository;
     private final WikiRepository wikiRepository;
+    private final WikiIndexingService wikiIndexingService;
 
     public List<Space> listVisibleSpaces(AuthContext authContext) {
         List<Space> all = spaceRepository.listSpaces();
@@ -85,6 +87,19 @@ public class SpaceService {
         Space space = getBySlug(slug);
         spaceRepository.delete(space.getId());
         // Filesystem content is retained for safety; operators can purge manually.
+    }
+
+    public void reindexSpace(AuthContext authContext, String slug) {
+        requireGlobalAdmin(authContext);
+        Space space = getBySlug(slug);
+        wikiIndexingService.scheduleRebuild(space.getId());
+    }
+
+    public int reindexAllSpaces(AuthContext authContext) {
+        requireGlobalAdmin(authContext);
+        List<Space> spaces = spaceRepository.listSpaces();
+        spaces.forEach(space -> wikiIndexingService.scheduleRebuild(space.getId()));
+        return spaces.size();
     }
 
     private String normalizeSlug(String slug) {

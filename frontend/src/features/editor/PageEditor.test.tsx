@@ -28,6 +28,7 @@ const navigateMock = vi.fn()
 const uploadAssetMock = vi.fn()
 const setContentMock = vi.fn()
 const savePageMock = vi.fn()
+const reloadTreeMock = vi.fn()
 const reloadFromConflictMock = vi.fn()
 const mergeConflictWithLocalDraftMock = vi.fn()
 
@@ -58,6 +59,7 @@ describe('PageEditor', () => {
     uploadAssetMock.mockReset()
     setContentMock.mockReset()
     savePageMock.mockReset()
+    reloadTreeMock.mockReset()
     reloadFromConflictMock.mockReset()
     mergeConflictWithLocalDraftMock.mockReset()
     const treeNode = {
@@ -82,7 +84,7 @@ describe('PageEditor', () => {
       manualNodeStateById: {},
       mustOpenNodeIdSet: {},
       suggestedOpenNodeIdSet: {},
-      reloadTree: async () => undefined,
+      reloadTree: reloadTreeMock,
       toggleNode: () => undefined,
       openNode: () => undefined,
       closeNode: () => undefined,
@@ -142,6 +144,7 @@ describe('PageEditor', () => {
       updatedAt: '2026-01-01T00:00:00Z',
       children: [],
     })
+    reloadTreeMock.mockResolvedValue(undefined)
   })
 
   it('shows metadata panel and unsaved changes dialog when closing dirty editor', () => {
@@ -175,6 +178,26 @@ describe('PageEditor', () => {
 
     fireEvent.click(saveButton)
     expect(savePageMock).not.toHaveBeenCalled()
+  })
+
+  it('saves dirty content through the editor store update path', async () => {
+    useEditorStore.setState({ content: 'Changed content' })
+
+    render(
+      <MemoryRouter>
+        <PageEditor />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => {
+      expect(savePageMock).toHaveBeenCalledTimes(1)
+    })
+    await waitFor(() => {
+      expect(reloadTreeMock).toHaveBeenCalledTimes(1)
+    })
+    expect(navigateMock).toHaveBeenCalledWith('/e/guides/runbook', { replace: true })
   })
 
   it('uploads pasted image assets into the current page', async () => {

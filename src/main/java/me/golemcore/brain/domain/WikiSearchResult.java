@@ -16,13 +16,26 @@
  * Contact: alex@kuleshov.tech
  */
 
-package me.golemcore.brain.adapter.in.web.dto;
+package me.golemcore.brain.domain;
 
-import jakarta.validation.constraints.NotBlank;
-import lombok.Data;
+import java.util.List;
+import lombok.Builder;
+import lombok.Value;
 
-@Data
-public class SemanticSearchPayload {
-    @NotBlank
-    private String query;
+/**
+ * Unified response returned by {@code POST /api/spaces/{slug}/search}.
+ *
+ * <p>
+ * {@code mode} reports the retrieval path actually used. {@code semanticReady}
+ * tells clients whether vector retrieval participated in ranking. When vector
+ * retrieval cannot run, {@code fallbackReason} explains why the result was
+ * produced by FTS only.
+ */
+@Value
+@Builder
+public class WikiSearchResult {
+    String mode;
+    boolean semanticReady;
+    String fallbackReason;
+    List<WikiSearchResultHit> hits;
 }

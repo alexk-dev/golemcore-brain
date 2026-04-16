@@ -54,31 +54,23 @@ public class SpaceResolverFilter extends OncePerRequestFilter {
         Matcher matcher = SPACE_PATH.matcher(path);
         if (matcher.matches()) {
             String slug = matcher.group(1);
-            // Exclude management endpoints that are not slug-bound
-            if (!isManagementEndpoint(slug)) {
-                Optional<Space> spaceOptional = spaceRepository.findBySlug(slug);
-                if (spaceOptional.isEmpty()) {
-                    response.setStatus(HttpServletResponse.SC_NOT_FOUND);
-                    response.setContentType("application/json");
-                    response.getWriter().write("{\"error\":\"Space not found: " + slug + "\"}");
-                    return;
-                }
-                Space space = spaceOptional.get();
-                SpaceContextHolder.set(space.getId());
-                request.setAttribute(SPACE_SLUG_ATTRIBUTE, space.getSlug());
-                request.setAttribute(SPACE_ID_ATTRIBUTE, space.getId());
+            Optional<Space> spaceOptional = spaceRepository.findBySlug(slug);
+            if (spaceOptional.isEmpty()) {
+                response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+                response.setContentType("application/json");
+                response.getWriter().write("{\"error\":\"Space not found: " + slug + "\"}");
+                return;
             }
+            Space space = spaceOptional.get();
+            SpaceContextHolder.set(space.getId());
+            request.setAttribute(SPACE_SLUG_ATTRIBUTE, space.getSlug());
+            request.setAttribute(SPACE_ID_ATTRIBUTE, space.getId());
         }
         try {
             chain.doFilter(request, response);
         } finally {
             SpaceContextHolder.clear();
         }
-    }
-
-    private boolean isManagementEndpoint(String slugCandidate) {
-        // Reserved words that aren't slugs: none currently. Kept as a hook.
-        return false;
     }
 
     private String requestPathWithinApplication(HttpServletRequest request) {

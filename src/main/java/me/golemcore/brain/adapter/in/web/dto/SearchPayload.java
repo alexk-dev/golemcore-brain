@@ -16,28 +16,27 @@
  * Contact: alex@kuleshov.tech
  */
 
-package me.golemcore.brain.domain;
+package me.golemcore.brain.adapter.in.web.dto;
 
-import java.time.Instant;
-import lombok.Builder;
-import lombok.Value;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import lombok.Data;
 
 /**
- * Internal indexing status used by the application service before it is mapped
- * to web-facing search status.
+ * Request body for the public space search endpoint.
+ *
+ * <p>
+ * Clients may omit {@code mode} to use automatic hybrid retrieval. {@code fts}
+ * forces full-text search and {@code hybrid} requests dense plus full-text
+ * fusion when embeddings are ready.
  */
-@Value
-@Builder
-public class WikiIndexStatus {
-    String mode;
-    boolean ready;
-    int totalDocuments;
-    int fullTextIndexedDocuments;
-    int embeddingIndexedDocuments;
-    int staleDocuments;
-    Instant lastUpdatedAt;
-    boolean embeddingsReady;
-    String lastIndexingError;
-    String embeddingModelId;
-    Instant lastFullRebuildAt;
+@Data
+public class SearchPayload {
+    private String query;
+
+    private String mode;
+
+    @Min(1)
+    @Max(100)
+    private Integer limit;
 }

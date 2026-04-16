@@ -22,6 +22,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class WikiDocumentChunkerTest {
@@ -96,17 +97,7 @@ class WikiDocumentChunkerTest {
 
     @Test
     void shouldRejectInvalidParameters() {
-        try {
-            new WikiDocumentChunker(0, 0);
-            assertTrue(false, "expected exception for zero chunk size");
-        } catch (IllegalArgumentException expected) {
-            // expected
-        }
-        try {
-            new WikiDocumentChunker(10, 10);
-            assertTrue(false, "expected exception when overlap >= chunkSize");
-        } catch (IllegalArgumentException expected) {
-            // expected
-        }
+        assertThrows(IllegalArgumentException.class, () -> new WikiDocumentChunker(0, 0));
+        assertThrows(IllegalArgumentException.class, () -> new WikiDocumentChunker(10, 10));
     }
 }

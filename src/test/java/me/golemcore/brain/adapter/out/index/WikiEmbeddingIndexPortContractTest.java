@@ -120,7 +120,40 @@ class WikiEmbeddingIndexPortContractTest {
                 "orphaned chunks should have been deleted");
     }
 
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("adapters")
+    void shouldNotExposeAStoredModelIdWhenModelsAreMixed(String name,
+            Function<Path, WikiEmbeddingIndexPort> factory) {
+        WikiEmbeddingIndexPort adapter = factory.apply(tempDir.resolve(name + "-mixed-models"));
+
+        adapter.applyChanges("space-1", WikiDocumentChangeSet.builder()
+                .spaceId("space-1")
+                .embeddingUpserts(List.of(
+                        chunk("docs/current", 0, "current model", "embedding-model", List.of(1.0d, 0.0d))))
+                .deletedPaths(List.of())
+                .fullRebuild(false)
+                .build());
+
+        assertEquals("embedding-model", adapter.findStoredEmbeddingModelId("space-1").orElseThrow());
+
+        adapter.applyChanges("space-1", WikiDocumentChangeSet.builder()
+                .spaceId("space-1")
+                .embeddingUpserts(List.of(
+                        chunk("docs/old", 0, "old model", "old-embedding-model", List.of(0.0d, 1.0d))))
+                .deletedPaths(List.of())
+                .fullRebuild(false)
+                .build());
+
+        assertTrue(adapter.findStoredEmbeddingModelId("space-1").isEmpty(),
+                "mixed embedding models should force a rebuild instead of reporting an arbitrary model id");
+    }
+
     private WikiEmbeddingDocument chunk(String path, int chunkIndex, String chunkText, List<Double> vector) {
+        return chunk(path, chunkIndex, chunkText, null, vector);
+    }
+
+    private WikiEmbeddingDocument chunk(String path, int chunkIndex, String chunkText, String embeddingModelId,
+            List<Double> vector) {
         return WikiEmbeddingDocument.builder()
                 .document(WikiIndexedDocument.builder()
                         .id(path)
@@ -134,6 +167,7 @@ class WikiEmbeddingIndexPortContractTest {
                         .build())
                 .chunkIndex(chunkIndex)
                 .chunkText(chunkText)
+                .embeddingModelId(embeddingModelId)
                 .vector(vector)
                 .build();
     }

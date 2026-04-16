@@ -21,6 +21,10 @@ package me.golemcore.brain.domain;
 import lombok.Builder;
 import lombok.Value;
 
+/**
+ * Operational index status returned to clients that need to decide whether
+ * search results are current enough for automation.
+ */
 @Value
 @Builder
 public class WikiSearchStatus {

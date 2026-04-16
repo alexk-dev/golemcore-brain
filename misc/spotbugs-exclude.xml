@@ -36,6 +36,13 @@
         </Or>
     </Match>
 
+    <!-- Scheduler dispatch must restore coalescing state before propagating executor rejection. -->
+    <Match>
+        <Bug pattern="THROWS_METHOD_THROWS_RUNTIMEEXCEPTION" />
+        <Class name="me.golemcore.brain.application.service.index.WikiIndexingService" />
+        <Method name="dispatchScheduledRebuild" />
+    </Match>
+
     <!-- Path.getFileName() is flagged nullable but never null within DirectoryStream iteration -->
     <Match>
         <Bug pattern="NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE" />

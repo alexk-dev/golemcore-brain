@@ -16,18 +16,7 @@
  * Contact: alex@kuleshov.tech
  */
 
-package me.golemcore.brain.domain;
-
-import java.util.List;
-import lombok.Builder;
-import lombok.Value;
-
-@Value
-@Builder
-public class WikiSemanticSearchResult {
-    String mode;
-    boolean semanticReady;
-    String fallbackReason;
-    List<WikiEmbeddingSearchHit> semanticHits;
-    List<WikiSearchHit> fallbackHits;
-}
+/**
+ * Request payloads accepted by the public HTTP API.
+ */
+package me.golemcore.brain.adapter.in.web.dto;

@@ -96,6 +96,12 @@ export interface WikiSearchHit {
   kind: WikiNodeKind
 }
 
+export type WikiSearchMode = 'auto' | 'fts' | 'hybrid'
+
+export interface WikiSearchResultHit extends WikiSearchHit {
+  score?: number | null
+}
+
 export interface WikiSearchStatus {
   mode: string
   ready: boolean
@@ -111,12 +117,11 @@ export interface WikiSearchStatus {
   lastUpdatedAt: string
 }
 
-export interface WikiSemanticSearchResult {
+export interface WikiSearchResult {
   mode: string
   semanticReady: boolean
   fallbackReason?: string | null
-  semanticHits: WikiSearchHit[]
-  fallbackHits: WikiSearchHit[]
+  hits: WikiSearchResultHit[]
 }
 
 export interface SpaceChatSource {
@@ -274,6 +279,11 @@ export interface Space {
   slug: string
   name: string
   createdAt: string
+}
+
+export interface ReindexResponse {
+  status: string
+  spacesQueued: number
 }
 
 export interface ApiKey {

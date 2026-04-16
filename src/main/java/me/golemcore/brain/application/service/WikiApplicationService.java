@@ -44,7 +44,8 @@ import me.golemcore.brain.domain.WikiPageHistoryVersion;
 import me.golemcore.brain.domain.WikiPathLookupResult;
 import me.golemcore.brain.domain.WikiPathLookupSegment;
 import me.golemcore.brain.domain.WikiSearchHit;
-import me.golemcore.brain.domain.WikiSemanticSearchResult;
+import me.golemcore.brain.domain.WikiSearchMode;
+import me.golemcore.brain.domain.WikiSearchResult;
 import me.golemcore.brain.domain.WikiSearchStatus;
 import me.golemcore.brain.domain.WikiTreeNode;
 import java.io.IOException;
@@ -232,6 +233,14 @@ public class WikiApplicationService {
         return wikiIndexingService.search(requireSpaceId(), normalizedQuery);
     }
 
+    public WikiSearchResult search(SearchCommand command) {
+        WikiSearchMode mode = WikiSearchMode.from(command == null ? null : command.getMode());
+        String query = Optional.ofNullable(command == null ? null : command.getQuery()).orElse("").trim();
+        int limit = Optional.ofNullable(command == null ? null : command.getLimit())
+                .orElse(WikiSearchMode.FTS.equals(mode) ? 50 : 10);
+        return wikiIndexingService.search(requireSpaceId(), query, mode, limit);
+    }
+
     public WikiSearchStatus getSearchStatus() {
         WikiIndexStatus status = wikiIndexingService.getStatus(requireSpaceId());
         Instant lastUpdatedAt = Optional.ofNullable(status.getLastUpdatedAt()).orElse(Instant.now());
@@ -251,10 +260,6 @@ public class WikiApplicationService {
                         : DATE_TIME_FORMATTER.format(status.getLastFullRebuildAt()))
                 .lastUpdatedAt(DATE_TIME_FORMATTER.format(lastUpdatedAt))
                 .build();
-    }
-
-    public WikiSemanticSearchResult semanticSearch(String query) {
-        return wikiIndexingService.semanticSearch(requireSpaceId(), query);
     }
 
     public WikiImportPlanResponse planMarkdownImport(InputStream inputStream) {
@@ -1020,6 +1025,14 @@ public class WikiApplicationService {
     public static class SortChildrenCommand {
         String path;
         List<String> orderedSlugs;
+    }
+
+    @Value
+    @Builder
+    public static class SearchCommand {
+        String query;
+        String mode;
+        Integer limit;
     }
 
     @Value

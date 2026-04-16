@@ -32,6 +32,7 @@ import type {
   ModelRegistryResolveResult,
   MovePagePayload,
   PublicUserView,
+  ReindexResponse,
   MarkdownImportOptions,
   SaveLlmModelPayload,
   SaveLlmProviderPayload,
@@ -52,9 +53,9 @@ import type {
   WikiPage,
   WikiPageHistoryEntry,
   WikiPathLookupResult,
-  WikiSearchHit,
+  WikiSearchMode,
+  WikiSearchResult,
   WikiSearchStatus,
-  WikiSemanticSearchResult,
   WikiTreeNode,
 } from '../types'
 import { withAppBasePath } from './basePath'
@@ -205,6 +206,18 @@ export function createSpace(slug: string, name: string): Promise<Space> {
 export function deleteSpace(slug: string): Promise<void> {
   return readJson<void>(`/api/spaces/${encodeURIComponent(slug)}`, {
     method: 'DELETE',
+  })
+}
+
+export function reindexSpace(slug: string): Promise<ReindexResponse> {
+  return readJson<ReindexResponse>(`/api/admin/spaces/${encodeURIComponent(slug)}/reindex`, {
+    method: 'POST',
+  })
+}
+
+export function reindexAllSpaces(): Promise<ReindexResponse> {
+  return readJson<ReindexResponse>('/api/admin/spaces/reindex', {
+    method: 'POST',
   })
 }
 
@@ -375,19 +388,15 @@ export function restorePageHistory(path: string, versionId: string): Promise<Wik
   })
 }
 
-export function searchPages(query: string): Promise<WikiSearchHit[]> {
-  return readJson<WikiSearchHit[]>(spaceUrl(`/search?q=${encodeURIComponent(query)}`))
+export function searchPages(query: string, mode: WikiSearchMode = 'auto', limit = 24): Promise<WikiSearchResult> {
+  return readJson<WikiSearchResult>(spaceUrl('/search'), {
+    method: 'POST',
+    body: JSON.stringify({ query, mode, limit }),
+  })
 }
 
 export function getSearchStatus(): Promise<WikiSearchStatus> {
   return readJson<WikiSearchStatus>(spaceUrl('/search/status'))
-}
-
-export function semanticSearchPages(query: string): Promise<WikiSemanticSearchResult> {
-  return readJson<WikiSemanticSearchResult>(spaceUrl('/search/semantic'), {
-    method: 'POST',
-    body: JSON.stringify({ query }),
-  })
 }
 
 export function chatWithSpace(

@@ -28,7 +28,7 @@ import lombok.RequiredArgsConstructor;
  * Periodic safety net that reconciles every known space against the on-disk
  * catalog. Runs on a fixed delay independently of the HTTP request path so that
  * drift introduced by out-of-band changes is picked up without punishing
- * latency-sensitive endpoints like {@code /search/semantic}.
+ * latency-sensitive endpoints like {@code /search}.
  */
 @RequiredArgsConstructor
 public class WikiIndexReconciliationScheduler {

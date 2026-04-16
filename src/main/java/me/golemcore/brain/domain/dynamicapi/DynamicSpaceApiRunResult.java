@@ -21,6 +21,9 @@ package me.golemcore.brain.domain.dynamicapi;
 import lombok.Builder;
 import lombok.Value;
 
+/**
+ * Response returned after a configured space-scoped Dynamic API executes.
+ */
 @Value
 @Builder
 public class DynamicSpaceApiRunResult {

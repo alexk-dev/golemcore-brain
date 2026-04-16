@@ -22,6 +22,9 @@ import java.util.List;
 import lombok.Builder;
 import lombok.Value;
 
+/**
+ * Public chat response for a single space-scoped assistant turn.
+ */
 @Value
 @Builder
 public class SpaceChatResponse {

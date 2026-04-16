@@ -25,6 +25,10 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * Public application configuration endpoint used before a client selects a
+ * space.
+ */
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor

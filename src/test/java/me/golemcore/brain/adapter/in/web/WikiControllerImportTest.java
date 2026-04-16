@@ -29,6 +29,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -38,6 +39,7 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -74,7 +76,12 @@ class WikiControllerImportTest {
                 "file",
                 "docs.zip",
                 "application/zip",
-                buildImportZip());
+                buildImportZip("Imported guides section", "Imported setup page"));
+        MockMultipartFile updatedArchive = new MockMultipartFile(
+                "file",
+                "docs.zip",
+                "application/zip",
+                buildImportZip("Updated archive landing token", "Imported setup page"));
         MockMultipartFile previewOptions = new MockMultipartFile(
                 "options",
                 "",
@@ -130,24 +137,46 @@ class WikiControllerImportTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title", is("Setup")));
 
+        mockMvc.perform(post("/api/spaces/default/search")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "query": "Imported setup page",
+                          "mode": "fts"
+                        }
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hits[0].path", is("knowledge/guides/setup")));
+
         mockMvc.perform(multipart("/api/spaces/default/import/markdown/apply")
-                .file(archive)
+                .file(updatedArchive)
                 .file(applyOptions))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.importedCount", is(1)))
                 .andExpect(jsonPath("$.createdCount", is(0)))
                 .andExpect(jsonPath("$.updatedCount", is(1)))
                 .andExpect(jsonPath("$.skippedCount", is(1)));
+
+        mockMvc.perform(post("/api/spaces/default/search")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "query": "Updated archive landing token",
+                          "mode": "fts"
+                        }
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hits[0].path", is("knowledge/guides")));
     }
 
-    private byte[] buildImportZip() throws Exception {
+    private byte[] buildImportZip(String guidesBody, String setupBody) throws Exception {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         ZipOutputStream zipOutputStream = new ZipOutputStream(outputStream, StandardCharsets.UTF_8);
         zipOutputStream.putNextEntry(new ZipEntry("guides/index.md"));
-        zipOutputStream.write("# Guides\n\nImported guides section".getBytes(StandardCharsets.UTF_8));
+        zipOutputStream.write(("# Guides\n\n" + guidesBody).getBytes(StandardCharsets.UTF_8));
         zipOutputStream.closeEntry();
         zipOutputStream.putNextEntry(new ZipEntry("guides/setup.md"));
-        zipOutputStream.write("# Setup\n\nImported setup page".getBytes(StandardCharsets.UTF_8));
+        zipOutputStream.write(("# Setup\n\n" + setupBody).getBytes(StandardCharsets.UTF_8));
         zipOutputStream.closeEntry();
         zipOutputStream.finish();
         zipOutputStream.close();

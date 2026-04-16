@@ -23,10 +23,10 @@ import me.golemcore.brain.domain.WikiDocumentChangeSet;
 import me.golemcore.brain.domain.WikiEmbeddingDocument;
 import me.golemcore.brain.domain.WikiEmbeddingSearchHit;
 import me.golemcore.brain.domain.WikiIndexedDocument;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -83,10 +83,18 @@ public class InMemoryWikiEmbeddingIndexAdapter implements WikiEmbeddingIndexPort
         if (space == null) {
             return Optional.empty();
         }
-        return space.values().stream()
-                .map(StoredChunk::embeddingModelId)
-                .filter(id -> id != null && !id.isBlank())
-                .findFirst();
+        Set<String> modelIds = new LinkedHashSet<>();
+        for (StoredChunk chunk : space.values()) {
+            String modelId = chunk.embeddingModelId();
+            if (modelId == null || modelId.isBlank()) {
+                return Optional.empty();
+            }
+            modelIds.add(modelId.strip());
+            if (modelIds.size() > 1) {
+                return Optional.empty();
+            }
+        }
+        return modelIds.stream().findFirst();
     }
 
     @Override
@@ -98,7 +106,7 @@ public class InMemoryWikiEmbeddingIndexAdapter implements WikiEmbeddingIndexPort
         if (space == null || space.isEmpty()) {
             return List.of();
         }
-        LinkedHashMap<String, WikiEmbeddingSearchHit> bestByPath = new LinkedHashMap<>();
+        Map<String, WikiEmbeddingSearchHit> bestByPath = new LinkedHashMap<>();
         for (StoredChunk chunk : space.values()) {
             double score = cosineSimilarity(chunk.vector(), embedding);
             WikiEmbeddingSearchHit hit = WikiEmbeddingSearchHit.builder()
@@ -140,7 +148,7 @@ public class InMemoryWikiEmbeddingIndexAdapter implements WikiEmbeddingIndexPort
         if (space == null) {
             return Map.of();
         }
-        LinkedHashMap<String, String> revisions = new LinkedHashMap<>();
+        Map<String, String> revisions = new LinkedHashMap<>();
         for (StoredChunk chunk : space.values()) {
             revisions.putIfAbsent(chunk.document().getPath(), chunk.document().getRevision());
         }

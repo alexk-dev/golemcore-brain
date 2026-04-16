@@ -21,62 +21,39 @@ package me.golemcore.brain.adapter.in.web;
 import me.golemcore.brain.adapter.in.web.auth.AuthContextResolver;
 import me.golemcore.brain.application.service.space.SpaceService;
 import me.golemcore.brain.domain.auth.AuthContext;
-import me.golemcore.brain.domain.space.Space;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
-import java.util.List;
-import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Public space catalog API for listing visible spaces and administering spaces.
+ * Administrative API for queueing full search-index rebuilds.
  */
 @RestController
-@RequestMapping("/api/spaces")
+@RequestMapping("/api/admin/spaces")
 @RequiredArgsConstructor
-public class SpaceController {
+public class AdminSpaceReindexController {
 
     private final SpaceService spaceService;
     private final AuthContextResolver authContextResolver;
 
-    @GetMapping
-    public List<Space> listSpaces(HttpServletRequest request) {
-        AuthContext context = authContextResolver.resolve(request);
-        return spaceService.listVisibleSpaces(context);
-    }
-
-    @PostMapping
-    public ResponseEntity<Space> createSpace(@Valid @RequestBody CreateSpaceRequest payload,
-            HttpServletRequest request) {
+    @PostMapping("/reindex")
+    public ResponseEntity<ReindexResponse> reindexAllSpaces(HttpServletRequest request) {
         AuthContext context = authContextResolver.requireAuthenticated(request);
-        Space space = spaceService.createSpace(context, payload.getSlug(), payload.getName());
-        return ResponseEntity.status(201).body(space);
+        int spacesQueued = spaceService.reindexAllSpaces(context);
+        return ResponseEntity.accepted().body(new ReindexResponse("queued", spacesQueued));
     }
 
-    @DeleteMapping("/{slug}")
-    public ResponseEntity<Void> deleteSpace(@PathVariable String slug, HttpServletRequest request) {
+    @PostMapping("/{slug}/reindex")
+    public ResponseEntity<ReindexResponse> reindexSpace(@PathVariable String slug, HttpServletRequest request) {
         AuthContext context = authContextResolver.requireAuthenticated(request);
-        spaceService.deleteSpace(context, slug);
-        return ResponseEntity.noContent().build();
+        spaceService.reindexSpace(context, slug);
+        return ResponseEntity.accepted().body(new ReindexResponse("queued", 1));
     }
 
-    @Data
-    public static class CreateSpaceRequest {
-        @NotBlank
-        @Size(max = 63)
-        private String slug;
-
-        @Size(max = 120)
-        private String name;
+    public record ReindexResponse(String status, int spacesQueued) {
     }
 }

@@ -16,17 +16,20 @@
  * Contact: alex@kuleshov.tech
  */
 
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { SpacesPage } from './SpacesPage'
+import { reindexAllSpaces, reindexSpace } from '../../lib/api'
 import { useSpaceStore } from '../../stores/space'
 import { useUiStore } from '../../stores/ui'
 
 vi.mock('../../lib/api', () => ({
   createSpace: vi.fn(),
   deleteSpace: vi.fn(),
+  reindexAllSpaces: vi.fn(),
+  reindexSpace: vi.fn(),
 }))
 
 vi.mock('sonner', () => ({
@@ -38,6 +41,10 @@ vi.mock('sonner', () => ({
 
 describe('SpacesPage', () => {
   beforeEach(() => {
+    vi.mocked(reindexAllSpaces).mockReset()
+    vi.mocked(reindexSpace).mockReset()
+    vi.mocked(reindexAllSpaces).mockResolvedValue({ status: 'queued', spacesQueued: 1 })
+    vi.mocked(reindexSpace).mockResolvedValue({ status: 'queued', spacesQueued: 1 })
     useUiStore.setState({
       authDisabled: false,
       currentUser: {
@@ -73,5 +80,23 @@ describe('SpacesPage', () => {
       'href',
       '/spaces/docs/settings',
     )
+  })
+
+  it('queues reindex for one space and all spaces', async () => {
+    render(
+      <MemoryRouter>
+        <SpacesPage />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reindex' }))
+    await waitFor(() => {
+      expect(reindexSpace).toHaveBeenCalledWith('docs')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Full reindex' }))
+    await waitFor(() => {
+      expect(reindexAllSpaces).toHaveBeenCalledTimes(1)
+    })
   })
 })
