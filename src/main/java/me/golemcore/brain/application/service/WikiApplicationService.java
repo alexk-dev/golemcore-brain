@@ -1460,18 +1460,28 @@ public class WikiApplicationService {
     }
 
     private String normalizePath(String path) {
-        String normalized = Optional.ofNullable(path).orElse("")
+        String normalized = trimSlashes(Optional.ofNullable(path).orElse("")
                 .replace('\\', '/')
-                .trim()
-                .replaceAll("^/+", "")
-                .replaceAll("/+$", "");
-        if (".".equals(normalized)) {
+                .trim());
+        if (normalized.isBlank() || ".".equals(normalized)) {
             return "";
         }
-        if (normalized.contains("..")) {
+        if (normalized.indexOf('\0') >= 0 || normalized.contains("..")) {
             throw new IllegalArgumentException("Path traversal is not allowed");
         }
         return normalized;
+    }
+
+    private String trimSlashes(String value) {
+        int startIndex = 0;
+        int endIndex = value.length();
+        while (startIndex < endIndex && value.charAt(startIndex) == '/') {
+            startIndex++;
+        }
+        while (endIndex > startIndex && value.charAt(endIndex - 1) == '/') {
+            endIndex--;
+        }
+        return value.substring(startIndex, endIndex);
     }
 
     private String humanizePath(String path) {
@@ -1510,16 +1520,34 @@ public class WikiApplicationService {
     }
 
     private String slugify(String input) {
-        String slug = Optional.ofNullable(input).orElse("")
+        String normalizedInput = Optional.ofNullable(input).orElse("")
                 .trim()
-                .toLowerCase(Locale.ROOT)
-                .replaceAll("[^a-z0-9]+", "-")
-                .replaceAll("^-+", "")
-                .replaceAll("-+$", "");
-        if (slug.isBlank()) {
+                .toLowerCase(Locale.ROOT);
+        StringBuilder slug = new StringBuilder();
+        boolean previousWasSeparator = false;
+        for (int index = 0; index < normalizedInput.length(); index++) {
+            char currentChar = normalizedInput.charAt(index);
+            if (isAsciiLowercaseLetterOrDigit(currentChar)) {
+                slug.append(currentChar);
+                previousWasSeparator = false;
+                continue;
+            }
+            if (!previousWasSeparator && slug.length() > 0) {
+                slug.append('-');
+                previousWasSeparator = true;
+            }
+        }
+        if (slug.length() > 0 && slug.charAt(slug.length() - 1) == '-') {
+            slug.deleteCharAt(slug.length() - 1);
+        }
+        if (slug.length() == 0) {
             throw new IllegalArgumentException("Slug cannot be empty");
         }
-        return slug;
+        return slug.toString();
+    }
+
+    private boolean isAsciiLowercaseLetterOrDigit(char value) {
+        return (value >= 'a' && value <= 'z') || (value >= '0' && value <= '9');
     }
 
     @Value
