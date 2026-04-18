@@ -32,6 +32,7 @@ import me.golemcore.brain.application.port.out.ModelRegistryCachePort;
 import me.golemcore.brain.application.port.out.ModelRegistryDocumentPort;
 import me.golemcore.brain.application.port.out.ModelRegistryRemotePort;
 import me.golemcore.brain.application.port.out.SpaceRepository;
+import me.golemcore.brain.application.port.out.WikiAccessStatsPort;
 import me.golemcore.brain.application.port.out.WikiEmbeddingIndexPort;
 import me.golemcore.brain.application.port.out.WikiFullTextIndexPort;
 import me.golemcore.brain.application.port.out.WikiDocumentCatalogPort;
@@ -50,6 +51,7 @@ import me.golemcore.brain.application.service.llm.LlmSettingsService;
 import me.golemcore.brain.application.service.llm.ModelRegistryService;
 import me.golemcore.brain.application.service.space.SpaceService;
 import me.golemcore.brain.application.service.user.UserManagementService;
+import java.time.Clock;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
@@ -59,6 +61,11 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class BrainApplicationConfiguration {
+
+    @Bean
+    public Clock clock() {
+        return Clock.systemUTC();
+    }
 
     @Bean(initMethod = "initialize")
     public AuthService authService(
@@ -78,8 +85,10 @@ public class BrainApplicationConfiguration {
     public WikiApplicationService wikiApplicationService(
             WikiRepository wikiRepository,
             BrainSettingsPort brainSettingsPort,
-            WikiIndexingService wikiIndexingService) {
-        return new WikiApplicationService(wikiRepository, brainSettingsPort, wikiIndexingService);
+            WikiIndexingService wikiIndexingService,
+            WikiAccessStatsPort wikiAccessStatsPort) {
+        return new WikiApplicationService(
+                wikiRepository, brainSettingsPort, wikiIndexingService, wikiAccessStatsPort);
     }
 
     @Bean

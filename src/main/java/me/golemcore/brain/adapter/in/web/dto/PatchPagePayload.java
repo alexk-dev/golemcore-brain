@@ -18,23 +18,21 @@
 
 package me.golemcore.brain.adapter.in.web.dto;
 
-import java.util.List;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
+import me.golemcore.brain.domain.WikiPatchOperation;
 
 @Data
-public class UpdatePagePayload {
+public class PatchPagePayload {
+
+    @NotNull
+    private WikiPatchOperation operation;
 
     @NotBlank
-    private String title;
-
-    private String slug;
+    private String expectedRevision;
 
     private String content = "";
 
-    private String revision;
-
-    private List<String> tags;
-
-    private String summary;
+    private String heading;
 }

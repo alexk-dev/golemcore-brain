@@ -261,6 +261,18 @@
     @apply text-danger hover:bg-danger/10 focus:bg-danger/10 data-[highlighted]:bg-danger/10;
   }
 
+  .user-menu__item--radio {
+    @apply pr-8;
+  }
+
+  .user-menu__item-label {
+    @apply truncate;
+  }
+
+  .user-menu__item-indicator {
+    @apply ml-auto inline-flex items-center justify-center text-accent;
+  }
+
   .app-layout__chromeless-main {
     @apply flex min-h-screen flex-col items-stretch overflow-auto;
   }

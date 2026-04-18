@@ -16,25 +16,15 @@
  * Contact: alex@kuleshov.tech
  */
 
-package me.golemcore.brain.adapter.in.web.dto;
+package me.golemcore.brain.domain;
 
 import java.util.List;
-import jakarta.validation.constraints.NotBlank;
-import lombok.Data;
+import lombok.Builder;
+import lombok.Value;
 
-@Data
-public class UpdatePagePayload {
-
-    @NotBlank
-    private String title;
-
-    private String slug;
-
-    private String content = "";
-
-    private String revision;
-
-    private List<String> tags;
-
-    private String summary;
+@Value
+@Builder
+public class WikiGraphSummary {
+    List<WikiGraphOrphan> orphans;
+    List<WikiLinkStatusItem> dangling;
 }

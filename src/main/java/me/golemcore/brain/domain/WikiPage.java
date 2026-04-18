@@ -36,5 +36,9 @@ public class WikiPage {
     String createdAt;
     String updatedAt;
     String revision;
+    List<String> tags;
+    String summary;
+    long accessCount;
+    String lastAccessedAt;
     List<WikiTreeNode> children;
 }

@@ -29,6 +29,7 @@ Use it for:
 - **Search that can be rebuilt** - index title and body content from the files, with optional hybrid vector search when embeddings are configured.
 - **Roles and access control** - use admin, editor, and viewer roles, public read-only mode, and API keys for programmatic access.
 - **LLM-ready workflows** - configure model providers once, then use them for embedding indexing, space chat, and space-scoped Dynamic APIs.
+- **Agent-native editing** - section-level `PATCH` with optimistic concurrency, atomic multi-page transactions, YAML frontmatter (`tags`, `summary`), a wiki link-graph summary, and automatic read-access tracking expose the Brain wiki as an LLM memory surface.
 - **Simple self-hosting** - run a Spring Boot application with the frontend bundled into the same artifact.
 
 ## How Content Is Stored
@@ -127,9 +128,10 @@ Use a session cookie from `POST /api/auth/login` or an API key with `Authorizati
 | `GET` | `/api/spaces/{slug}/page?path=...` | Viewer | Read a page by path. |
 | `GET` | `/api/spaces/{slug}/pages/by-path?path=...` | Viewer | Read a page by path; stable alias for integrations. |
 | `GET` | `/api/spaces/{slug}/pages/lookup?path=...` | Viewer | Resolve path segments and existence metadata. |
-| `POST` | `/api/spaces/{slug}/pages` | Editor | Create a page. Body: `parentPath`, `title`, optional `slug`, `content`, `kind`. |
+| `POST` | `/api/spaces/{slug}/pages` | Editor | Create a page. Body: `parentPath`, `title`, optional `slug`, `content`, `kind`, `tags`, `summary`. `tags`/`summary` are stored as YAML frontmatter. |
 | `POST` | `/api/spaces/{slug}/pages/ensure` | Editor | Create or return a page at an exact path. Body: `path`, `targetTitle`. |
-| `PUT` | `/api/spaces/{slug}/page?path=...` | Editor | Update page title, slug, content, and revision guard. |
+| `PUT` | `/api/spaces/{slug}/page?path=...` | Editor | Update page title, slug, content, revision guard, and optional `tags`/`summary` frontmatter. |
+| `PATCH` | `/api/spaces/{slug}/page?path=...` | Editor | Section-level patch. Body: `operation` (`APPEND`, `PREPEND`, `REPLACE_SECTION`), `expectedRevision`, `content`, optional `heading` for `REPLACE_SECTION`. Returns 409 on stale revision. |
 | `DELETE` | `/api/spaces/{slug}/page?path=...` | Editor | Delete a page or section. |
 | `POST` | `/api/spaces/{slug}/page/move?path=...` | Editor | Move or rename a page. |
 | `POST` | `/api/spaces/{slug}/page/copy?path=...` | Editor | Copy a page into another section. |
@@ -143,6 +145,9 @@ Use a session cookie from `POST /api/auth/login` or an API key with `Authorizati
 | `POST` | `/api/spaces/{slug}/import/markdown/plan` | Editor | Upload a Markdown archive and preview import actions. Multipart: `file`, optional `options`. |
 | `POST` | `/api/spaces/{slug}/import/markdown/apply` | Editor | Upload a Markdown archive and apply selected import actions. |
 | `GET` | `/api/spaces/{slug}/links?path=...` | Viewer | Validate links from a page. |
+| `GET` | `/api/spaces/{slug}/wiki/graph` | Viewer | Summarize wiki link graph: orphan pages (not linked from anywhere) and dangling outgoing links across the space. |
+| `POST` | `/api/spaces/{slug}/wiki/tx` | Editor | Apply an ordered batch of wiki operations atomically. Body: `operations[]` where each item has `op` (`CREATE`, `UPDATE`, `DELETE`) and the fields required by that operation (including `expectedRevision` for `UPDATE`). Batch is rejected with HTTP 409 if any `expectedRevision` is stale. |
+| `GET` | `/api/spaces/{slug}/wiki/access/top?limit=N` | Viewer | List the most-read pages for the space. Read counts and `lastAccessedAt` are recorded automatically on each page read. |
 | `GET` | `/api/spaces/{slug}/pages/assets?path=...` | Editor | List assets attached to a page. |
 | `POST` | `/api/spaces/{slug}/pages/assets?path=...` | Editor | Upload an asset for a page. Multipart: `file`. |
 | `PUT` | `/api/spaces/{slug}/pages/assets/rename?path=...` | Editor | Rename a page asset. Body: `oldName`, `newName`. |

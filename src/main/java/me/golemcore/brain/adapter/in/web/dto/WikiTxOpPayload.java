@@ -18,23 +18,28 @@
 
 package me.golemcore.brain.adapter.in.web.dto;
 
-import java.util.List;
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
+import me.golemcore.brain.domain.WikiNodeKind;
+import me.golemcore.brain.domain.WikiTxOperationType;
 
 @Data
-public class UpdatePagePayload {
+public class WikiTxOpPayload {
 
-    @NotBlank
-    private String title;
+    @NotNull
+    private WikiTxOperationType op;
+
+    private String path;
+
+    private String parentPath;
 
     private String slug;
 
+    private String title;
+
     private String content = "";
 
-    private String revision;
+    private WikiNodeKind kind;
 
-    private List<String> tags;
-
-    private String summary;
+    private String expectedRevision;
 }

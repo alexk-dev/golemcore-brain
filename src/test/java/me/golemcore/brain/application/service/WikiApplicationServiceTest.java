@@ -26,6 +26,7 @@ import me.golemcore.brain.application.exception.WikiNotFoundException;
 import me.golemcore.brain.application.port.out.LlmEmbeddingPort;
 import me.golemcore.brain.application.port.out.LlmSettingsRepository;
 import me.golemcore.brain.application.service.index.WikiIndexingService;
+import me.golemcore.brain.application.service.support.InMemoryWikiAccessStatsPort;
 import me.golemcore.brain.application.space.SpaceContextHolder;
 import me.golemcore.brain.config.WikiProperties;
 import me.golemcore.brain.domain.WikiAsset;
@@ -244,7 +245,8 @@ class WikiApplicationServiceTest {
                         new SqliteWikiEmbeddingIndexAdapter(properties),
                         new InMemoryLlmSettingsRepository(),
                         new NoopEmbeddingPort(),
-                        Runnable::run));
+                        Runnable::run),
+                new InMemoryWikiAccessStatsPort());
 
         WikiPage syntheticSection = service.getPage("manual-notes");
 
@@ -397,7 +399,8 @@ class WikiApplicationServiceTest {
                 new InMemoryLlmSettingsRepository(),
                 new NoopEmbeddingPort(),
                 Runnable::run);
-        WikiApplicationService service = new WikiApplicationService(repository, properties, indexingService);
+        WikiApplicationService service = new WikiApplicationService(
+                repository, properties, indexingService, new InMemoryWikiAccessStatsPort());
         assertTrue(Files.exists(
                 properties.getStorageRoot().resolve("spaces").resolve(defaultSpace.getId()).resolve("index.md")));
         return service;
@@ -431,4 +434,5 @@ class WikiApplicationServiceTest {
             return settings;
         }
     }
+
 }

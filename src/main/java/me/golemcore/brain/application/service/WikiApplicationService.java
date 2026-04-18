@@ -20,9 +20,11 @@ package me.golemcore.brain.application.service;
 
 import me.golemcore.brain.application.exception.WikiNotFoundException;
 import me.golemcore.brain.application.port.out.BrainSettingsPort;
+import me.golemcore.brain.application.port.out.WikiAccessStatsPort;
 import me.golemcore.brain.application.port.out.WikiRepository;
 import me.golemcore.brain.application.service.index.WikiIndexingService;
 import me.golemcore.brain.application.space.SpaceContextHolder;
+import me.golemcore.brain.domain.WikiAccessStats;
 import me.golemcore.brain.domain.WikiAsset;
 import me.golemcore.brain.domain.WikiAssetContent;
 import me.golemcore.brain.domain.WikiConfigResponse;
@@ -33,13 +35,20 @@ import me.golemcore.brain.domain.WikiIndexStatus;
 import me.golemcore.brain.domain.WikiIndexedDocument;
 import me.golemcore.brain.domain.WikiImportPolicy;
 import me.golemcore.brain.domain.WikiImportPlanResponse;
+import me.golemcore.brain.domain.WikiGraphOrphan;
+import me.golemcore.brain.domain.WikiGraphSummary;
 import me.golemcore.brain.domain.WikiLinkStatus;
 import me.golemcore.brain.domain.WikiLinkStatusItem;
 import me.golemcore.brain.domain.WikiNodeKind;
 import me.golemcore.brain.domain.WikiNodeReference;
 import me.golemcore.brain.domain.WikiPage;
+import me.golemcore.brain.application.exception.WikiEditConflictException;
 import me.golemcore.brain.domain.WikiPageDocument;
+import me.golemcore.brain.domain.WikiPatchOperation;
 import me.golemcore.brain.domain.WikiPageHistoryEntry;
+import me.golemcore.brain.domain.WikiTxOperationType;
+import me.golemcore.brain.domain.WikiTxResult;
+import me.golemcore.brain.domain.WikiTxResult.WikiTxOperationResult;
 import me.golemcore.brain.domain.WikiPageHistoryVersion;
 import me.golemcore.brain.domain.WikiPathLookupResult;
 import me.golemcore.brain.domain.WikiPathLookupSegment;
@@ -64,17 +73,22 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import lombok.Builder;
 import lombok.RequiredArgsConstructor;
 import lombok.Value;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Coordinates wiki use cases without binding the application layer to HTTP,
  * filesystem, or indexing implementation details.
  */
+@Slf4j
 @RequiredArgsConstructor
 public class WikiApplicationService {
 
@@ -83,6 +97,8 @@ public class WikiApplicationService {
     private final WikiRepository wikiRepository;
     private final BrainSettingsPort brainSettingsPort;
     private final WikiIndexingService wikiIndexingService;
+    private final WikiAccessStatsPort wikiAccessStatsPort;
+    private final Map<String, ReentrantLock> spaceMutationLocks = new ConcurrentHashMap<>();
 
     public void initialize() {
         wikiRepository.initialize();
@@ -107,7 +123,62 @@ public class WikiApplicationService {
     public WikiPage getPage(String path) {
         WikiNodeReference nodeReference = wikiRepository.findReference(path)
                 .orElseThrow(() -> new WikiNotFoundException("Page not found: " + normalizePath(path)));
+        if (nodeReference.getKind() == WikiNodeKind.PAGE) {
+            try {
+                wikiAccessStatsPort.recordAccess(requireSpaceId(), nodeReference.getPath());
+            } catch (RuntimeException exception) {
+                log.warn("Failed to record access stats for {}", nodeReference.getPath(), exception);
+            }
+        }
         return toPage(nodeReference);
+    }
+
+    private WikiPage readPageSilent(String path) {
+        WikiNodeReference nodeReference = wikiRepository.findReference(path)
+                .orElseThrow(() -> new WikiNotFoundException("Page not found: " + normalizePath(path)));
+        return toPage(nodeReference);
+    }
+
+    private <T> T withSpaceLock(Supplier<T> operation) {
+        ReentrantLock lock = spaceMutationLocks.computeIfAbsent(requireSpaceId(), id -> new ReentrantLock());
+        lock.lock();
+        try {
+            return operation.get();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void withSpaceLockVoid(Runnable operation) {
+        withSpaceLock(() -> {
+            operation.run();
+            return null;
+        });
+    }
+
+    public List<WikiAccessStats> listTopAccessed(int limit) {
+        String spaceId = requireSpaceId();
+        // Fetch the full ranked snapshot so orphan filtering can't drop below `limit`.
+        // The adapter keeps stats in memory, so the cost is O(entries), not an extra
+        // I/O.
+        List<WikiAccessStats> raw = wikiAccessStatsPort.listTop(spaceId, 0);
+        List<WikiAccessStats> live = new ArrayList<>();
+        List<String> orphans = new ArrayList<>();
+        for (WikiAccessStats stat : raw) {
+            if (wikiRepository.findReference(stat.getPath()).isPresent()) {
+                live.add(stat);
+            } else {
+                orphans.add(stat.getPath());
+            }
+        }
+        if (!orphans.isEmpty()) {
+            // Batch-GC out-of-band deletions so ghosts don't accumulate in the stats file.
+            wikiAccessStatsPort.removePaths(spaceId, orphans);
+        }
+        if (limit > 0 && live.size() > limit) {
+            return live.subList(0, limit);
+        }
+        return live;
     }
 
     public List<WikiPageHistoryEntry> getPageHistory(String path) {
@@ -119,110 +190,396 @@ public class WikiApplicationService {
     }
 
     public WikiPage restorePageHistory(String path, String versionId, String actor) {
-        WikiPageHistoryVersion version = wikiRepository.readPageHistoryVersion(path, versionId);
-        WikiPageDocument document = wikiRepository.restorePageVersion(
-                path,
-                versionId,
-                actor,
-                "Version restored",
-                "Rolled back to \"" + version.getTitle() + "\".");
-        recordUpsert(document);
-        return toPageDocument(document);
+        return withSpaceLock(() -> {
+            WikiPageHistoryVersion version = wikiRepository.readPageHistoryVersion(path, versionId);
+            WikiPageDocument document = wikiRepository.restorePageVersion(
+                    path,
+                    versionId,
+                    actor,
+                    "Version restored",
+                    "Rolled back to \"" + version.getTitle() + "\".");
+            recordUpsert(document);
+            return toPageDocument(document);
+        });
     }
 
     public WikiPage createPage(CreatePageCommand command) {
-        WikiPageDocument document = wikiRepository.createPage(
-                command.getParentPath(),
-                command.getTitle(),
-                command.getSlug(),
-                command.getContent(),
-                command.getKind());
-        recordUpsert(document);
-        return getPage(document.getPath());
+        return withSpaceLock(() -> {
+            String bodyWithFrontmatter = renderFrontmatter(command.getTags(), command.getSummary(),
+                    Optional.ofNullable(command.getContent()).orElse(""));
+            WikiPageDocument document = wikiRepository.createPage(
+                    command.getParentPath(),
+                    command.getTitle(),
+                    command.getSlug(),
+                    bodyWithFrontmatter,
+                    command.getKind());
+            recordUpsert(document);
+            return readPageSilent(document.getPath());
+        });
     }
 
     public WikiPage ensurePage(String path, String targetTitle) {
-        Optional<WikiNodeReference> existingReference = wikiRepository.findReference(path);
-        if (existingReference.isPresent()) {
-            return getPage(existingReference.get().getPath());
-        }
-        String normalizedPath = normalizePath(path);
-        String parentPath = normalizedPath.contains("/") ? normalizedPath.substring(0, normalizedPath.lastIndexOf('/'))
-                : "";
-        String slug = normalizedPath.contains("/") ? normalizedPath.substring(normalizedPath.lastIndexOf('/') + 1)
-                : normalizedPath;
-        String title = Optional.ofNullable(targetTitle).filter(value -> !value.isBlank()).orElse(humanizePath(slug));
-        return createPage(CreatePageCommand.builder()
-                .parentPath(parentPath)
-                .title(title)
-                .slug(slug)
-                .content("")
-                .kind(WikiNodeKind.PAGE)
-                .build());
+        return withSpaceLock(() -> {
+            Optional<WikiNodeReference> existingReference = wikiRepository.findReference(path);
+            if (existingReference.isPresent()) {
+                return readPageSilent(existingReference.get().getPath());
+            }
+            String normalizedPath = normalizePath(path);
+            String parentPath = normalizedPath.contains("/")
+                    ? normalizedPath.substring(0, normalizedPath.lastIndexOf('/'))
+                    : "";
+            String slug = normalizedPath.contains("/") ? normalizedPath.substring(normalizedPath.lastIndexOf('/') + 1)
+                    : normalizedPath;
+            String title = Optional.ofNullable(targetTitle).filter(value -> !value.isBlank())
+                    .orElse(humanizePath(slug));
+            return createPage(CreatePageCommand.builder()
+                    .parentPath(parentPath)
+                    .title(title)
+                    .slug(slug)
+                    .content("")
+                    .kind(WikiNodeKind.PAGE)
+                    .build());
+        });
     }
 
     public WikiPage updatePage(UpdatePageCommand command) {
-        WikiNodeReference nodeReference = wikiRepository.findReference(command.getPath())
-                .orElseThrow(() -> new WikiNotFoundException("Page not found: " + normalizePath(command.getPath())));
-        WikiPageDocument currentDocument = wikiRepository.readDocument(nodeReference);
-        List<String> previousPaths = pathsForSubtree(command.getPath());
-        WikiPageDocument document = wikiRepository.updatePage(
-                command.getPath(),
-                command.getTitle(),
-                command.getSlug(),
-                command.getContent(),
-                command.getExpectedRevision(),
-                command.getActor(),
-                Optional.ofNullable(command.getHistoryReason()).orElse("Manual save"),
-                Optional.ofNullable(command.getHistorySummary())
-                        .orElse(summarizeManualSave(currentDocument, nodeReference, command)));
-        if (normalizePath(command.getPath()).equals(document.getPath())) {
-            recordUpsert(document);
-        } else {
-            // A rename changes every descendant path, so remove stale index records
-            // before writing the current subtree back.
-            recordDeletes(previousPaths);
-            recordUpserts(documentsForSubtree(document.getPath()));
-        }
-        return getPage(document.getPath());
+        return withSpaceLock(() -> {
+            WikiNodeReference nodeReference = wikiRepository.findReference(command.getPath())
+                    .orElseThrow(
+                            () -> new WikiNotFoundException("Page not found: " + normalizePath(command.getPath())));
+            WikiPageDocument currentDocument = wikiRepository.readDocument(nodeReference);
+            List<String> previousPaths = pathsForSubtree(command.getPath());
+            String bodyWithFrontmatter = renderFrontmatter(command.getTags(), command.getSummary(),
+                    Optional.ofNullable(command.getContent()).orElse(""));
+            WikiPageDocument document = wikiRepository.updatePage(
+                    command.getPath(),
+                    command.getTitle(),
+                    command.getSlug(),
+                    bodyWithFrontmatter,
+                    command.getExpectedRevision(),
+                    command.getActor(),
+                    Optional.ofNullable(command.getHistoryReason()).orElse("Manual save"),
+                    Optional.ofNullable(command.getHistorySummary())
+                            .orElse(summarizeManualSave(currentDocument, nodeReference, command)));
+            if (normalizePath(command.getPath()).equals(document.getPath())) {
+                recordUpsert(document);
+            } else {
+                // A rename changes every descendant path, so remove stale index records
+                // before writing the current subtree back.
+                recordDeletes(previousPaths);
+                recordUpserts(documentsForSubtree(document.getPath()));
+                wikiAccessStatsPort.removeSubtree(requireSpaceId(), normalizePath(command.getPath()));
+            }
+            return readPageSilent(document.getPath());
+        });
     }
 
     public void deletePage(String path) {
-        List<String> deletedPaths = pathsForSubtree(path);
-        wikiRepository.deletePage(path);
-        recordDeletes(deletedPaths);
+        withSpaceLockVoid(() -> {
+            String normalizedPath = normalizePath(path);
+            List<String> deletedPaths = pathsForSubtree(path);
+            wikiRepository.deletePage(path);
+            recordDeletes(deletedPaths);
+            if (!normalizedPath.isBlank()) {
+                wikiAccessStatsPort.removeSubtree(requireSpaceId(), normalizedPath);
+            }
+        });
+    }
+
+    public WikiTxResult applyTransaction(TransactionCommand command) {
+        return withSpaceLock(() -> applyTransactionLocked(command));
+    }
+
+    private WikiTxResult applyTransactionLocked(TransactionCommand command) {
+        List<TxOpCommand> ops = Optional.ofNullable(command.getOperations()).orElse(List.of());
+        for (TxOpCommand op : ops) {
+            switch (op.getOp()) {
+            case CREATE -> {
+                if (op.getTitle() == null || op.getTitle().isBlank()) {
+                    throw new IllegalArgumentException("CREATE op requires non-blank title");
+                }
+            }
+            case UPDATE -> {
+                WikiNodeReference reference = wikiRepository.findReference(op.getPath())
+                        .orElseThrow(() -> new WikiNotFoundException(
+                                "Page not found: " + normalizePath(op.getPath())));
+                if (op.getExpectedRevision() != null && !op.getExpectedRevision().isBlank()) {
+                    WikiPageDocument current = wikiRepository.readDocument(reference);
+                    if (!op.getExpectedRevision().equals(current.getRevision())) {
+                        throw new WikiEditConflictException(op.getExpectedRevision(), current);
+                    }
+                }
+            }
+            case DELETE -> wikiRepository.findReference(op.getPath())
+                    .orElseThrow(() -> new WikiNotFoundException(
+                            "Page not found: " + normalizePath(op.getPath())));
+            default -> throw new IllegalArgumentException("Unsupported tx op: " + op.getOp());
+            }
+        }
+        List<WikiTxOperationResult> results = new ArrayList<>();
+        for (TxOpCommand op : ops) {
+            switch (op.getOp()) {
+            case CREATE -> {
+                WikiPage created = createPage(CreatePageCommand.builder()
+                        .parentPath(Optional.ofNullable(op.getParentPath()).orElse(""))
+                        .title(op.getTitle())
+                        .slug(op.getSlug())
+                        .content(Optional.ofNullable(op.getContent()).orElse(""))
+                        .kind(Optional.ofNullable(op.getKind()).orElse(WikiNodeKind.PAGE))
+                        .build());
+                results.add(WikiTxOperationResult.builder()
+                        .op(WikiTxOperationType.CREATE)
+                        .path(created.getPath())
+                        .revision(created.getRevision())
+                        .build());
+            }
+            case UPDATE -> {
+                WikiPage updated = updatePage(UpdatePageCommand.builder()
+                        .path(op.getPath())
+                        .title(op.getTitle())
+                        .slug(op.getSlug())
+                        .content(Optional.ofNullable(op.getContent()).orElse(""))
+                        .expectedRevision(op.getExpectedRevision())
+                        .actor(command.getActor())
+                        .historyReason("Tx apply")
+                        .build());
+                results.add(WikiTxOperationResult.builder()
+                        .op(WikiTxOperationType.UPDATE)
+                        .path(updated.getPath())
+                        .revision(updated.getRevision())
+                        .build());
+            }
+            case DELETE -> {
+                String path = normalizePath(op.getPath());
+                deletePage(path);
+                results.add(WikiTxOperationResult.builder()
+                        .op(WikiTxOperationType.DELETE)
+                        .path(path)
+                        .revision(null)
+                        .build());
+            }
+            default -> throw new IllegalArgumentException("Unsupported tx op: " + op.getOp());
+            }
+        }
+        return WikiTxResult.builder().results(results).build();
+    }
+
+    public WikiPage patchPage(PatchPageCommand command) {
+        return withSpaceLock(() -> {
+            WikiNodeReference nodeReference = wikiRepository.findReference(command.getPath())
+                    .orElseThrow(
+                            () -> new WikiNotFoundException("Page not found: " + normalizePath(command.getPath())));
+            WikiPageDocument currentDocument = wikiRepository.readDocument(nodeReference);
+            String patchedBody = applyPatch(currentDocument.getBody(), command);
+            String reason;
+            switch (command.getOperation()) {
+            case APPEND -> reason = "Patch (append)";
+            case PREPEND -> reason = "Patch (prepend)";
+            case REPLACE_SECTION -> reason = "Patch (replace section: " + command.getHeading() + ")";
+            default -> reason = "Patch";
+            }
+            String summary = buildPatchSummary(command, currentDocument.getBody(), patchedBody);
+            WikiPageDocument document = wikiRepository.updatePage(
+                    command.getPath(),
+                    currentDocument.getTitle(),
+                    currentDocument.getSlug(),
+                    patchedBody,
+                    command.getExpectedRevision(),
+                    command.getActor(),
+                    reason,
+                    summary);
+            recordUpsert(document);
+            return readPageSilent(document.getPath());
+        });
+    }
+
+    private String buildPatchSummary(PatchPageCommand command, String before, String after) {
+        int deltaChars = (after == null ? 0 : after.length()) - (before == null ? 0 : before.length());
+        if (deltaChars == 0) {
+            switch (command.getOperation()) {
+            case REPLACE_SECTION:
+                return "Rewrote section '" + command.getHeading() + "' with no net change.";
+            default:
+                return "Page body unchanged.";
+            }
+        }
+        String sign = deltaChars > 0 ? "+" : "-";
+        int magnitude = Math.abs(deltaChars);
+        switch (command.getOperation()) {
+        case APPEND:
+            return "Appended " + sign + magnitude + " chars to page body.";
+        case PREPEND:
+            return "Prepended " + sign + magnitude + " chars to page body.";
+        case REPLACE_SECTION:
+            return "Rewrote section '" + command.getHeading() + "' (" + sign + magnitude + " chars).";
+        default:
+            return "Patched page (" + sign + magnitude + " chars).";
+        }
+    }
+
+    private String applyPatch(String currentBody, PatchPageCommand command) {
+        String original = Optional.ofNullable(currentBody).orElse("");
+        String addition = Optional.ofNullable(command.getContent()).orElse("");
+        switch (command.getOperation()) {
+        case APPEND:
+            return original + addition;
+        case PREPEND:
+            return addition + original;
+        case REPLACE_SECTION:
+            String heading = Optional.ofNullable(command.getHeading()).orElse("").trim();
+            if (heading.isBlank()) {
+                throw new IllegalArgumentException("heading is required for REPLACE_SECTION");
+            }
+            return replaceSection(original, heading, addition);
+        default:
+            throw new IllegalArgumentException("Unsupported patch operation: " + command.getOperation());
+        }
+    }
+
+    private String replaceSection(String body, String heading, String newContent) {
+        String[] lines = body.split("\n", -1);
+        int startLine = -1;
+        int headingLevel = -1;
+        boolean insideFence = false;
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i];
+            if (isFenceLine(line)) {
+                insideFence = !insideFence;
+                continue;
+            }
+            if (insideFence) {
+                continue;
+            }
+            int level = leadingHashCount(line);
+            if (level <= 0) {
+                continue;
+            }
+            String text = line.substring(level).trim();
+            if (text.equals(heading)) {
+                startLine = i;
+                headingLevel = level;
+                break;
+            }
+        }
+        if (startLine < 0) {
+            throw new IllegalArgumentException("Section heading not found: " + heading);
+        }
+        int endLine = lines.length;
+        boolean scanInsideFence = false;
+        for (int j = startLine + 1; j < lines.length; j++) {
+            if (isFenceLine(lines[j])) {
+                scanInsideFence = !scanInsideFence;
+                continue;
+            }
+            if (scanInsideFence) {
+                continue;
+            }
+            int level = leadingHashCount(lines[j]);
+            if (level > 0 && level <= headingLevel) {
+                endLine = j;
+                break;
+            }
+        }
+        StringBuilder result = new StringBuilder();
+        for (int k = 0; k < startLine; k++) {
+            result.append(lines[k]);
+            if (k < lines.length - 1) {
+                result.append('\n');
+            }
+        }
+        result.append(lines[startLine]).append('\n');
+        String normalized = newContent;
+        if (!normalized.isEmpty() && !normalized.endsWith("\n")) {
+            normalized = normalized + "\n";
+        }
+        result.append(normalized);
+        for (int k = endLine; k < lines.length; k++) {
+            result.append(lines[k]);
+            if (k < lines.length - 1) {
+                result.append('\n');
+            }
+        }
+        return result.toString();
+    }
+
+    private int leadingHashCount(String line) {
+        int count = 0;
+        while (count < line.length() && line.charAt(count) == '#') {
+            count++;
+        }
+        if (count == 0 || count >= line.length() || line.charAt(count) != ' ') {
+            return 0;
+        }
+        return count;
+    }
+
+    private boolean isFenceLine(String line) {
+        if (line == null) {
+            return false;
+        }
+        String trimmed = line.stripLeading();
+        return trimmed.startsWith("```") || trimmed.startsWith("~~~");
+    }
+
+    private void validateFrontmatter(List<String> tags, String summary) {
+        if (tags != null) {
+            if (tags.size() > MAX_TAGS) {
+                throw new IllegalArgumentException(
+                        "tags exceeds maximum of " + MAX_TAGS + " entries (got " + tags.size() + ")");
+            }
+            for (String tag : tags) {
+                if (tag != null && tag.length() > MAX_TAG_LENGTH) {
+                    throw new IllegalArgumentException(
+                            "tag exceeds maximum length of " + MAX_TAG_LENGTH + " characters");
+                }
+            }
+        }
+        if (summary != null && summary.length() > MAX_SUMMARY_LENGTH) {
+            throw new IllegalArgumentException(
+                    "summary exceeds maximum length of " + MAX_SUMMARY_LENGTH + " characters");
+        }
     }
 
     public WikiPage movePage(MovePageCommand command) {
-        List<String> previousPaths = pathsForSubtree(command.getPath());
-        WikiPageDocument document = wikiRepository.movePage(
-                command.getPath(),
-                command.getTargetParentPath(),
-                command.getTargetSlug(),
-                command.getBeforeSlug());
-        recordDeletes(previousPaths);
-        recordUpserts(documentsForSubtree(document.getPath()));
-        return getPage(document.getPath());
+        return withSpaceLock(() -> {
+            String originalPath = normalizePath(command.getPath());
+            List<String> previousPaths = pathsForSubtree(command.getPath());
+            WikiPageDocument document = wikiRepository.movePage(
+                    command.getPath(),
+                    command.getTargetParentPath(),
+                    command.getTargetSlug(),
+                    command.getBeforeSlug());
+            recordDeletes(previousPaths);
+            recordUpserts(documentsForSubtree(document.getPath()));
+            if (!originalPath.isBlank() && !originalPath.equals(document.getPath())) {
+                wikiAccessStatsPort.removeSubtree(requireSpaceId(), originalPath);
+            }
+            return readPageSilent(document.getPath());
+        });
     }
 
     public WikiPage copyPage(CopyPageCommand command) {
-        WikiPageDocument document = wikiRepository.copyPage(
-                command.getPath(),
-                command.getTargetParentPath(),
-                command.getTargetSlug(),
-                command.getBeforeSlug());
-        recordUpserts(documentsForSubtree(document.getPath()));
-        return getPage(document.getPath());
+        return withSpaceLock(() -> {
+            WikiPageDocument document = wikiRepository.copyPage(
+                    command.getPath(),
+                    command.getTargetParentPath(),
+                    command.getTargetSlug(),
+                    command.getBeforeSlug());
+            recordUpserts(documentsForSubtree(document.getPath()));
+            return readPageSilent(document.getPath());
+        });
     }
 
     public WikiPage convertPage(ConvertPageCommand command) {
-        WikiPageDocument document = wikiRepository.convertPage(command.getPath(), command.getTargetKind());
-        recordUpsert(document);
-        return getPage(document.getPath());
+        return withSpaceLock(() -> {
+            WikiPageDocument document = wikiRepository.convertPage(command.getPath(), command.getTargetKind());
+            recordUpsert(document);
+            return readPageSilent(document.getPath());
+        });
     }
 
     public void sortChildren(SortChildrenCommand command) {
-        wikiRepository.sortChildren(command.getPath(), command.getOrderedSlugs());
+        withSpaceLockVoid(() -> wikiRepository.sortChildren(command.getPath(), command.getOrderedSlugs()));
     }
 
     public List<WikiSearchHit> search(String query) {
@@ -288,14 +645,23 @@ public class WikiApplicationService {
     }
 
     public WikiImportApplyResponse applyMarkdownImport(InputStream inputStream, ImportApplyCommand command) {
+        // Parse outside the lock so unzip + markdown parsing doesn't block concurrent
+        // writes.
         validateImportTargetRoot(command.getTargetRootPath());
         List<ImportEntry> entries = readImportEntries(inputStream, command.getTargetRootPath());
-        ensureSectionHierarchy(normalizePath(Optional.ofNullable(command.getTargetRootPath()).orElse("")));
         Map<String, ImportSelectionCommand> selectionBySourcePath = Optional.ofNullable(command.getItems())
                 .orElse(List.of()).stream()
                 .filter(selection -> selection.getSourcePath() != null && !selection.getSourcePath().isBlank())
                 .collect(Collectors.toMap(ImportSelectionCommand::getSourcePath, selection -> selection,
                         (left, right) -> right, LinkedHashMap::new));
+        return withSpaceLock(() -> applyMarkdownImportLocked(entries, selectionBySourcePath, command));
+    }
+
+    private WikiImportApplyResponse applyMarkdownImportLocked(
+            List<ImportEntry> entries,
+            Map<String, ImportSelectionCommand> selectionBySourcePath,
+            ImportApplyCommand command) {
+        ensureSectionHierarchy(normalizePath(Optional.ofNullable(command.getTargetRootPath()).orElse("")));
         List<WikiImportItem> items = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
         int createdCount = 0;
@@ -420,6 +786,53 @@ public class WikiApplicationService {
                 .outgoings(outgoings)
                 .brokenOutgoings(brokenOutgoings)
                 .build();
+    }
+
+    public WikiGraphSummary getGraphSummary() {
+        Map<String, WikiNodeReference> referencesByPath = new LinkedHashMap<>();
+        for (WikiNodeReference reference : wikiRepository.flatten()) {
+            referencesByPath.put(reference.getPath(), reference);
+        }
+        Set<String> linkedTargets = new LinkedHashSet<>();
+        List<WikiLinkStatusItem> dangling = new ArrayList<>();
+        for (WikiNodeReference reference : referencesByPath.values()) {
+            if (reference.getKind() == WikiNodeKind.ROOT) {
+                continue;
+            }
+            WikiPageDocument document = wikiRepository.readDocument(reference);
+            for (ResolvedLink link : extractResolvedLinks(reference.getPath(), document.getBody())) {
+                WikiNodeReference target = referencesByPath.get(link.getTargetPath());
+                if (target == null) {
+                    dangling.add(WikiLinkStatusItem.builder()
+                            .fromPageId(reference.getId())
+                            .fromPath(reference.getPath())
+                            .fromTitle(document.getTitle())
+                            .toPageId(null)
+                            .toPath(link.getTargetPath())
+                            .toTitle(humanizePath(link.getTargetPath()))
+                            .broken(true)
+                            .build());
+                } else {
+                    linkedTargets.add(target.getPath());
+                }
+            }
+        }
+        List<WikiGraphOrphan> orphans = new ArrayList<>();
+        for (WikiNodeReference reference : referencesByPath.values()) {
+            if (reference.getKind() == WikiNodeKind.ROOT || reference.getKind() == WikiNodeKind.SECTION) {
+                continue;
+            }
+            if (linkedTargets.contains(reference.getPath())) {
+                continue;
+            }
+            WikiPageDocument document = wikiRepository.readDocument(reference);
+            orphans.add(WikiGraphOrphan.builder()
+                    .pageId(reference.getId())
+                    .path(reference.getPath())
+                    .title(document.getTitle())
+                    .build());
+        }
+        return WikiGraphSummary.builder().orphans(orphans).dangling(dangling).build();
     }
 
     public WikiPathLookupResult lookupPath(String path) {
@@ -766,10 +1179,14 @@ public class WikiApplicationService {
 
     private String extractBody(String markdown) {
         String[] lines = markdown.split("\\R", -1);
-        if (lines.length > 0 && lines[0].startsWith("# ")) {
-            return Arrays.stream(lines).skip(2).collect(Collectors.joining("\n")).strip();
+        if (lines.length == 0 || !lines[0].startsWith("# ")) {
+            return markdown.strip();
         }
-        return markdown.strip();
+        int startIndex = 1;
+        if (startIndex < lines.length && lines[startIndex].isBlank()) {
+            startIndex++;
+        }
+        return Arrays.stream(lines).skip(startIndex).collect(Collectors.joining("\n")).strip();
     }
 
     private WikiTreeNode toTreeNode(WikiNodeReference nodeReference) {
@@ -800,6 +1217,10 @@ public class WikiApplicationService {
         List<WikiTreeNode> children = nodeReference.getKind() == WikiNodeKind.PAGE
                 ? List.of()
                 : wikiRepository.listChildren(nodeReference).stream().map(this::toTreeNode).toList();
+        Frontmatter frontmatter = parseFrontmatter(document.getBody());
+        Optional<WikiAccessStats> stats = document.getKind() == WikiNodeKind.PAGE
+                ? wikiAccessStatsPort.getStats(requireSpaceId(), document.getPath())
+                : Optional.empty();
         return WikiPage.builder()
                 .id(document.getId())
                 .path(document.getPath())
@@ -807,12 +1228,134 @@ public class WikiApplicationService {
                 .title(document.getTitle())
                 .slug(document.getSlug())
                 .kind(document.getKind())
-                .content(document.getBody())
+                .content(frontmatter.remainingBody())
                 .createdAt(DATE_TIME_FORMATTER.format(document.getCreatedAt()))
                 .updatedAt(DATE_TIME_FORMATTER.format(document.getUpdatedAt()))
                 .revision(document.getRevision())
+                .tags(frontmatter.tags())
+                .summary(frontmatter.summary())
+                .accessCount(stats.map(WikiAccessStats::getAccessCount).orElse(0L))
+                .lastAccessedAt(stats.map(s -> DATE_TIME_FORMATTER.format(s.getLastAccessedAt())).orElse(null))
                 .children(children)
                 .build();
+    }
+
+    private record Frontmatter(List<String> tags, String summary, String remainingBody) {
+    }
+
+    private static String unescapeFrontmatterValue(String escaped) {
+        StringBuilder out = new StringBuilder(escaped.length());
+        for (int index = 0; index < escaped.length(); index++) {
+            char ch = escaped.charAt(index);
+            if (ch == '\\' && index + 1 < escaped.length()) {
+                char next = escaped.charAt(index + 1);
+                if (next == '\\' || next == '"') {
+                    out.append(next);
+                    index++;
+                    continue;
+                }
+            }
+            out.append(ch);
+        }
+        return out.toString();
+    }
+
+    private static List<String> splitQuotedCsv(String inner) {
+        List<String> items = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean inQuotes = false;
+        for (int index = 0; index < inner.length(); index++) {
+            char ch = inner.charAt(index);
+            if (ch == '\\' && index + 1 < inner.length()) {
+                current.append(ch).append(inner.charAt(index + 1));
+                index++;
+                continue;
+            }
+            if (ch == '"') {
+                inQuotes = !inQuotes;
+                current.append(ch);
+                continue;
+            }
+            if (ch == ',' && !inQuotes) {
+                items.add(current.toString());
+                current.setLength(0);
+                continue;
+            }
+            current.append(ch);
+        }
+        if (current.length() > 0) {
+            items.add(current.toString());
+        }
+        return items;
+    }
+
+    private Frontmatter parseFrontmatter(String body) {
+        if (body == null || body.isEmpty()) {
+            return new Frontmatter(List.of(), null, "");
+        }
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("^---\\s*\\r?\\n(.*?)\\r?\\n---\\s*\\r?\\n", java.util.regex.Pattern.DOTALL)
+                .matcher(body);
+        if (!matcher.find() || matcher.start() != 0) {
+            return new Frontmatter(List.of(), null, body);
+        }
+        String yaml = matcher.group(1);
+        List<String> tags = new ArrayList<>();
+        String summary = null;
+        for (String line : yaml.split("\\R")) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith("tags:")) {
+                String value = trimmed.substring("tags:".length()).trim();
+                if (value.startsWith("[") && value.endsWith("]")) {
+                    String inner = value.substring(1, value.length() - 1);
+                    for (String item : splitQuotedCsv(inner)) {
+                        String cleaned = item.trim();
+                        if (cleaned.startsWith("\"") && cleaned.endsWith("\"") && cleaned.length() >= 2) {
+                            cleaned = unescapeFrontmatterValue(cleaned.substring(1, cleaned.length() - 1));
+                        }
+                        if (!cleaned.isEmpty()) {
+                            tags.add(cleaned);
+                        }
+                    }
+                }
+            } else if (trimmed.startsWith("summary:")) {
+                String value = trimmed.substring("summary:".length()).trim();
+                if (value.startsWith("\"") && value.endsWith("\"") && value.length() >= 2) {
+                    value = unescapeFrontmatterValue(value.substring(1, value.length() - 1));
+                }
+                summary = value;
+            }
+        }
+        String remaining = body.substring(matcher.end()).stripTrailing();
+        return new Frontmatter(tags, summary, remaining);
+    }
+
+    private static final int MAX_TAGS = 32;
+    private static final int MAX_TAG_LENGTH = 64;
+    private static final int MAX_SUMMARY_LENGTH = 1000;
+
+    private String renderFrontmatter(List<String> tags, String summary, String body) {
+        validateFrontmatter(tags, summary);
+        boolean hasTags = tags != null && !tags.isEmpty();
+        boolean hasSummary = summary != null && !summary.isBlank();
+        if (!hasTags && !hasSummary) {
+            return Optional.ofNullable(body).orElse("");
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("---\n");
+        if (hasTags) {
+            sb.append("tags: [");
+            sb.append(tags.stream()
+                    .map(tag -> "\"" + tag.replace("\\", "\\\\").replace("\"", "\\\"") + "\"")
+                    .collect(Collectors.joining(", ")));
+            sb.append("]\n");
+        }
+        if (hasSummary) {
+            sb.append("summary: \"").append(summary.replace("\\", "\\\\").replace("\"", "\\\"")).append("\"\n");
+        }
+        sb.append("---\n");
+        sb.append(Optional.ofNullable(body).orElse(""));
+        return sb.toString();
     }
 
     private void recordUpsert(WikiPageDocument document) {
@@ -862,9 +1405,13 @@ public class WikiApplicationService {
     }
 
     private List<ResolvedLink> extractResolvedLinks(String currentPath, String markdown) {
-        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\\[[^\\]]+\\]\\(([^)]+)\\)")
-                .matcher(markdown == null ? "" : markdown);
         List<ResolvedLink> links = new ArrayList<>();
+        if (markdown == null || markdown.isEmpty()) {
+            return links;
+        }
+        String scanned = stripFencedCodeBlocks(markdown);
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\\[[^\\]]+\\]\\(([^)]+)\\)")
+                .matcher(scanned);
         while (matcher.find()) {
             String href = matcher.group(1).trim();
             if (href.isBlank() || href.startsWith("http") || href.startsWith("mailto:") || href.startsWith("#")
@@ -875,6 +1422,29 @@ public class WikiApplicationService {
             links.add(ResolvedLink.builder().targetPath(resolveWikiLinkPath(currentPath, href)).build());
         }
         return links;
+    }
+
+    private String stripFencedCodeBlocks(String markdown) {
+        String[] lines = markdown.split("\n", -1);
+        StringBuilder out = new StringBuilder();
+        boolean insideFence = false;
+        for (int index = 0; index < lines.length; index++) {
+            String line = lines[index];
+            if (isFenceLine(line)) {
+                insideFence = !insideFence;
+                if (index < lines.length - 1) {
+                    out.append('\n');
+                }
+                continue;
+            }
+            if (!insideFence) {
+                out.append(line);
+            }
+            if (index < lines.length - 1) {
+                out.append('\n');
+            }
+        }
+        return out.toString();
     }
 
     private String resolveWikiLinkPath(String currentPath, String href) {
@@ -980,6 +1550,8 @@ public class WikiApplicationService {
         String slug;
         String content;
         WikiNodeKind kind;
+        List<String> tags;
+        String summary;
     }
 
     @Value
@@ -993,6 +1565,39 @@ public class WikiApplicationService {
         String actor;
         String historyReason;
         String historySummary;
+        List<String> tags;
+        String summary;
+    }
+
+    @Value
+    @Builder
+    public static class TransactionCommand {
+        List<TxOpCommand> operations;
+        String actor;
+    }
+
+    @Value
+    @Builder
+    public static class TxOpCommand {
+        WikiTxOperationType op;
+        String path;
+        String parentPath;
+        String slug;
+        String title;
+        String content;
+        WikiNodeKind kind;
+        String expectedRevision;
+    }
+
+    @Value
+    @Builder
+    public static class PatchPageCommand {
+        String path;
+        WikiPatchOperation operation;
+        String heading;
+        String content;
+        String expectedRevision;
+        String actor;
     }
 
     @Value

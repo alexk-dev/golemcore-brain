@@ -21,7 +21,6 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
 import { Sidebar } from '../sidebar/Sidebar'
-import { SpaceSwitcher } from '../spaces/SpaceSwitcher'
 import { Toolbar } from '../toolbar/Toolbar'
 import type { WikiNodeKind, WikiTreeNode } from '../../types'
 import { UserMenu } from './UserMenu'
@@ -134,7 +133,6 @@ export function AppLayout({
                 Import
               </Link>
             ) : null}
-            <SpaceSwitcher className="action-button-secondary hidden md:inline-flex" />
             {displayImageVersion ? (
               <span className="app-layout__image-version hidden xl:inline-flex" title={`Image version ${displayImageVersion}`}>
                 {displayImageVersion}

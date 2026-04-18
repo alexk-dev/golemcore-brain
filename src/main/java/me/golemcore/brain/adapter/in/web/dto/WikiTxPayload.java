@@ -18,23 +18,15 @@
 
 package me.golemcore.brain.adapter.in.web.dto;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotEmpty;
 import java.util.List;
-import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 @Data
-public class UpdatePagePayload {
+public class WikiTxPayload {
 
-    @NotBlank
-    private String title;
-
-    private String slug;
-
-    private String content = "";
-
-    private String revision;
-
-    private List<String> tags;
-
-    private String summary;
+    @NotEmpty
+    @Valid
+    private List<WikiTxOpPayload> operations;
 }
