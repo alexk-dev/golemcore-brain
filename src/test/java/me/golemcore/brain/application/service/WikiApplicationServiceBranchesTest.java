@@ -1175,11 +1175,10 @@ class WikiApplicationServiceBranchesTest {
         String spaceId = SpaceContextHolder.require();
         int threads = 8;
         int pagesPerThread = 5;
-        ExecutorService pool = Executors.newFixedThreadPool(threads);
         CountDownLatch start = new CountDownLatch(1);
         CountDownLatch done = new CountDownLatch(threads);
-        AtomicReference<Throwable> failure = new AtomicReference<>();
-        try {
+        AtomicReference<Exception> failure = new AtomicReference<>();
+        try (ExecutorService pool = Executors.newFixedThreadPool(threads)) {
             for (int t = 0; t < threads; t++) {
                 final int threadIndex = t;
                 pool.submit(() -> {
@@ -1196,7 +1195,7 @@ class WikiApplicationServiceBranchesTest {
                                     .kind(WikiNodeKind.PAGE)
                                     .build());
                         }
-                    } catch (Throwable ex) {
+                    } catch (Exception ex) {
                         failure.compareAndSet(null, ex);
                     } finally {
                         SpaceContextHolder.clear();
@@ -1206,7 +1205,6 @@ class WikiApplicationServiceBranchesTest {
             }
             start.countDown();
             assertTrue(done.await(30, TimeUnit.SECONDS), "workers should finish in time");
-        } finally {
             pool.shutdownNow();
         }
         assertNull(failure.get(), () -> "concurrent createPage raised: " + failure.get());

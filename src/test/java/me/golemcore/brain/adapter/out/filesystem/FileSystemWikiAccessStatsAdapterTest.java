@@ -61,7 +61,7 @@ class FileSystemWikiAccessStatsAdapterTest {
 
     private static final class MutableClock extends Clock {
 
-        private Instant instant;
+        private Instant now;
         private final ZoneId zone;
 
         MutableClock(Instant start) {
@@ -69,17 +69,17 @@ class FileSystemWikiAccessStatsAdapterTest {
         }
 
         MutableClock(Instant start, ZoneId zone) {
-            this.instant = start;
+            this.now = start;
             this.zone = zone;
         }
 
         void advance(Duration delta) {
-            instant = instant.plus(delta);
+            now = now.plus(delta);
         }
 
         @Override
         public Instant instant() {
-            return instant;
+            return now;
         }
 
         @Override
@@ -89,7 +89,7 @@ class FileSystemWikiAccessStatsAdapterTest {
 
         @Override
         public Clock withZone(ZoneId overrideZone) {
-            return new MutableClock(instant, overrideZone);
+            return new MutableClock(now, overrideZone);
         }
     }
 
@@ -400,11 +400,10 @@ class FileSystemWikiAccessStatsAdapterTest {
         int writers = 4;
         int readers = 4;
         int iterations = 200;
-        ExecutorService executor = Executors.newFixedThreadPool(writers + readers);
         CountDownLatch start = new CountDownLatch(1);
         CountDownLatch done = new CountDownLatch(writers + readers);
-        AtomicReference<Throwable> failure = new AtomicReference<>();
-        try {
+        AtomicReference<Exception> failure = new AtomicReference<>();
+        try (ExecutorService executor = Executors.newFixedThreadPool(writers + readers)) {
             for (int w = 0; w < writers; w++) {
                 final int id = w;
                 executor.submit(() -> {
@@ -413,7 +412,7 @@ class FileSystemWikiAccessStatsAdapterTest {
                         for (int i = 0; i < iterations; i++) {
                             adapter.recordAccess("space-1", "path-" + (i % 20) + "-w" + id);
                         }
-                    } catch (Throwable t) {
+                    } catch (Exception t) {
                         failure.compareAndSet(null, t);
                     } finally {
                         done.countDown();
@@ -428,7 +427,7 @@ class FileSystemWikiAccessStatsAdapterTest {
                             adapter.listTop("space-1", 5);
                             adapter.getStats("space-1", "path-" + (i % 20) + "-w0");
                         }
-                    } catch (Throwable t) {
+                    } catch (Exception t) {
                         failure.compareAndSet(null, t);
                     } finally {
                         done.countDown();
@@ -437,7 +436,6 @@ class FileSystemWikiAccessStatsAdapterTest {
             }
             start.countDown();
             assertTrue(done.await(30, TimeUnit.SECONDS), "concurrent workload timed out");
-        } finally {
             executor.shutdownNow();
         }
         if (failure.get() != null) {

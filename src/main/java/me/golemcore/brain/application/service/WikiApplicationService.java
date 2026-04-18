@@ -371,13 +371,12 @@ public class WikiApplicationService {
                             () -> new WikiNotFoundException("Page not found: " + normalizePath(command.getPath())));
             WikiPageDocument currentDocument = wikiRepository.readDocument(nodeReference);
             String patchedBody = applyPatch(currentDocument.getBody(), command);
-            String reason;
-            switch (command.getOperation()) {
-            case APPEND -> reason = "Patch (append)";
-            case PREPEND -> reason = "Patch (prepend)";
-            case REPLACE_SECTION -> reason = "Patch (replace section: " + command.getHeading() + ")";
-            default -> reason = "Patch";
-            }
+            String reason = switch (command.getOperation()) {
+            case APPEND -> "Patch (append)";
+            case PREPEND -> "Patch (prepend)";
+            case REPLACE_SECTION -> "Patch (replace section: " + command.getHeading() + ")";
+            default -> "Patch";
+            };
             String summary = buildPatchSummary(command, currentDocument.getBody(), patchedBody);
             WikiPageDocument document = wikiRepository.updatePage(
                     command.getPath(),

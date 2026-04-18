@@ -29,9 +29,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -100,7 +98,6 @@ class WikiControllerTxTest {
     @Test
     void shouldRejectEntireBatchWhenAnyRevisionIsStale() throws Exception {
         createPage("stale-target", "original");
-        String stale = currentRevision("stale-target");
 
         mockMvc.perform(post("/api/spaces/default/pages")
                 .contentType("application/json")
