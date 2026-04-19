@@ -225,6 +225,46 @@ class WikiApplicationServiceBranchesTest {
     }
 
     @Test
+    void frontmatterCodecParsesTagsAndSummaryVariants() {
+        WikiFrontmatterCodec codec = new WikiFrontmatterCodec();
+
+        WikiFrontmatterCodec.Frontmatter summaryOnly = codec.render(List.of(), "only summary here", "Body") == null
+                ? null
+                : codec.parse(codec.render(List.of(), "only summary here", "Body"));
+        assertEquals("only summary here", summaryOnly.summary());
+        assertTrue(summaryOnly.tags().isEmpty());
+        assertEquals("Body", summaryOnly.remainingBody());
+
+        WikiFrontmatterCodec.Frontmatter tagsOnly = codec.parse(codec.render(List.of("a", "b"), null, "Text"));
+        assertEquals(List.of("a", "b"), tagsOnly.tags());
+        assertNull(tagsOnly.summary());
+        assertEquals("Text", tagsOnly.remainingBody());
+    }
+
+    @Test
+    void patchApplierReplacesSectionWithoutTouchingOtherSections() {
+        WikiPatchApplier applier = new WikiPatchApplier();
+        WikiApplicationService.PatchPageCommand command = WikiApplicationService.PatchPageCommand.builder()
+                .operation(WikiPatchOperation.REPLACE_SECTION)
+                .heading("Status")
+                .content("Updated status line.\n")
+                .build();
+
+        String patched = applier.apply(
+                "# Runbook\n\n## Status\nOld status text.\n\n## Next Steps\nReview backlog.\n",
+                command);
+
+        assertTrue(patched.contains("Updated status line."));
+        assertTrue(patched.contains("## Next Steps"));
+        assertTrue(patched.contains("Review backlog."));
+        assertFalse(patched.contains("Old status text."));
+        assertEquals("Rewrote section 'Status' (+8 chars).",
+                applier.buildSummary(command, "old", "new content"));
+        assertEquals("Patch (replace section: Status)",
+                applier.buildReason(WikiPatchOperation.REPLACE_SECTION, "Status"));
+    }
+
+    @Test
     void frontmatterParsesTagsAndSummaryVariants() {
         WikiApplicationService service = createService();
 

@@ -98,6 +98,8 @@ public class WikiApplicationService {
     private final BrainSettingsPort brainSettingsPort;
     private final WikiIndexingService wikiIndexingService;
     private final WikiAccessStatsPort wikiAccessStatsPort;
+    private final WikiFrontmatterCodec wikiFrontmatterCodec = new WikiFrontmatterCodec();
+    private final WikiPatchApplier wikiPatchApplier = new WikiPatchApplier();
     private final Map<String, ReentrantLock> spaceMutationLocks = new ConcurrentHashMap<>();
 
     public void initialize() {
@@ -205,7 +207,7 @@ public class WikiApplicationService {
 
     public WikiPage createPage(CreatePageCommand command) {
         return withSpaceLock(() -> {
-            String bodyWithFrontmatter = renderFrontmatter(command.getTags(), command.getSummary(),
+            String bodyWithFrontmatter = wikiFrontmatterCodec.render(command.getTags(), command.getSummary(),
                     Optional.ofNullable(command.getContent()).orElse(""));
             WikiPageDocument document = wikiRepository.createPage(
                     command.getParentPath(),
@@ -249,7 +251,7 @@ public class WikiApplicationService {
                             () -> new WikiNotFoundException("Page not found: " + normalizePath(command.getPath())));
             WikiPageDocument currentDocument = wikiRepository.readDocument(nodeReference);
             List<String> previousPaths = pathsForSubtree(command.getPath());
-            String bodyWithFrontmatter = renderFrontmatter(command.getTags(), command.getSummary(),
+            String bodyWithFrontmatter = wikiFrontmatterCodec.render(command.getTags(), command.getSummary(),
                     Optional.ofNullable(command.getContent()).orElse(""));
             WikiPageDocument document = wikiRepository.updatePage(
                     command.getPath(),
@@ -390,14 +392,9 @@ public class WikiApplicationService {
                     .orElseThrow(
                             () -> new WikiNotFoundException("Page not found: " + normalizePath(command.getPath())));
             WikiPageDocument currentDocument = wikiRepository.readDocument(nodeReference);
-            String patchedBody = applyPatch(currentDocument.getBody(), command);
-            String reason = switch (command.getOperation()) {
-            case APPEND -> "Patch (append)";
-            case PREPEND -> "Patch (prepend)";
-            case REPLACE_SECTION -> "Patch (replace section: " + command.getHeading() + ")";
-            default -> "Patch";
-            };
-            String summary = buildPatchSummary(command, currentDocument.getBody(), patchedBody);
+            String patchedBody = wikiPatchApplier.apply(currentDocument.getBody(), command);
+            String reason = wikiPatchApplier.buildReason(command.getOperation(), command.getHeading());
+            String summary = wikiPatchApplier.buildSummary(command, currentDocument.getBody(), patchedBody);
             WikiPageDocument document = wikiRepository.updatePage(
                     command.getPath(),
                     currentDocument.getTitle(),
@@ -410,153 +407,6 @@ public class WikiApplicationService {
             recordUpsert(document);
             return readPageSilent(document.getPath());
         });
-    }
-
-    private String buildPatchSummary(PatchPageCommand command, String before, String after) {
-        int deltaChars = (after == null ? 0 : after.length()) - (before == null ? 0 : before.length());
-        if (deltaChars == 0) {
-            switch (command.getOperation()) {
-            case REPLACE_SECTION:
-                return "Rewrote section '" + command.getHeading() + "' with no net change.";
-            default:
-                return "Page body unchanged.";
-            }
-        }
-        String sign = deltaChars > 0 ? "+" : "-";
-        int magnitude = Math.abs(deltaChars);
-        switch (command.getOperation()) {
-        case APPEND:
-            return "Appended " + sign + magnitude + " chars to page body.";
-        case PREPEND:
-            return "Prepended " + sign + magnitude + " chars to page body.";
-        case REPLACE_SECTION:
-            return "Rewrote section '" + command.getHeading() + "' (" + sign + magnitude + " chars).";
-        default:
-            return "Patched page (" + sign + magnitude + " chars).";
-        }
-    }
-
-    private String applyPatch(String currentBody, PatchPageCommand command) {
-        String original = Optional.ofNullable(currentBody).orElse("");
-        String addition = Optional.ofNullable(command.getContent()).orElse("");
-        switch (command.getOperation()) {
-        case APPEND:
-            return original + addition;
-        case PREPEND:
-            return addition + original;
-        case REPLACE_SECTION:
-            String heading = Optional.ofNullable(command.getHeading()).orElse("").trim();
-            if (heading.isBlank()) {
-                throw new IllegalArgumentException("heading is required for REPLACE_SECTION");
-            }
-            return replaceSection(original, heading, addition);
-        default:
-            throw new IllegalArgumentException("Unsupported patch operation: " + command.getOperation());
-        }
-    }
-
-    private String replaceSection(String body, String heading, String newContent) {
-        String[] lines = body.split("\n", -1);
-        int startLine = -1;
-        int headingLevel = -1;
-        boolean insideFence = false;
-        for (int i = 0; i < lines.length; i++) {
-            String line = lines[i];
-            if (isFenceLine(line)) {
-                insideFence = !insideFence;
-                continue;
-            }
-            if (insideFence) {
-                continue;
-            }
-            int level = leadingHashCount(line);
-            if (level <= 0) {
-                continue;
-            }
-            String text = line.substring(level).trim();
-            if (text.equals(heading)) {
-                startLine = i;
-                headingLevel = level;
-                break;
-            }
-        }
-        if (startLine < 0) {
-            throw new IllegalArgumentException("Section heading not found: " + heading);
-        }
-        int endLine = lines.length;
-        boolean scanInsideFence = false;
-        for (int j = startLine + 1; j < lines.length; j++) {
-            if (isFenceLine(lines[j])) {
-                scanInsideFence = !scanInsideFence;
-                continue;
-            }
-            if (scanInsideFence) {
-                continue;
-            }
-            int level = leadingHashCount(lines[j]);
-            if (level > 0 && level <= headingLevel) {
-                endLine = j;
-                break;
-            }
-        }
-        StringBuilder result = new StringBuilder();
-        for (int k = 0; k < startLine; k++) {
-            result.append(lines[k]);
-            if (k < lines.length - 1) {
-                result.append('\n');
-            }
-        }
-        result.append(lines[startLine]).append('\n');
-        String normalized = newContent;
-        if (!normalized.isEmpty() && !normalized.endsWith("\n")) {
-            normalized = normalized + "\n";
-        }
-        result.append(normalized);
-        for (int k = endLine; k < lines.length; k++) {
-            result.append(lines[k]);
-            if (k < lines.length - 1) {
-                result.append('\n');
-            }
-        }
-        return result.toString();
-    }
-
-    private int leadingHashCount(String line) {
-        int count = 0;
-        while (count < line.length() && line.charAt(count) == '#') {
-            count++;
-        }
-        if (count == 0 || count >= line.length() || line.charAt(count) != ' ') {
-            return 0;
-        }
-        return count;
-    }
-
-    private boolean isFenceLine(String line) {
-        if (line == null) {
-            return false;
-        }
-        String trimmed = line.stripLeading();
-        return trimmed.startsWith("```") || trimmed.startsWith("~~~");
-    }
-
-    private void validateFrontmatter(List<String> tags, String summary) {
-        if (tags != null) {
-            if (tags.size() > MAX_TAGS) {
-                throw new IllegalArgumentException(
-                        "tags exceeds maximum of " + MAX_TAGS + " entries (got " + tags.size() + ")");
-            }
-            for (String tag : tags) {
-                if (tag != null && tag.length() > MAX_TAG_LENGTH) {
-                    throw new IllegalArgumentException(
-                            "tag exceeds maximum length of " + MAX_TAG_LENGTH + " characters");
-                }
-            }
-        }
-        if (summary != null && summary.length() > MAX_SUMMARY_LENGTH) {
-            throw new IllegalArgumentException(
-                    "summary exceeds maximum length of " + MAX_SUMMARY_LENGTH + " characters");
-        }
     }
 
     public WikiPage movePage(MovePageCommand command) {
@@ -1236,7 +1086,7 @@ public class WikiApplicationService {
         List<WikiTreeNode> children = nodeReference.getKind() == WikiNodeKind.PAGE
                 ? List.of()
                 : wikiRepository.listChildren(nodeReference).stream().map(this::toTreeNode).toList();
-        Frontmatter frontmatter = parseFrontmatter(document.getBody());
+        WikiFrontmatterCodec.Frontmatter frontmatter = wikiFrontmatterCodec.parse(document.getBody());
         Optional<WikiAccessStats> stats = document.getKind() == WikiNodeKind.PAGE
                 ? wikiAccessStatsPort.getStats(requireSpaceId(), document.getPath())
                 : Optional.empty();
@@ -1257,124 +1107,6 @@ public class WikiApplicationService {
                 .lastAccessedAt(stats.map(s -> DATE_TIME_FORMATTER.format(s.getLastAccessedAt())).orElse(null))
                 .children(children)
                 .build();
-    }
-
-    private record Frontmatter(List<String> tags, String summary, String remainingBody) {
-    }
-
-    private static String unescapeFrontmatterValue(String escaped) {
-        StringBuilder out = new StringBuilder(escaped.length());
-        for (int index = 0; index < escaped.length(); index++) {
-            char ch = escaped.charAt(index);
-            if (ch == '\\' && index + 1 < escaped.length()) {
-                char next = escaped.charAt(index + 1);
-                if (next == '\\' || next == '"') {
-                    out.append(next);
-                    index++;
-                    continue;
-                }
-            }
-            out.append(ch);
-        }
-        return out.toString();
-    }
-
-    private static List<String> splitQuotedCsv(String inner) {
-        List<String> items = new ArrayList<>();
-        StringBuilder current = new StringBuilder();
-        boolean inQuotes = false;
-        for (int index = 0; index < inner.length(); index++) {
-            char ch = inner.charAt(index);
-            if (ch == '\\' && index + 1 < inner.length()) {
-                current.append(ch).append(inner.charAt(index + 1));
-                index++;
-                continue;
-            }
-            if (ch == '"') {
-                inQuotes = !inQuotes;
-                current.append(ch);
-                continue;
-            }
-            if (ch == ',' && !inQuotes) {
-                items.add(current.toString());
-                current.setLength(0);
-                continue;
-            }
-            current.append(ch);
-        }
-        if (current.length() > 0) {
-            items.add(current.toString());
-        }
-        return items;
-    }
-
-    private Frontmatter parseFrontmatter(String body) {
-        if (body == null || body.isEmpty()) {
-            return new Frontmatter(List.of(), null, "");
-        }
-        java.util.regex.Matcher matcher = java.util.regex.Pattern
-                .compile("^---\\s*\\r?\\n(.*?)\\r?\\n---\\s*\\r?\\n", java.util.regex.Pattern.DOTALL)
-                .matcher(body);
-        if (!matcher.find() || matcher.start() != 0) {
-            return new Frontmatter(List.of(), null, body);
-        }
-        String yaml = matcher.group(1);
-        List<String> tags = new ArrayList<>();
-        String summary = null;
-        for (String line : yaml.split("\\R")) {
-            String trimmed = line.trim();
-            if (trimmed.startsWith("tags:")) {
-                String value = trimmed.substring("tags:".length()).trim();
-                if (value.startsWith("[") && value.endsWith("]")) {
-                    String inner = value.substring(1, value.length() - 1);
-                    for (String item : splitQuotedCsv(inner)) {
-                        String cleaned = item.trim();
-                        if (cleaned.startsWith("\"") && cleaned.endsWith("\"") && cleaned.length() >= 2) {
-                            cleaned = unescapeFrontmatterValue(cleaned.substring(1, cleaned.length() - 1));
-                        }
-                        if (!cleaned.isEmpty()) {
-                            tags.add(cleaned);
-                        }
-                    }
-                }
-            } else if (trimmed.startsWith("summary:")) {
-                String value = trimmed.substring("summary:".length()).trim();
-                if (value.startsWith("\"") && value.endsWith("\"") && value.length() >= 2) {
-                    value = unescapeFrontmatterValue(value.substring(1, value.length() - 1));
-                }
-                summary = value;
-            }
-        }
-        String remaining = body.substring(matcher.end()).stripTrailing();
-        return new Frontmatter(tags, summary, remaining);
-    }
-
-    private static final int MAX_TAGS = 32;
-    private static final int MAX_TAG_LENGTH = 64;
-    private static final int MAX_SUMMARY_LENGTH = 1000;
-
-    private String renderFrontmatter(List<String> tags, String summary, String body) {
-        validateFrontmatter(tags, summary);
-        boolean hasTags = tags != null && !tags.isEmpty();
-        boolean hasSummary = summary != null && !summary.isBlank();
-        if (!hasTags && !hasSummary) {
-            return Optional.ofNullable(body).orElse("");
-        }
-        StringBuilder sb = new StringBuilder();
-        sb.append("---\n");
-        if (hasTags) {
-            sb.append("tags: [");
-            sb.append(tags.stream()
-                    .map(tag -> "\"" + tag.replace("\\", "\\\\").replace("\"", "\\\"") + "\"")
-                    .collect(Collectors.joining(", ")));
-            sb.append("]\n");
-        }
-        if (hasSummary) {
-            sb.append("summary: \"").append(summary.replace("\\", "\\\\").replace("\"", "\\\"")).append("\"\n");
-        }
-        sb.append("---\n");
-        sb.append(Optional.ofNullable(body).orElse(""));
-        return sb.toString();
     }
 
     private void recordUpsert(WikiPageDocument document) {
@@ -1464,6 +1196,14 @@ public class WikiApplicationService {
             }
         }
         return out.toString();
+    }
+
+    private boolean isFenceLine(String line) {
+        if (line == null) {
+            return false;
+        }
+        String trimmed = line.stripLeading();
+        return trimmed.startsWith("```") || trimmed.startsWith("~~~");
     }
 
     private String resolveWikiLinkPath(String currentPath, String href) {
