@@ -16,7 +16,7 @@
  * Contact: alex@kuleshov.tech
  */
 
-package me.golemcore.brain.application.service;
+package me.golemcore.brain.application.service.wiki;
 
 import java.util.ArrayList;
 import java.util.List;

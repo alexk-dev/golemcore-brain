@@ -16,7 +16,7 @@
  * Contact: alex@kuleshov.tech
  */
 
-package me.golemcore.brain.application.service;
+package me.golemcore.brain.application.service.wiki;
 
 import me.golemcore.brain.domain.WikiPatchOperation;
 import java.util.Optional;
@@ -26,54 +26,54 @@ import java.util.Optional;
  */
 public class WikiPatchApplier {
 
-    public String apply(String currentBody, WikiApplicationService.PatchPageCommand command) {
+    public String apply(String currentBody, WikiPatchRequest request) {
         String original = Optional.ofNullable(currentBody).orElse("");
-        String addition = Optional.ofNullable(command.getContent()).orElse("");
-        switch (command.getOperation()) {
+        String addition = Optional.ofNullable(request.getContent()).orElse("");
+        switch (request.getOperation()) {
         case APPEND:
             return original + addition;
         case PREPEND:
             return addition + original;
         case REPLACE_SECTION:
-            String heading = Optional.ofNullable(command.getHeading()).orElse("").trim();
+            String heading = Optional.ofNullable(request.getHeading()).orElse("").trim();
             if (heading.isBlank()) {
                 throw new IllegalArgumentException("heading is required for REPLACE_SECTION");
             }
             return replaceSection(original, heading, addition);
         default:
-            throw new IllegalArgumentException("Unsupported patch operation: " + command.getOperation());
+            throw new IllegalArgumentException("Unsupported patch operation: " + request.getOperation());
         }
     }
 
-    public String buildSummary(WikiApplicationService.PatchPageCommand command, String before, String after) {
+    public String buildSummary(WikiPatchRequest request, String before, String after) {
         int deltaChars = (after == null ? 0 : after.length()) - (before == null ? 0 : before.length());
         if (deltaChars == 0) {
-            switch (command.getOperation()) {
+            switch (request.getOperation()) {
             case REPLACE_SECTION:
-                return "Rewrote section '" + command.getHeading() + "' with no net change.";
+                return "Rewrote section '" + request.getHeading() + "' with no net change.";
             default:
                 return "Page body unchanged.";
             }
         }
         String sign = deltaChars > 0 ? "+" : "-";
         int magnitude = Math.abs(deltaChars);
-        switch (command.getOperation()) {
+        switch (request.getOperation()) {
         case APPEND:
             return "Appended " + sign + magnitude + " chars to page body.";
         case PREPEND:
             return "Prepended " + sign + magnitude + " chars to page body.";
         case REPLACE_SECTION:
-            return "Rewrote section '" + command.getHeading() + "' (" + sign + magnitude + " chars).";
+            return "Rewrote section '" + request.getHeading() + "' (" + sign + magnitude + " chars).";
         default:
             return "Patched page (" + sign + magnitude + " chars).";
         }
     }
 
-    public String buildReason(WikiPatchOperation operation, String heading) {
-        return switch (operation) {
+    public String buildReason(WikiPatchRequest request) {
+        return switch (request.getOperation()) {
         case APPEND -> "Patch (append)";
         case PREPEND -> "Patch (prepend)";
-        case REPLACE_SECTION -> "Patch (replace section: " + heading + ")";
+        case REPLACE_SECTION -> "Patch (replace section: " + request.getHeading() + ")";
         default -> "Patch";
         };
     }

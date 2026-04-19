@@ -23,6 +23,9 @@ import me.golemcore.brain.application.port.out.BrainSettingsPort;
 import me.golemcore.brain.application.port.out.WikiAccessStatsPort;
 import me.golemcore.brain.application.port.out.WikiRepository;
 import me.golemcore.brain.application.service.index.WikiIndexingService;
+import me.golemcore.brain.application.service.wiki.WikiFrontmatterCodec;
+import me.golemcore.brain.application.service.wiki.WikiPatchApplier;
+import me.golemcore.brain.application.service.wiki.WikiPatchRequest;
 import me.golemcore.brain.application.space.SpaceContextHolder;
 import me.golemcore.brain.domain.WikiAccessStats;
 import me.golemcore.brain.domain.WikiAsset;
@@ -392,9 +395,10 @@ public class WikiApplicationService {
                     .orElseThrow(
                             () -> new WikiNotFoundException("Page not found: " + normalizePath(command.getPath())));
             WikiPageDocument currentDocument = wikiRepository.readDocument(nodeReference);
-            String patchedBody = wikiPatchApplier.apply(currentDocument.getBody(), command);
-            String reason = wikiPatchApplier.buildReason(command.getOperation(), command.getHeading());
-            String summary = wikiPatchApplier.buildSummary(command, currentDocument.getBody(), patchedBody);
+            WikiPatchRequest patchRequest = toPatchRequest(command);
+            String patchedBody = wikiPatchApplier.apply(currentDocument.getBody(), patchRequest);
+            String reason = wikiPatchApplier.buildReason(patchRequest);
+            String summary = wikiPatchApplier.buildSummary(patchRequest, currentDocument.getBody(), patchedBody);
             WikiPageDocument document = wikiRepository.updatePage(
                     command.getPath(),
                     currentDocument.getTitle(),
@@ -407,6 +411,14 @@ public class WikiApplicationService {
             recordUpsert(document);
             return readPageSilent(document.getPath());
         });
+    }
+
+    private WikiPatchRequest toPatchRequest(PatchPageCommand command) {
+        return WikiPatchRequest.builder()
+                .operation(command.getOperation())
+                .heading(command.getHeading())
+                .content(command.getContent())
+                .build();
     }
 
     public WikiPage movePage(MovePageCommand command) {
