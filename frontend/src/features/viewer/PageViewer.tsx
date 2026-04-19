@@ -30,6 +30,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { ensurePage } from '../../lib/api'
 import { normalizeWikiPath } from '../../lib/paths'
+import { useSpaceStore } from '../../stores/space'
 import { useViewerStore } from '../../stores/viewer'
 
 export function PageViewer() {
@@ -39,6 +40,7 @@ export function PageViewer() {
   const error = useViewerStore((state) => state.error)
   const loading = useViewerStore((state) => state.loading)
   const loadPageData = useViewerStore((state) => state.loadPageData)
+  const activeSpaceSlug = useSpaceStore((state) => state.activeSlug)
   const setActiveNodeId = useTreeStore((state) => state.setActiveNodeId)
   const openAncestorsForPath = useTreeStore((state) => state.openAncestorsForPath)
   const getPageByPath = useTreeStore((state) => state.getPageByPath)
@@ -55,7 +57,7 @@ export function PageViewer() {
 
   useEffect(() => {
     void loadPageData(currentPath)
-  }, [currentPath, loadPageData])
+  }, [activeSpaceSlug, currentPath, loadPageData])
 
   useEffect(() => {
     const treeNode = getPageByPath(currentPath)

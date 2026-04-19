@@ -142,7 +142,7 @@
   }
 
   .sidebar__inner {
-    @apply block h-full w-full bg-sidebar;
+    @apply flex h-full w-full flex-col bg-sidebar;
   }
 
   .sidebar__tabs {
@@ -166,7 +166,15 @@
   }
 
   .sidebar__content {
-    @apply h-[calc(100%-48px)] w-full;
+    @apply min-h-0 flex-1 w-full;
+  }
+
+  .sidebar__footer {
+    @apply border-t border-surface-border px-3 py-2;
+  }
+
+  .sidebar__image-version {
+    @apply inline-flex max-w-full truncate rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs font-medium text-sidebar-foreground/70;
   }
 
   .app-layout__header {
@@ -199,10 +207,6 @@
 
   .app-layout__editor-toolbar-container {
     @apply ml-auto flex min-h-full items-center gap-1 md:gap-2;
-  }
-
-  .app-layout__image-version {
-    @apply max-w-28 truncate rounded-full border border-surface-border bg-background/50 px-2 py-1 text-xs font-medium text-muted;
   }
 
   .app-layout__header-spacer {
@@ -270,6 +274,42 @@
   }
 
   .user-menu__item-indicator {
+    @apply ml-auto inline-flex items-center justify-center text-accent;
+  }
+
+  .space-switcher__trigger {
+    @apply max-w-[42vw] rounded-lg px-2 sm:max-w-56 sm:px-3;
+  }
+
+  .space-switcher__trigger-label {
+    @apply hidden min-w-0 truncate sm:inline;
+  }
+
+  .space-switcher__trigger-chevron {
+    @apply hidden sm:inline;
+  }
+
+  .space-switcher__content {
+    @apply z-50 min-w-56 max-w-[calc(100vw-1rem)] rounded-lg border border-surface-border bg-surface p-2 shadow-2xl outline-none;
+  }
+
+  .space-switcher__label {
+    @apply px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted;
+  }
+
+  .space-switcher__item {
+    @apply flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-foreground outline-none transition hover:bg-surface-alt focus:bg-surface-alt data-[highlighted]:bg-surface-alt;
+  }
+
+  .space-switcher__item--radio {
+    @apply pr-8;
+  }
+
+  .space-switcher__item-label {
+    @apply truncate;
+  }
+
+  .space-switcher__item-indicator {
     @apply ml-auto inline-flex items-center justify-center text-accent;
   }
 
