@@ -566,6 +566,34 @@ class WikiApplicationServiceBranchesTest {
     }
 
     @Test
+    void transactionDuplicateCreateTargetsFailsBeforePersistingAnything() {
+        WikiApplicationService service = createService();
+
+        assertThrows(IllegalArgumentException.class,
+                () -> service.applyTransaction(WikiApplicationService.TransactionCommand.builder()
+                        .operations(List.of(
+                                WikiApplicationService.TxOpCommand.builder()
+                                        .op(WikiTxOperationType.CREATE)
+                                        .parentPath("")
+                                        .title("Same")
+                                        .slug("same")
+                                        .content("first")
+                                        .kind(WikiNodeKind.PAGE)
+                                        .build(),
+                                WikiApplicationService.TxOpCommand.builder()
+                                        .op(WikiTxOperationType.CREATE)
+                                        .parentPath("")
+                                        .title("Same Again")
+                                        .slug("same")
+                                        .content("second")
+                                        .kind(WikiNodeKind.PAGE)
+                                        .build()))
+                        .build()));
+
+        assertThrows(WikiNotFoundException.class, () -> service.getPage("same"));
+    }
+
+    @Test
     void ensurePageReturnsExistingPageWithoutCreating() {
         WikiApplicationService service = createService();
         service.createPage(WikiApplicationService.CreatePageCommand.builder()

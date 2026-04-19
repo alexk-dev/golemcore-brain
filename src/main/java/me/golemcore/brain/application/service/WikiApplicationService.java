@@ -292,11 +292,19 @@ public class WikiApplicationService {
 
     private WikiTxResult applyTransactionLocked(TransactionCommand command) {
         List<TxOpCommand> ops = Optional.ofNullable(command.getOperations()).orElse(List.of());
+        Set<String> reservedCreatePaths = new LinkedHashSet<>();
         for (TxOpCommand op : ops) {
             switch (op.getOp()) {
             case CREATE -> {
                 if (op.getTitle() == null || op.getTitle().isBlank()) {
                     throw new IllegalArgumentException("CREATE op requires non-blank title");
+                }
+                String targetPath = resolveTransactionCreateTargetPath(op);
+                if (wikiRepository.findReference(targetPath).isPresent()) {
+                    throw new IllegalArgumentException("A page with this slug already exists: " + targetPath);
+                }
+                if (!reservedCreatePaths.add(targetPath)) {
+                    throw new IllegalArgumentException("Duplicate CREATE target in transaction: " + targetPath);
                 }
             }
             case UPDATE -> {
@@ -362,6 +370,18 @@ public class WikiApplicationService {
             }
         }
         return WikiTxResult.builder().results(results).build();
+    }
+
+    private String resolveTransactionCreateTargetPath(TxOpCommand op) {
+        String parentPath = normalizePath(Optional.ofNullable(op.getParentPath()).orElse(""));
+        WikiNodeReference parentReference = wikiRepository.findReference(parentPath)
+                .orElseThrow(() -> new WikiNotFoundException("Page not found: " + parentPath));
+        if (!parentReference.getKind().isContainer()) {
+            throw new IllegalArgumentException("Target path is not a section");
+        }
+        String requestedSlug = Optional.ofNullable(op.getSlug()).orElse("");
+        String resolvedSlug = slugify(requestedSlug.isBlank() ? op.getTitle() : requestedSlug);
+        return joinPath(parentPath, resolvedSlug);
     }
 
     public WikiPage patchPage(PatchPageCommand command) {
