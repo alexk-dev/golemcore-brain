@@ -18,7 +18,6 @@
 
 package me.golemcore.brain.application.service.wiki;
 
-import me.golemcore.brain.domain.WikiPatchOperation;
 import java.util.Optional;
 
 /**
