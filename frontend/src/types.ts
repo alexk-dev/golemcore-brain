@@ -117,6 +117,16 @@ export interface WikiSearchStatus {
   lastUpdatedAt: string
 }
 
+/**
+ * Search API response.
+ *
+ * `mode` is the effective retrieval path used by the backend, not the raw
+ * requested mode from the client payload. Expect values such as `fts`,
+ * `hybrid`, `fts-fallback`, or `empty-query`.
+ *
+ * `semanticReady` is true only when vector retrieval actually participated in
+ * ranking for this response.
+ */
 export interface WikiSearchResult {
   mode: string
   semanticReady: boolean

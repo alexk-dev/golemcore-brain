@@ -26,10 +26,22 @@ import lombok.Value;
  * Unified response returned by {@code POST /api/spaces/{slug}/search}.
  *
  * <p>
- * {@code mode} reports the retrieval path actually used. {@code semanticReady}
- * tells clients whether vector retrieval participated in ranking. When vector
- * retrieval cannot run, {@code fallbackReason} explains why the result was
- * produced by FTS only.
+ * {@code mode} reports the effective retrieval path actually used, not merely
+ * the requested search preference from the request payload. Current values are:
+ *
+ * <ul>
+ * <li>{@code fts} when the caller explicitly requested full-text search</li>
+ * <li>{@code hybrid} when vector plus full-text fusion participated in
+ * ranking</li>
+ * <li>{@code fts-fallback} when {@code auto} or {@code hybrid} was requested
+ * but embeddings could not participate</li>
+ * <li>{@code empty-query} when the request query is blank after trimming</li>
+ * </ul>
+ *
+ * <p>
+ * {@code semanticReady} tells clients whether vector retrieval actually
+ * participated in ranking for this response. When vector retrieval cannot run,
+ * {@code fallbackReason} explains why the result was produced by FTS only.
  */
 @Value
 @Builder

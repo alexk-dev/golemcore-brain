@@ -140,7 +140,7 @@ Use a session cookie from `POST /api/auth/login` or an API key with `Authorizati
 | `GET` | `/api/spaces/{slug}/page/history?path=...` | Viewer | List stored page versions. |
 | `GET` | `/api/spaces/{slug}/page/history/version?path=...&versionId=...` | Viewer | Read one stored page version. |
 | `POST` | `/api/spaces/{slug}/page/history/restore?path=...&versionId=...` | Editor | Restore a stored page version. |
-| `POST` | `/api/spaces/{slug}/search` | Viewer | Search pages. Body: `query`, `mode` (`auto`, `fts`, `hybrid`), optional `limit`. |
+| `POST` | `/api/spaces/{slug}/search` | Viewer | Search pages. Body: `query`, `mode` (`auto`, `fts`, `hybrid`), optional `limit`. Response `mode` is the effective retrieval path actually used (`fts`, `hybrid`, `fts-fallback`, `empty-query`), not just the requested preference. `semanticReady=true` means vector retrieval participated in ranking for that response. |
 | `GET` | `/api/spaces/{slug}/search/status` | Viewer | Read full-text and embedding index readiness. |
 | `POST` | `/api/spaces/{slug}/import/markdown/plan` | Editor | Upload a Markdown archive and preview import actions. Multipart: `file`, optional `options`. |
 | `POST` | `/api/spaces/{slug}/import/markdown/apply` | Editor | Upload a Markdown archive and apply selected import actions. |
