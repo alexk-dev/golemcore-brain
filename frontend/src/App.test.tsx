@@ -16,17 +16,23 @@
  * Contact: alex@kuleshov.tech
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from './App'
 import { useEditorStore } from './stores/editor'
+import { useSpaceStore } from './stores/space'
 import { useTreeStore } from './stores/tree'
 import { useUiStore } from './stores/ui'
 import { useViewerStore } from './stores/viewer'
 
 vi.mock('./lib/api', () => ({
+  setCurrentSpaceSlug: vi.fn(),
+  listSpaces: vi.fn(async () => [
+    { id: 's1', slug: 'default', name: 'Default', createdAt: '2026-01-01T00:00:00Z' },
+    { id: 's2', slug: 'docs', name: 'Docs', createdAt: '2026-01-01T00:00:00Z' },
+  ]),
   getAuthConfig: vi.fn(async () => ({
     authDisabled: true,
     publicAccess: true,
@@ -130,6 +136,11 @@ describe('App', () => {
       loading: false,
       error: null,
     })
+    useSpaceStore.setState({
+      spaces: [],
+      activeSlug: 'default',
+      loaded: false,
+    })
     useUiStore.setState({
       isDark: false,
       sidebarVisible: true,
@@ -148,7 +159,20 @@ describe('App', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByTitle('Image version sha-1234567')).toHaveTextContent('sha-1234567')
+    const sidebar = await screen.findByTestId('sidebar')
+    expect(within(sidebar).getByTitle('Image version sha-1234567')).toHaveTextContent('sha-1234567')
+    expect(within(screen.getByRole('banner')).queryByTitle('Image version sha-1234567')).not.toBeInTheDocument()
+  })
+
+  it('shows a standalone space switcher when there is no account menu', async () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('button', { name: 'Switch space, current space Default' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Account menu/ })).not.toBeInTheDocument()
   })
 
   it('renders the shell and loads the root page without crashing', async () => {

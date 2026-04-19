@@ -41,6 +41,7 @@ interface SidebarProps {
   onExpandAll: () => void
   onCollapseAll: () => void
   onOpenSearch: () => void
+  imageVersion?: string | null
 }
 
 export function Sidebar({
@@ -61,6 +62,7 @@ export function Sidebar({
   onExpandAll,
   onCollapseAll,
   onOpenSearch,
+  imageVersion,
 }: SidebarProps) {
   const [activeTab, setActiveTab] = useState<'tree' | 'search'>('tree')
 
@@ -170,6 +172,13 @@ export function Sidebar({
             />
           )}
         </div>
+        {imageVersion ? (
+          <div className="sidebar__footer">
+            <span className="sidebar__image-version" title={`Image version ${imageVersion}`}>
+              {imageVersion}
+            </span>
+          </div>
+        ) : null}
       </div>
     </aside>
   )

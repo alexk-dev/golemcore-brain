@@ -23,6 +23,7 @@ import { Link } from 'react-router-dom'
 import { Sidebar } from '../sidebar/Sidebar'
 import { Toolbar } from '../toolbar/Toolbar'
 import type { WikiNodeKind, WikiTreeNode } from '../../types'
+import { SpaceSwitcher } from './SpaceSwitcher'
 import { UserMenu } from './UserMenu'
 
 interface AppLayoutProps {
@@ -133,11 +134,7 @@ export function AppLayout({
                 Import
               </Link>
             ) : null}
-            {displayImageVersion ? (
-              <span className="app-layout__image-version hidden xl:inline-flex" title={`Image version ${displayImageVersion}`}>
-                {displayImageVersion}
-              </span>
-            ) : null}
+            {currentUsername ? null : <SpaceSwitcher />}
             {currentUsername ? (
               <UserMenu
                 username={currentUsername}
@@ -182,6 +179,7 @@ export function AppLayout({
                 onExpandAll={onExpandAll}
                 onCollapseAll={onCollapseAll}
                 onOpenSearch={onOpenSearch}
+                imageVersion={displayImageVersion}
               />
             </div>
           </>
