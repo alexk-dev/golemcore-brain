@@ -16,18 +16,17 @@
  * Contact: alex@kuleshov.tech
  */
 
-package me.golemcore.brain.domain;
+package me.golemcore.brain.adapter.in.web.dto;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotEmpty;
 import java.util.List;
-import lombok.Builder;
-import lombok.Value;
+import lombok.Data;
 
-@Value
-@Builder
-public class WikiSemanticSearchResult {
-    String mode;
-    boolean semanticReady;
-    String fallbackReason;
-    List<WikiEmbeddingSearchHit> semanticHits;
-    List<WikiSearchHit> fallbackHits;
+@Data
+public class WikiTxPayload {
+
+    @NotEmpty
+    @Valid
+    private List<WikiTxOpPayload> operations;
 }

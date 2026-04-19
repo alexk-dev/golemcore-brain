@@ -43,6 +43,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * API-key management endpoints for global automation and space-scoped
+ * integrations.
+ */
 @RestController
 @RequiredArgsConstructor
 public class ApiKeyController {

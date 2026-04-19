@@ -665,7 +665,7 @@ export function LlmSettingsPage() {
                       ? `${enabledEmbeddingModels.length} enabled embedding model`
                       : 'No enabled embedding model'}
                   </div>
-                  <div className="text-xs text-muted">Optional for semantic search quality.</div>
+                  <div className="text-xs text-muted">Optional for hybrid search quality.</div>
                 </div>
               </div>
             </section>

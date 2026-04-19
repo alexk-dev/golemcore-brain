@@ -32,6 +32,7 @@ import me.golemcore.brain.application.port.out.ModelRegistryCachePort;
 import me.golemcore.brain.application.port.out.ModelRegistryDocumentPort;
 import me.golemcore.brain.application.port.out.ModelRegistryRemotePort;
 import me.golemcore.brain.application.port.out.SpaceRepository;
+import me.golemcore.brain.application.port.out.WikiAccessStatsPort;
 import me.golemcore.brain.application.port.out.WikiEmbeddingIndexPort;
 import me.golemcore.brain.application.port.out.WikiFullTextIndexPort;
 import me.golemcore.brain.application.port.out.WikiDocumentCatalogPort;
@@ -44,16 +45,27 @@ import me.golemcore.brain.application.service.chat.SpaceChatService;
 import me.golemcore.brain.application.service.auth.AuthService;
 import me.golemcore.brain.application.service.auth.PasswordHasher;
 import me.golemcore.brain.application.service.dynamicapi.DynamicSpaceApiService;
+import me.golemcore.brain.application.service.index.WikiIndexReconciliationScheduler;
 import me.golemcore.brain.application.service.index.WikiIndexingService;
 import me.golemcore.brain.application.service.llm.LlmSettingsService;
 import me.golemcore.brain.application.service.llm.ModelRegistryService;
 import me.golemcore.brain.application.service.space.SpaceService;
 import me.golemcore.brain.application.service.user.UserManagementService;
+import java.time.Clock;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class BrainApplicationConfiguration {
+
+    @Bean
+    public Clock clock() {
+        return Clock.systemUTC();
+    }
 
     @Bean(initMethod = "initialize")
     public AuthService authService(
@@ -73,8 +85,10 @@ public class BrainApplicationConfiguration {
     public WikiApplicationService wikiApplicationService(
             WikiRepository wikiRepository,
             BrainSettingsPort brainSettingsPort,
-            WikiIndexingService wikiIndexingService) {
-        return new WikiApplicationService(wikiRepository, brainSettingsPort, wikiIndexingService);
+            WikiIndexingService wikiIndexingService,
+            WikiAccessStatsPort wikiAccessStatsPort) {
+        return new WikiApplicationService(
+                wikiRepository, brainSettingsPort, wikiIndexingService, wikiAccessStatsPort);
     }
 
     @Bean
@@ -83,13 +97,32 @@ public class BrainApplicationConfiguration {
             WikiFullTextIndexPort wikiFullTextIndexPort,
             WikiEmbeddingIndexPort wikiEmbeddingIndexPort,
             LlmSettingsRepository llmSettingsRepository,
-            LlmEmbeddingPort llmEmbeddingPort) {
+            LlmEmbeddingPort llmEmbeddingPort,
+            Executor wikiIndexingExecutor) {
         return new WikiIndexingService(
                 wikiRepository,
                 wikiFullTextIndexPort,
                 wikiEmbeddingIndexPort,
                 llmSettingsRepository,
-                llmEmbeddingPort);
+                llmEmbeddingPort,
+                wikiIndexingExecutor);
+    }
+
+    @Bean(destroyMethod = "shutdown")
+    public java.util.concurrent.ExecutorService wikiIndexingExecutor() {
+        AtomicInteger counter = new AtomicInteger();
+        ThreadFactory threadFactory = runnable -> {
+            Thread thread = new Thread(runnable, "brain-indexer-" + counter.incrementAndGet());
+            thread.setDaemon(true);
+            return thread;
+        };
+        return Executors.newSingleThreadExecutor(threadFactory);
+    }
+
+    @Bean
+    public WikiIndexReconciliationScheduler wikiIndexReconciliationScheduler(
+            SpaceRepository spaceRepository, WikiIndexingService wikiIndexingService) {
+        return new WikiIndexReconciliationScheduler(spaceRepository, wikiIndexingService);
     }
 
     @Bean
@@ -155,8 +188,11 @@ public class BrainApplicationConfiguration {
     }
 
     @Bean
-    public SpaceService spaceService(SpaceRepository spaceRepository, WikiRepository wikiRepository) {
-        return new SpaceService(spaceRepository, wikiRepository);
+    public SpaceService spaceService(
+            SpaceRepository spaceRepository,
+            WikiRepository wikiRepository,
+            WikiIndexingService wikiIndexingService) {
+        return new SpaceService(spaceRepository, wikiRepository, wikiIndexingService);
     }
 
     @Bean

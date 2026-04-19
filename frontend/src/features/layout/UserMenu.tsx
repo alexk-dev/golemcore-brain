@@ -17,8 +17,21 @@
  */
 
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { BrainCircuit, ChevronDown, KeyRound, LogOut, Shield, UserRound, Users as UsersIcon } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import {
+  BrainCircuit,
+  Check,
+  ChevronDown,
+  KeyRound,
+  Layers,
+  LogOut,
+  Shield,
+  UserRound,
+  Users as UsersIcon,
+} from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+
+import { useSpaceStore } from '../../stores/space'
+import { useTreeStore } from '../../stores/tree'
 
 interface UserMenuProps {
   username: string
@@ -28,6 +41,23 @@ interface UserMenuProps {
 }
 
 export function UserMenu({ username, canAccessAccount, canManageUsers, onLogout }: UserMenuProps) {
+  const spaces = useSpaceStore((state) => state.spaces)
+  const activeSlug = useSpaceStore((state) => state.activeSlug)
+  const setActiveSlug = useSpaceStore((state) => state.setActiveSlug)
+  const reloadTree = useTreeStore((state) => state.reloadTree)
+  const navigate = useNavigate()
+
+  const showSpacesGroup = spaces.length > 1
+
+  const handleSpaceChange = (slug: string) => {
+    if (!slug || slug === activeSlug) {
+      return
+    }
+    setActiveSlug(slug)
+    navigate('/')
+    void reloadTree()
+  }
+
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
@@ -52,6 +82,31 @@ export function UserMenu({ username, canAccessAccount, canManageUsers, onLogout 
             <div className="user-menu__header-label">Signed in as</div>
             <div className="user-menu__header-name">{username}</div>
           </div>
+          {showSpacesGroup ? (
+            <>
+              <DropdownMenu.Separator className="user-menu__separator" />
+              <DropdownMenu.Label className="user-menu__label">Switch space</DropdownMenu.Label>
+              <DropdownMenu.RadioGroup
+                aria-label="Switch space"
+                value={activeSlug}
+                onValueChange={handleSpaceChange}
+              >
+                {spaces.map((space) => (
+                  <DropdownMenu.RadioItem
+                    key={space.id}
+                    value={space.slug}
+                    className="user-menu__item user-menu__item--radio"
+                  >
+                    <Layers size={14} aria-hidden="true" />
+                    <span className="user-menu__item-label">{space.name}</span>
+                    <DropdownMenu.ItemIndicator className="user-menu__item-indicator">
+                      <Check size={14} aria-hidden="true" />
+                    </DropdownMenu.ItemIndicator>
+                  </DropdownMenu.RadioItem>
+                ))}
+              </DropdownMenu.RadioGroup>
+            </>
+          ) : null}
           <DropdownMenu.Separator className="user-menu__separator" />
           {canAccessAccount ? (
             <DropdownMenu.Item asChild>
@@ -74,7 +129,7 @@ export function UserMenu({ username, canAccessAccount, canManageUsers, onLogout 
               <DropdownMenu.Item asChild>
                 <Link to="/spaces" className="user-menu__item">
                   <Shield size={14} />
-                  <span>Spaces</span>
+                  <span>Manage spaces</span>
                 </Link>
               </DropdownMenu.Item>
               <DropdownMenu.Item asChild>

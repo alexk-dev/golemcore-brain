@@ -35,6 +35,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * Space-scoped chat endpoint that retrieves space context and delegates the
+ * answer to the configured LLM model.
+ */
 @RestController
 @RequestMapping("/api/spaces/{slug}/chat")
 @RequiredArgsConstructor

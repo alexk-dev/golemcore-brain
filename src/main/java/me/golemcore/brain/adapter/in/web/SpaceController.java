@@ -38,6 +38,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * Public space catalog API for listing visible spaces and administering spaces.
+ */
 @RestController
 @RequestMapping("/api/spaces")
 @RequiredArgsConstructor

@@ -24,24 +24,30 @@ import type { WikiTreeNode } from '../types'
 import { SearchDialog } from './SearchDialog'
 
 vi.mock('../lib/api', () => ({
-  searchPages: vi.fn(async () => [
-    {
-      id: 'guides/runbook',
-      path: 'guides/runbook',
-      title: 'Runbook',
-      excerpt: 'Runbook excerpt',
-      parentPath: 'guides',
-      kind: 'PAGE',
-    },
-    {
-      id: 'guides/setup',
-      path: 'guides/setup',
-      title: 'Setup',
-      excerpt: 'Setup excerpt',
-      parentPath: 'guides',
-      kind: 'PAGE',
-    },
-  ]),
+  searchPages: vi.fn(async () => ({
+    mode: 'hybrid',
+    semanticReady: true,
+    hits: [
+      {
+        id: 'guides/runbook',
+        path: 'guides/runbook',
+        title: 'Runbook',
+        excerpt: 'Runbook excerpt',
+        parentPath: 'guides',
+        kind: 'PAGE',
+        score: 0.5,
+      },
+      {
+        id: 'guides/setup',
+        path: 'guides/setup',
+        title: 'Setup',
+        excerpt: 'Setup excerpt',
+        parentPath: 'guides',
+        kind: 'PAGE',
+        score: 0.25,
+      },
+    ],
+  })),
   getSearchStatus: vi.fn(async () => ({
     mode: 'live-scan',
     ready: true,

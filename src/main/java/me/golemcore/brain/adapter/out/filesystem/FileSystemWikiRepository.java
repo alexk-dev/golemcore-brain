@@ -105,6 +105,8 @@ public class FileSystemWikiRepository implements WikiRepository {
 
     @Override
     public void initializeSpace(String spaceId) {
+        String previousSpaceId = SpaceContextHolder.get();
+        SpaceContextHolder.set(spaceId);
         Path root = wikiProperties.getStorageRoot().resolve(SPACES_DIR).resolve(spaceId);
         try {
             Files.createDirectories(root);
@@ -113,17 +115,22 @@ public class FileSystemWikiRepository implements WikiRepository {
                         root.resolve(INDEX_FILE_NAME),
                         renderMarkdown(
                                 "Welcome",
-                                "This lightweight wiki stores every page as markdown on disk.\n\n"
-                                        + "- Create pages and sections\n"
-                                        + "- Browse the content tree\n"
-                                        + "- Search across notes\n"
-                                        + "- Edit without a database"));
+                                """
+                                        This lightweight wiki stores every page as markdown on disk.
+
+                                        - Create pages and sections
+                                        - Browse the content tree
+                                        - Search across notes
+                                        - Edit without a database
+                                        """.strip()));
             }
             if (wikiProperties.isSeedDemoContent()) {
                 seedDemoContent(root);
             }
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to initialize space " + spaceId, exception);
+        } finally {
+            restorePreviousSpace(previousSpaceId);
         }
     }
 
@@ -220,12 +227,13 @@ public class FileSystemWikiRepository implements WikiRepository {
         Path targetPath = buildNodePath(parentReference.getNodePath(), resolvedSlug, kind);
         requireAvailable(targetPath, resolvedSlug);
 
+        Path safeTargetPath = requireSpaceContainedPath(targetPath);
         try {
             if (kind == WikiNodeKind.SECTION) {
-                Files.createDirectories(targetPath);
-                writeMarkdown(targetPath.resolve(INDEX_FILE_NAME), renderMarkdown(title, content));
+                Files.createDirectories(safeTargetPath);
+                writeMarkdown(safeTargetPath.resolve(INDEX_FILE_NAME), renderMarkdown(title, content));
             } else if (kind == WikiNodeKind.PAGE) {
-                writeMarkdown(targetPath, renderMarkdown(title, content));
+                writeMarkdown(safeTargetPath, renderMarkdown(title, content));
             } else {
                 throw new IllegalArgumentException("Unsupported node kind: " + kind);
             }
@@ -682,7 +690,8 @@ public class FileSystemWikiRepository implements WikiRepository {
 
     private boolean isMaterializableSectionDirectory(Path path) {
         Path safePath = requireSpaceContainedPath(path);
-        return Files.isDirectory(safePath) && !hasHiddenPathSegment(spaceRoot().relativize(safePath));
+        Path normalizedRoot = spaceRoot().toAbsolutePath().normalize();
+        return Files.isDirectory(safePath) && !hasHiddenPathSegment(normalizedRoot.relativize(safePath));
     }
 
     private Path requireSpaceContainedPath(Path path) {
@@ -696,6 +705,30 @@ public class FileSystemWikiRepository implements WikiRepository {
 
     private boolean safeExists(Path path) {
         return Files.exists(requireSpaceContainedPath(path));
+    }
+
+    private Path requireParentPath(Path path) {
+        Path parentPath = path.getParent();
+        if (parentPath == null) {
+            throw new IllegalArgumentException("Path traversal is not allowed");
+        }
+        return requireSpaceContainedPath(parentPath);
+    }
+
+    private String trimSlashes(String value) {
+        int startIndex = 0;
+        int endIndex = value.length();
+        while (startIndex < endIndex && value.charAt(startIndex) == '/') {
+            startIndex++;
+        }
+        while (endIndex > startIndex && value.charAt(endIndex - 1) == '/') {
+            endIndex--;
+        }
+        return value.substring(startIndex, endIndex);
+    }
+
+    private boolean isAsciiLowercaseLetterOrDigit(char value) {
+        return (value >= 'a' && value <= 'z') || (value >= '0' && value <= '9');
     }
 
     private boolean hasHiddenPathSegment(Path relativePath) {
@@ -758,10 +791,12 @@ public class FileSystemWikiRepository implements WikiRepository {
     }
 
     private WikiPageDocument readDocument(Path markdownPath, WikiNodeReference nodeReference) {
+        Path safeMarkdownPath = requireSpaceContainedPath(markdownPath);
         try {
-            String rawContent = Files.readString(markdownPath, StandardCharsets.UTF_8);
+            String rawContent = Files.readString(safeMarkdownPath, StandardCharsets.UTF_8);
             List<String> lines = Arrays.asList(rawContent.split("\\R", -1));
-            String title = lines.isEmpty() ? deriveTitle(markdownPath) : deriveTitleFromLines(markdownPath, lines);
+            String title = lines.isEmpty() ? deriveTitle(safeMarkdownPath)
+                    : deriveTitleFromLines(safeMarkdownPath, lines);
             String body = lines.isEmpty() ? "" : deriveBody(lines);
             return WikiPageDocument.builder()
                     .id(nodeReference.getId())
@@ -771,12 +806,12 @@ public class FileSystemWikiRepository implements WikiRepository {
                     .title(title)
                     .body(body)
                     .kind(nodeReference.getKind())
-                    .createdAt(readCreatedInstant(markdownPath))
-                    .updatedAt(readUpdatedInstant(markdownPath))
+                    .createdAt(readCreatedInstant(safeMarkdownPath))
+                    .updatedAt(readUpdatedInstant(safeMarkdownPath))
                     .revision(calculateRevision(rawContent))
                     .build();
         } catch (IOException exception) {
-            throw new IllegalStateException("Failed to read markdown file " + markdownPath, exception);
+            throw new IllegalStateException("Failed to read markdown file " + safeMarkdownPath, exception);
         }
     }
 
@@ -847,7 +882,9 @@ public class FileSystemWikiRepository implements WikiRepository {
     private String renameNode(WikiNodeReference nodeReference, String nextSlug) throws IOException {
         Path targetPath = buildNodePath(nodeReference.getParentDirectory(), nextSlug, nodeReference.getKind());
         requireAvailable(targetPath, nextSlug);
-        Files.move(nodeReference.getNodePath(), targetPath, StandardCopyOption.REPLACE_EXISTING);
+        Path safeSourcePath = requireSpaceContainedPath(nodeReference.getNodePath());
+        Path safeTargetPath = requireSpaceContainedPath(targetPath);
+        Files.move(safeSourcePath, safeTargetPath, StandardCopyOption.REPLACE_EXISTING);
         if (nodeReference.getKind() == WikiNodeKind.PAGE) {
             moveIfExists(getAssetsDirectory(nodeReference),
                     nodeReference.getParentDirectory().resolve(".assets-" + nextSlug));
@@ -932,26 +969,31 @@ public class FileSystemWikiRepository implements WikiRepository {
     }
 
     private void moveIfExists(Path source, Path target) throws IOException {
-        if (!Files.exists(source)) {
+        Path safeSource = requireSpaceContainedPath(source);
+        Path safeTarget = requireSpaceContainedPath(target);
+        if (!Files.exists(safeSource)) {
             return;
         }
-        Files.createDirectories(target.getParent());
-        Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+        Files.createDirectories(requireParentPath(safeTarget));
+        Files.move(safeSource, safeTarget, StandardCopyOption.REPLACE_EXISTING);
     }
 
     private void copyIfExists(Path source, Path target) throws IOException {
-        if (!Files.exists(source)) {
+        Path safeSource = requireSpaceContainedPath(source);
+        Path safeTarget = requireSpaceContainedPath(target);
+        if (!Files.exists(safeSource)) {
             return;
         }
-        Files.createDirectories(target.getParent());
-        copyRecursively(source, target);
+        Files.createDirectories(requireParentPath(safeTarget));
+        copyRecursively(safeSource, safeTarget);
     }
 
     private void deleteIfExistsRecursively(Path path) throws IOException {
-        if (!Files.exists(path)) {
+        Path safePath = requireSpaceContainedPath(path);
+        if (!Files.exists(safePath)) {
             return;
         }
-        deleteRecursively(path);
+        deleteRecursively(safePath);
     }
 
     private void rewriteAssetReferencesInSubtree(WikiNodeReference rootReference, String oldRootPath,
@@ -1035,9 +1077,10 @@ public class FileSystemWikiRepository implements WikiRepository {
 
     private void rewriteAssetNameReferences(Path markdownPath, String oldAssetPath, String newAssetPath,
             String pagePath, String oldName, String newName) throws IOException {
+        Path safeMarkdownPath = requireSpaceContainedPath(markdownPath);
         String normalizedPagePath = normalizePath(pagePath);
         String encodedOldName = encodeUrlComponent(oldName);
-        String rawMarkdown = Files.readString(markdownPath, StandardCharsets.UTF_8);
+        String rawMarkdown = Files.readString(safeMarkdownPath, StandardCharsets.UTF_8);
         String updatedMarkdown = rawMarkdown
                 .replace(oldAssetPath, newAssetPath)
                 .replace(unencodedAssetPathPrefix(normalizedPagePath) + oldName, newAssetPath)
@@ -1050,13 +1093,14 @@ public class FileSystemWikiRepository implements WikiRepository {
                 .replace(encodedLegacyAssetPathPrefix(normalizedPagePath) + encodedOldName, newAssetPath)
                 .replace("[" + oldName + "](", "[" + newName + "](");
         if (!rawMarkdown.equals(updatedMarkdown)) {
-            Files.writeString(markdownPath, updatedMarkdown, StandardCharsets.UTF_8,
+            Files.writeString(safeMarkdownPath, updatedMarkdown, StandardCharsets.UTF_8,
                     StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
         }
     }
 
     private void requireAvailable(Path targetPath, String slug) {
-        if (Files.exists(targetPath)) {
+        Path safeTargetPath = requireSpaceContainedPath(targetPath);
+        if (Files.exists(safeTargetPath)) {
             throw new IllegalArgumentException("A page with this slug already exists: " + slug);
         }
     }
@@ -1069,7 +1113,8 @@ public class FileSystemWikiRepository implements WikiRepository {
     }
 
     private List<String> readOrderedSlugs(Path directory) {
-        Path orderFile = directory.resolve(ORDER_FILE_NAME);
+        Path safeDirectory = requireSpaceContainedPath(directory);
+        Path orderFile = requireSpaceContainedPath(safeDirectory.resolve(ORDER_FILE_NAME));
         if (!Files.exists(orderFile)) {
             return List.of();
         }
@@ -1082,6 +1127,8 @@ public class FileSystemWikiRepository implements WikiRepository {
     }
 
     private void saveOrderedSlugs(Path directory, List<String> orderedSlugs) {
+        Path safeDirectory = requireSpaceContainedPath(directory);
+        Path orderFile = requireSpaceContainedPath(safeDirectory.resolve(ORDER_FILE_NAME));
         Set<String> uniqueSlugs = new LinkedHashSet<>(orderedSlugs.stream()
                 .filter(Objects::nonNull)
                 .map(String::trim)
@@ -1091,7 +1138,7 @@ public class FileSystemWikiRepository implements WikiRepository {
                 .map(this::quoteJsonString)
                 .collect(Collectors.joining(",\n  ", "[\n  ", "\n]\n"));
         try {
-            Files.writeString(directory.resolve(ORDER_FILE_NAME), json, StandardCharsets.UTF_8,
+            Files.writeString(orderFile, json, StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to write order file", exception);
@@ -1159,12 +1206,13 @@ public class FileSystemWikiRepository implements WikiRepository {
     }
 
     private void writeMarkdown(Path markdownPath, String markdown) {
+        Path safeMarkdownPath = requireSpaceContainedPath(markdownPath);
         try {
-            Files.createDirectories(markdownPath.getParent());
-            Files.writeString(markdownPath, markdown, StandardCharsets.UTF_8, StandardOpenOption.CREATE,
+            Files.createDirectories(requireParentPath(safeMarkdownPath));
+            Files.writeString(safeMarkdownPath, markdown, StandardCharsets.UTF_8, StandardOpenOption.CREATE,
                     StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
         } catch (IOException exception) {
-            throw new IllegalStateException("Failed to write markdown file " + markdownPath, exception);
+            throw new IllegalStateException("Failed to write markdown file " + safeMarkdownPath, exception);
         }
     }
 
@@ -1202,28 +1250,40 @@ public class FileSystemWikiRepository implements WikiRepository {
     }
 
     private String slugify(String input) {
-        String slug = Optional.ofNullable(input).orElse("")
+        String normalizedInput = Optional.ofNullable(input).orElse("")
                 .trim()
-                .toLowerCase(Locale.ROOT)
-                .replaceAll("[^a-z0-9]+", "-")
-                .replaceAll("^-+", "")
-                .replaceAll("-+$", "");
-        if (slug.isBlank()) {
+                .toLowerCase(Locale.ROOT);
+        StringBuilder slug = new StringBuilder();
+        boolean previousWasSeparator = false;
+        for (int index = 0; index < normalizedInput.length(); index++) {
+            char currentChar = normalizedInput.charAt(index);
+            if (isAsciiLowercaseLetterOrDigit(currentChar)) {
+                slug.append(currentChar);
+                previousWasSeparator = false;
+                continue;
+            }
+            if (!previousWasSeparator && slug.length() > 0) {
+                slug.append('-');
+                previousWasSeparator = true;
+            }
+        }
+        if (slug.length() > 0 && slug.charAt(slug.length() - 1) == '-') {
+            slug.deleteCharAt(slug.length() - 1);
+        }
+        if (slug.length() == 0) {
             throw new IllegalArgumentException("Slug cannot be empty");
         }
-        return slug;
+        return slug.toString();
     }
 
     private String normalizePath(String rawPath) {
-        String normalized = Optional.ofNullable(rawPath).orElse("")
+        String normalized = trimSlashes(Optional.ofNullable(rawPath).orElse("")
                 .replace('\\', '/')
-                .trim()
-                .replaceAll("^/+", "")
-                .replaceAll("/+$", "");
-        if (".".equals(normalized)) {
+                .trim());
+        if (normalized.isBlank() || ".".equals(normalized)) {
             return "";
         }
-        if (normalized.contains("..")) {
+        if (normalized.indexOf('\0') >= 0 || normalized.contains("..")) {
             throw new IllegalArgumentException("Path traversal is not allowed");
         }
         return normalized;
@@ -1254,14 +1314,15 @@ public class FileSystemWikiRepository implements WikiRepository {
     }
 
     private void deleteRecursively(Path path) throws IOException {
-        if (Files.isDirectory(path)) {
-            try (DirectoryStream<Path> stream = Files.newDirectoryStream(path)) {
+        Path safePath = requireSpaceContainedPath(path);
+        if (Files.isDirectory(safePath)) {
+            try (DirectoryStream<Path> stream = Files.newDirectoryStream(safePath)) {
                 for (Path child : stream) {
                     deleteRecursively(child);
                 }
             }
         }
-        Files.deleteIfExists(path);
+        Files.deleteIfExists(safePath);
     }
 
     private void copyRecursively(Path source, Path target) throws IOException {

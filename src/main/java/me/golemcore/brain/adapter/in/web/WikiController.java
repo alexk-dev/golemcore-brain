@@ -25,13 +25,18 @@ import me.golemcore.brain.adapter.in.web.dto.CreatePagePayload;
 import me.golemcore.brain.adapter.in.web.dto.EnsurePagePayload;
 import me.golemcore.brain.adapter.in.web.dto.MarkdownImportOptionsPayload;
 import me.golemcore.brain.adapter.in.web.dto.MovePagePayload;
+import me.golemcore.brain.adapter.in.web.dto.PatchPagePayload;
 import me.golemcore.brain.adapter.in.web.dto.RenameAssetPayload;
-import me.golemcore.brain.adapter.in.web.dto.SemanticSearchPayload;
+import me.golemcore.brain.adapter.in.web.dto.SearchPayload;
 import me.golemcore.brain.adapter.in.web.dto.SortChildrenPayload;
 import me.golemcore.brain.adapter.in.web.dto.UpdatePagePayload;
+import me.golemcore.brain.adapter.in.web.dto.WikiTxOpPayload;
+import me.golemcore.brain.adapter.in.web.dto.WikiTxPayload;
 import me.golemcore.brain.application.service.WikiApplicationService;
+import me.golemcore.brain.domain.WikiAccessTopResponse;
 import me.golemcore.brain.domain.WikiAsset;
 import me.golemcore.brain.domain.WikiAssetContent;
+import me.golemcore.brain.domain.WikiGraphSummary;
 import me.golemcore.brain.domain.WikiImportApplyResponse;
 import me.golemcore.brain.domain.WikiImportPlanResponse;
 import me.golemcore.brain.domain.WikiLinkStatus;
@@ -39,10 +44,10 @@ import me.golemcore.brain.domain.WikiPage;
 import me.golemcore.brain.domain.WikiPageHistoryEntry;
 import me.golemcore.brain.domain.WikiPageHistoryVersion;
 import me.golemcore.brain.domain.WikiPathLookupResult;
-import me.golemcore.brain.domain.WikiSearchHit;
-import me.golemcore.brain.domain.WikiSemanticSearchResult;
+import me.golemcore.brain.domain.WikiSearchResult;
 import me.golemcore.brain.domain.WikiSearchStatus;
 import me.golemcore.brain.domain.WikiTreeNode;
+import me.golemcore.brain.domain.WikiTxResult;
 import me.golemcore.brain.domain.auth.AuthContext;
 import me.golemcore.brain.domain.auth.UserRole;
 import me.golemcore.brain.web.SpaceResolverFilter;
@@ -57,6 +62,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -67,6 +73,10 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+/**
+ * Space-scoped wiki API used by the web UI and external integrations to manage
+ * Markdown pages, assets, imports, links, and search.
+ */
 @RestController
 @RequestMapping("/api/spaces/{slug}")
 @RequiredArgsConstructor
@@ -127,6 +137,8 @@ public class WikiController {
                 .slug(payload.getSlug())
                 .content(payload.getContent())
                 .kind(payload.getKind())
+                .tags(payload.getTags())
+                .summary(payload.getSummary())
                 .build());
     }
 
@@ -154,6 +166,22 @@ public class WikiController {
                 .slug(payload.getSlug())
                 .content(payload.getContent())
                 .expectedRevision(payload.getRevision())
+                .actor(resolveActor(context))
+                .tags(payload.getTags())
+                .summary(payload.getSummary())
+                .build());
+    }
+
+    @PatchMapping("/page")
+    public WikiPage patchPage(@PathVariable String slug, @RequestParam(name = "path") String path,
+            @Valid @RequestBody PatchPagePayload payload, HttpServletRequest request) {
+        AuthContext context = requireEdit(request);
+        return wikiApplicationService.patchPage(WikiApplicationService.PatchPageCommand.builder()
+                .path(path)
+                .operation(payload.getOperation())
+                .heading(payload.getHeading())
+                .content(payload.getContent())
+                .expectedRevision(payload.getExpectedRevision())
                 .actor(resolveActor(context))
                 .build());
     }
@@ -209,24 +237,21 @@ public class WikiController {
                 .build());
     }
 
-    @GetMapping("/search")
-    public List<WikiSearchHit> search(@PathVariable String slug,
-            @RequestParam(name = "q", defaultValue = "") String query, HttpServletRequest request) {
+    @PostMapping("/search")
+    public WikiSearchResult search(@PathVariable String slug,
+            @Valid @RequestBody SearchPayload payload, HttpServletRequest request) {
         requireView(request);
-        return wikiApplicationService.search(query);
+        return wikiApplicationService.search(WikiApplicationService.SearchCommand.builder()
+                .query(payload.getQuery())
+                .mode(payload.getMode())
+                .limit(payload.getLimit())
+                .build());
     }
 
     @GetMapping("/search/status")
     public WikiSearchStatus getSearchStatus(@PathVariable String slug, HttpServletRequest request) {
         requireView(request);
         return wikiApplicationService.getSearchStatus();
-    }
-
-    @PostMapping("/search/semantic")
-    public WikiSemanticSearchResult semanticSearch(@PathVariable String slug,
-            @Valid @RequestBody SemanticSearchPayload payload, HttpServletRequest request) {
-        requireView(request);
-        return wikiApplicationService.semanticSearch(payload.getQuery());
     }
 
     @PostMapping(value = "/import/markdown/plan", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -270,6 +295,47 @@ public class WikiController {
             HttpServletRequest request) {
         requireView(request);
         return wikiApplicationService.getLinkStatus(path);
+    }
+
+    @GetMapping("/wiki/graph")
+    public WikiGraphSummary getGraphSummary(@PathVariable String slug, HttpServletRequest request) {
+        requireView(request);
+        return wikiApplicationService.getGraphSummary();
+    }
+
+    @GetMapping("/wiki/access/top")
+    public WikiAccessTopResponse getTopAccessed(@PathVariable String slug,
+            @RequestParam(name = "limit", defaultValue = "20") int limit, HttpServletRequest request) {
+        requireView(request);
+        return WikiAccessTopResponse.builder()
+                .items(wikiApplicationService.listTopAccessed(limit))
+                .build();
+    }
+
+    @PostMapping("/wiki/tx")
+    public WikiTxResult applyTransaction(@PathVariable String slug,
+            @Valid @RequestBody WikiTxPayload payload, HttpServletRequest request) {
+        AuthContext context = requireEdit(request);
+        List<WikiApplicationService.TxOpCommand> ops = payload.getOperations().stream()
+                .map(WikiController::toOpCommand)
+                .toList();
+        return wikiApplicationService.applyTransaction(WikiApplicationService.TransactionCommand.builder()
+                .operations(ops)
+                .actor(resolveActor(context))
+                .build());
+    }
+
+    private static WikiApplicationService.TxOpCommand toOpCommand(WikiTxOpPayload payload) {
+        return WikiApplicationService.TxOpCommand.builder()
+                .op(payload.getOp())
+                .path(payload.getPath())
+                .parentPath(payload.getParentPath())
+                .slug(payload.getSlug())
+                .title(payload.getTitle())
+                .content(payload.getContent())
+                .kind(payload.getKind())
+                .expectedRevision(payload.getExpectedRevision())
+                .build();
     }
 
     @GetMapping("/pages/assets")

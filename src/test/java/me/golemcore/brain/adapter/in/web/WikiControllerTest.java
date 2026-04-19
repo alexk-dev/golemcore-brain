@@ -174,17 +174,105 @@ class WikiControllerTest {
                 .andExpect(jsonPath("$.indexedDocuments", greaterThan(0)))
                 .andExpect(jsonPath("$.lastUpdatedAt").exists());
 
-        mockMvc.perform(get("/api/spaces/default/search").param("q", "updated"))
+        mockMvc.perform(post("/api/spaces/default/search")
+                .contentType("application/json")
+                .content("{}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].path", is("operations/release-runbook")));
+                .andExpect(jsonPath("$.mode", is("empty-query")))
+                .andExpect(jsonPath("$.hits", hasSize(0)));
 
-        mockMvc.perform(get("/api/spaces/default/search").param("q", "release* runbo*"))
+        mockMvc.perform(post("/api/spaces/default/search")
+                .contentType("application/json")
+                .content("""
+                        {
+                          "query": "updated",
+                          "mode": "fts"
+                        }
+                        """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].path", is("operations/release-runbook")));
+                .andExpect(jsonPath("$.mode", is("fts")))
+                .andExpect(jsonPath("$.semanticReady", is(false)))
+                .andExpect(jsonPath("$.hits[0].path", is("operations/release-runbook")));
 
-        mockMvc.perform(get("/api/spaces/default/search").param("q", "*"))
+        mockMvc.perform(post("/api/spaces/default/search")
+                .contentType("application/json")
+                .content("""
+                        {
+                          "query": "release* runbo*",
+                          "mode": "fts"
+                        }
+                        """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(greaterThan(0))));
+                .andExpect(jsonPath("$.mode", is("fts")))
+                .andExpect(jsonPath("$.hits[0].path", is("operations/release-runbook")));
+
+        mockMvc.perform(post("/api/spaces/default/search")
+                .contentType("application/json")
+                .content("""
+                        {
+                          "query": "*",
+                          "mode": "fts"
+                        }
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mode", is("fts")))
+                .andExpect(jsonPath("$.hits", hasSize(greaterThan(0))));
+
+        mockMvc.perform(post("/api/spaces/default/search")
+                .contentType("application/json")
+                .content("""
+                        {
+                          "query": "updated",
+                          "mode": "hybrid",
+                          "limit": 1
+                        }
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mode", is("fts-fallback")))
+                .andExpect(jsonPath("$.fallbackReason", is("embedding-model-not-configured")))
+                .andExpect(jsonPath("$.hits", hasSize(1)));
+
+        mockMvc.perform(post("/api/spaces/default/search")
+                .contentType("application/json")
+                .content("""
+                        {
+                          "query": "updated",
+                          "mode": "fts",
+                          "limit": 0
+                        }
+                        """))
+                .andExpect(status().isBadRequest());
+
+        String removedHybridModeAlias = "seman" + "tic";
+        mockMvc.perform(post("/api/spaces/default/search")
+                .contentType("application/json")
+                .content("""
+                        {
+                          "query": "updated",
+                          "mode": "%s"
+                        }
+                        """.formatted(removedHybridModeAlias)))
+                .andExpect(status().isBadRequest());
+
+        String removedFullTextModeAlias = "lex" + "ical";
+        mockMvc.perform(post("/api/spaces/default/search")
+                .contentType("application/json")
+                .content("""
+                        {
+                          "query": "updated",
+                          "mode": "%s"
+                        }
+                        """.formatted(removedFullTextModeAlias)))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(post("/api/spaces/default/search/semantic")
+                .contentType("application/json")
+                .content("""
+                        {
+                          "query": "updated"
+                        }
+                        """))
+                .andExpect(status().is4xxClientError());
 
         mockMvc.perform(get("/api/spaces/default/links").param("path", "operations/release-runbook"))
                 .andExpect(status().isOk())

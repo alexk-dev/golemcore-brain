@@ -110,10 +110,17 @@ class PublicReadOnlyAccessIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title", is("Public Handbook")))
                 .andExpect(jsonPath("$.content", is("Public alpha knowledge")));
-        mockMvc.perform(get("/api/spaces/default/search").param("q", "alpha"))
+        mockMvc.perform(post("/api/spaces/default/search")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "query": "alpha",
+                          "mode": "fts"
+                        }
+                        """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(1)))
-                .andExpect(jsonPath("$[0].path", is("public-handbook")));
+                .andExpect(jsonPath("$.hits", hasSize(1)))
+                .andExpect(jsonPath("$.hits[0].path", is("public-handbook")));
         mockMvc.perform(get("/api/spaces/default/assets")
                 .param("path", "public-handbook")
                 .param("name", "readme.txt"))

@@ -22,6 +22,10 @@ import java.time.Instant;
 import lombok.Builder;
 import lombok.Value;
 
+/**
+ * Snapshot of derived index metadata collected from the full-text and embedding
+ * adapters.
+ */
 @Value
 @Builder
 public class WikiIndexMetadata {

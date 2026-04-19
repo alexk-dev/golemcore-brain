@@ -96,6 +96,12 @@ export interface WikiSearchHit {
   kind: WikiNodeKind
 }
 
+export type WikiSearchMode = 'auto' | 'fts' | 'hybrid'
+
+export interface WikiSearchResultHit extends WikiSearchHit {
+  score?: number | null
+}
+
 export interface WikiSearchStatus {
   mode: string
   ready: boolean
@@ -111,12 +117,21 @@ export interface WikiSearchStatus {
   lastUpdatedAt: string
 }
 
-export interface WikiSemanticSearchResult {
+/**
+ * Search API response.
+ *
+ * `mode` is the effective retrieval path used by the backend, not the raw
+ * requested mode from the client payload. Expect values such as `fts`,
+ * `hybrid`, `fts-fallback`, or `empty-query`.
+ *
+ * `semanticReady` is true only when vector retrieval actually participated in
+ * ranking for this response.
+ */
+export interface WikiSearchResult {
   mode: string
   semanticReady: boolean
   fallbackReason?: string | null
-  semanticHits: WikiSearchHit[]
-  fallbackHits: WikiSearchHit[]
+  hits: WikiSearchResultHit[]
 }
 
 export interface SpaceChatSource {
@@ -274,6 +289,11 @@ export interface Space {
   slug: string
   name: string
   createdAt: string
+}
+
+export interface ReindexResponse {
+  status: string
+  spacesQueued: number
 }
 
 export interface ApiKey {

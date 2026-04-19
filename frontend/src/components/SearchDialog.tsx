@@ -20,7 +20,7 @@ import { Search, Sparkles } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { getSearchStatus, searchPages } from '../lib/api'
-import type { WikiSearchHit, WikiSearchStatus, WikiTreeNode } from '../types'
+import type { WikiSearchHit, WikiSearchResultHit, WikiSearchStatus, WikiTreeNode } from '../types'
 import { ModalCard } from './ModalCard'
 
 interface SearchDialogProps {
@@ -62,7 +62,7 @@ function SearchDialogBody({
   onNavigate,
 }: Omit<SearchDialogProps, 'embedded'>) {
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState<WikiSearchHit[]>([])
+  const [results, setResults] = useState<WikiSearchResultHit[]>([])
   const [loading, setLoading] = useState(false)
   const [pageIndex, setPageIndex] = useState(0)
   const [activeIndex, setActiveIndex] = useState(0)
@@ -100,9 +100,9 @@ function SearchDialogBody({
 
     const timeoutId = window.setTimeout(() => {
       setLoading(true)
-      searchPages(query)
+      searchPages(query, 'fts')
         .then((response) => {
-          setResults(response)
+          setResults(response.hits)
           setPageIndex(0)
           setActiveIndex(0)
         })
@@ -169,7 +169,7 @@ function SearchDialogBody({
             <div>{searchStatus.staleDocuments} stale documents</div>
           ) : null}
           {searchStatus.embeddingModelId ? <div>Embedding model: {searchStatus.embeddingModelId}</div> : null}
-          {searchStatus.embeddingsReady === false ? <div>Semantic index is not ready</div> : null}
+          {searchStatus.embeddingsReady === false ? <div>Embedding index is not ready</div> : null}
           {searchStatus.lastIndexingError ? <div>Last indexing error: {searchStatus.lastIndexingError}</div> : null}
         </div>
       ) : null}

@@ -19,6 +19,7 @@
 package me.golemcore.brain.domain;
 
 import java.time.Instant;
+import java.util.List;
 
 import lombok.Builder;
 import lombok.Value;
@@ -36,4 +37,6 @@ public class WikiPageDocument {
     Instant createdAt;
     Instant updatedAt;
     String revision;
+    List<String> tags;
+    String summary;
 }

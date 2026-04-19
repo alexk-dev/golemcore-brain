@@ -18,6 +18,7 @@
 
 package me.golemcore.brain.adapter.in.web.dto;
 
+import java.util.List;
 import me.golemcore.brain.domain.WikiNodeKind;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -37,4 +38,8 @@ public class CreatePagePayload {
 
     @NotNull
     private WikiNodeKind kind;
+
+    private List<String> tags;
+
+    private String summary;
 }

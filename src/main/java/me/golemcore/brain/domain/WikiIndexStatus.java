@@ -22,6 +22,10 @@ import java.time.Instant;
 import lombok.Builder;
 import lombok.Value;
 
+/**
+ * Internal indexing status used by the application service before it is mapped
+ * to web-facing search status.
+ */
 @Value
 @Builder
 public class WikiIndexStatus {

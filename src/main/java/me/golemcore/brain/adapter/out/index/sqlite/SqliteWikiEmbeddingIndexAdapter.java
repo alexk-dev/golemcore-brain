@@ -39,19 +39,27 @@ import java.sql.Statement;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.List;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
+@ConditionalOnProperty(name = "brain.indexing.embedding-adapter", havingValue = "sqlite", matchIfMissing = true)
 @RequiredArgsConstructor
 public class SqliteWikiEmbeddingIndexAdapter implements WikiEmbeddingIndexPort {
 
     private static final String INDEX_ROOT = ".indexes/embeddings";
     private static final String DATABASE_FILE = "embeddings.sqlite";
+    static final String STORED_MODEL_ID_PROBE_SQL = "select distinct embedding_model_id "
+            + "from wiki_embeddings where space_id = ? limit 2";
 
     private final WikiProperties wikiProperties;
 
@@ -70,7 +78,12 @@ public class SqliteWikiEmbeddingIndexAdapter implements WikiEmbeddingIndexPort {
                 for (String deletedPath : safeList(changeSet.getDeletedPaths())) {
                     deletePath(connection, spaceId, deletedPath);
                 }
+                Set<String> wipedPaths = new HashSet<>();
                 for (WikiEmbeddingDocument embeddingDocument : safeList(changeSet.getEmbeddingUpserts())) {
+                    String path = embeddingDocument.getDocument().getPath();
+                    if (wipedPaths.add(path)) {
+                        deletePath(connection, spaceId, path);
+                    }
                     upsertDocument(connection, spaceId, embeddingDocument);
                 }
             }
@@ -89,8 +102,15 @@ public class SqliteWikiEmbeddingIndexAdapter implements WikiEmbeddingIndexPort {
         try (Connection connection = openConnection()) {
             initializeSchema(connection);
             List<StoredEmbeddingDocument> documents = readSpaceDocuments(connection, spaceId);
-            return documents.stream()
-                    .map(document -> toHit(document, embedding))
+            Map<String, WikiEmbeddingSearchHit> bestByPath = new LinkedHashMap<>();
+            for (StoredEmbeddingDocument document : documents) {
+                WikiEmbeddingSearchHit hit = toHit(document, embedding);
+                WikiEmbeddingSearchHit current = bestByPath.get(hit.getPath());
+                if (current == null || hit.getScore() > current.getScore()) {
+                    bestByPath.put(hit.getPath(), hit);
+                }
+            }
+            return bestByPath.values().stream()
                     .sorted(Comparator.comparingDouble(WikiEmbeddingSearchHit::getScore).reversed())
                     .limit(Math.max(1, limit))
                     .toList();
@@ -107,7 +127,7 @@ public class SqliteWikiEmbeddingIndexAdapter implements WikiEmbeddingIndexPort {
         try (Connection connection = openConnection()) {
             initializeSchema(connection);
             try (PreparedStatement statement = connection.prepareStatement(
-                    "select path from wiki_embeddings where space_id = ? order by lower(path)")) {
+                    "select distinct path from wiki_embeddings where space_id = ? order by lower(path)")) {
                 statement.setString(1, spaceId);
                 try (ResultSet resultSet = statement.executeQuery()) {
                     List<String> paths = new ArrayList<>();
@@ -130,7 +150,8 @@ public class SqliteWikiEmbeddingIndexAdapter implements WikiEmbeddingIndexPort {
         try (Connection connection = openConnection()) {
             initializeSchema(connection);
             try (PreparedStatement statement = connection.prepareStatement(
-                    "select path, revision from wiki_embeddings where space_id = ? order by lower(path)")) {
+                    "select path, revision from wiki_embeddings where space_id = ? and chunk_index = 0 "
+                            + "order by lower(path)")) {
                 statement.setString(1, spaceId);
                 try (ResultSet resultSet = statement.executeQuery()) {
                     Map<String, String> revisions = new LinkedHashMap<>();
@@ -153,7 +174,7 @@ public class SqliteWikiEmbeddingIndexAdapter implements WikiEmbeddingIndexPort {
         try (Connection connection = openConnection()) {
             initializeSchema(connection);
             try (PreparedStatement statement = connection.prepareStatement(
-                    "select count(*) from wiki_embeddings where space_id = ?")) {
+                    "select count(distinct path) from wiki_embeddings where space_id = ?")) {
                 statement.setString(1, spaceId);
                 try (ResultSet resultSet = statement.executeQuery()) {
                     return resultSet.next() ? resultSet.getInt(1) : 0;
@@ -171,22 +192,73 @@ public class SqliteWikiEmbeddingIndexAdapter implements WikiEmbeddingIndexPort {
     }
 
     private void initializeSchema(Connection connection) throws SQLException {
+        if (tableExists(connection) && !hasChunkIndexInPrimaryKey(connection)) {
+            // Legacy PK was (space_id, path) — cannot be altered to include
+            // chunk_index in SQLite. The table is a derived index, so drop it
+            // and let reconciliation rebuild it from the catalog.
+            try (Statement statement = connection.createStatement()) {
+                statement.execute("drop table wiki_embeddings");
+            }
+        }
         try (Statement statement = connection.createStatement()) {
             statement.execute("create table if not exists wiki_embeddings ("
                     + "space_id text not null, "
                     + "path text not null, "
+                    + "chunk_index integer not null default 0, "
                     + "id text not null, "
                     + "parent_path text, "
                     + "title text not null, "
                     + "body text not null, "
+                    + "chunk_text text, "
                     + "kind text not null, "
                     + "revision text, "
                     + "updated_at integer not null, "
+                    + "embedding_model_id text, "
                     + "vector blob not null, "
-                    + "primary key (space_id, path))");
+                    + "primary key (space_id, path, chunk_index))");
             statement.execute("create index if not exists idx_wiki_embeddings_space "
                     + "on wiki_embeddings(space_id)");
         }
+        addEmbeddingModelIdColumnIfMissing(connection);
+        try (Statement statement = connection.createStatement()) {
+            statement.execute("create index if not exists idx_wiki_embeddings_space_model "
+                    + "on wiki_embeddings(space_id, embedding_model_id)");
+        }
+    }
+
+    private void addEmbeddingModelIdColumnIfMissing(Connection connection) throws SQLException {
+        try (Statement statement = connection.createStatement();
+                ResultSet info = statement.executeQuery("pragma table_info(wiki_embeddings)")) {
+            while (info.next()) {
+                if ("embedding_model_id".equalsIgnoreCase(info.getString("name"))) {
+                    return;
+                }
+            }
+        }
+        try (Statement statement = connection.createStatement()) {
+            statement.execute("alter table wiki_embeddings add column embedding_model_id text");
+        }
+    }
+
+    private boolean tableExists(Connection connection) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "select 1 from sqlite_master where type = 'table' and name = 'wiki_embeddings'")) {
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next();
+            }
+        }
+    }
+
+    private boolean hasChunkIndexInPrimaryKey(Connection connection) throws SQLException {
+        try (Statement statement = connection.createStatement();
+                ResultSet info = statement.executeQuery("pragma table_info(wiki_embeddings)")) {
+            while (info.next()) {
+                if ("chunk_index".equalsIgnoreCase(info.getString("name")) && info.getInt("pk") > 0) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private void upsertDocument(Connection connection, String spaceId, WikiEmbeddingDocument embeddingDocument)
@@ -194,30 +266,66 @@ public class SqliteWikiEmbeddingIndexAdapter implements WikiEmbeddingIndexPort {
         WikiIndexedDocument document = embeddingDocument.getDocument();
         try (PreparedStatement statement = connection.prepareStatement(
                 "insert into wiki_embeddings "
-                        + "(space_id, path, id, parent_path, title, body, kind, revision, updated_at, vector) "
-                        + "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
-                        + "on conflict(space_id, path) do update set "
+                        + "(space_id, path, chunk_index, id, parent_path, title, body, chunk_text, "
+                        + "kind, revision, updated_at, embedding_model_id, vector) "
+                        + "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                        + "on conflict(space_id, path, chunk_index) do update set "
                         + "id = excluded.id, parent_path = excluded.parent_path, title = excluded.title, "
-                        + "body = excluded.body, kind = excluded.kind, revision = excluded.revision, "
-                        + "updated_at = excluded.updated_at, vector = excluded.vector")) {
+                        + "body = excluded.body, chunk_text = excluded.chunk_text, kind = excluded.kind, "
+                        + "revision = excluded.revision, updated_at = excluded.updated_at, "
+                        + "embedding_model_id = excluded.embedding_model_id, "
+                        + "vector = excluded.vector")) {
             statement.setString(1, spaceId);
             statement.setString(2, document.getPath());
-            statement.setString(3, document.getId());
-            statement.setString(4, document.getParentPath());
-            statement.setString(5, document.getTitle());
-            statement.setString(6, document.getBody());
-            statement.setString(7, document.getKind().name());
-            statement.setString(8, document.getRevision());
-            statement.setLong(9, toEpochMillis(document.getUpdatedAt()));
-            statement.setBytes(10, toBytes(embeddingDocument.getVector()));
+            statement.setInt(3, embeddingDocument.getChunkIndex());
+            statement.setString(4, document.getId());
+            statement.setString(5, document.getParentPath());
+            statement.setString(6, document.getTitle());
+            statement.setString(7, document.getBody());
+            statement.setString(8, embeddingDocument.getChunkText());
+            statement.setString(9, document.getKind().name());
+            statement.setString(10, document.getRevision());
+            statement.setLong(11, toEpochMillis(document.getUpdatedAt()));
+            statement.setString(12, embeddingDocument.getEmbeddingModelId());
+            statement.setBytes(13, toBytes(embeddingDocument.getVector()));
             statement.executeUpdate();
+        }
+    }
+
+    @Override
+    public synchronized Optional<String> findStoredEmbeddingModelId(String spaceId) {
+        if (!Files.exists(databasePath())) {
+            return Optional.empty();
+        }
+        try (Connection connection = openConnection()) {
+            initializeSchema(connection);
+            try (PreparedStatement statement = connection.prepareStatement(STORED_MODEL_ID_PROBE_SQL)) {
+                statement.setString(1, spaceId);
+                try (ResultSet resultSet = statement.executeQuery()) {
+                    Set<String> modelIds = new LinkedHashSet<>();
+                    while (resultSet.next()) {
+                        String value = resultSet.getString(1);
+                        if (value == null || value.isBlank()) {
+                            return Optional.empty();
+                        }
+                        modelIds.add(value.strip());
+                        if (modelIds.size() > 1) {
+                            return Optional.empty();
+                        }
+                    }
+                    return modelIds.stream().findFirst();
+                }
+            }
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Failed to read stored embedding model id", exception);
         }
     }
 
     private List<StoredEmbeddingDocument> readSpaceDocuments(Connection connection, String spaceId)
             throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(
-                "select id, path, parent_path, title, body, kind, vector from wiki_embeddings where space_id = ?")) {
+                "select id, path, parent_path, title, body, chunk_text, kind, vector "
+                        + "from wiki_embeddings where space_id = ?")) {
             statement.setString(1, spaceId);
             try (ResultSet resultSet = statement.executeQuery()) {
                 List<StoredEmbeddingDocument> documents = new ArrayList<>();
@@ -228,6 +336,7 @@ public class SqliteWikiEmbeddingIndexAdapter implements WikiEmbeddingIndexPort {
                             resultSet.getString("parent_path"),
                             resultSet.getString("title"),
                             resultSet.getString("body"),
+                            resultSet.getString("chunk_text"),
                             WikiNodeKind.valueOf(resultSet.getString("kind")),
                             fromBytes(resultSet.getBytes("vector"))));
                 }
@@ -237,12 +346,18 @@ public class SqliteWikiEmbeddingIndexAdapter implements WikiEmbeddingIndexPort {
     }
 
     private WikiEmbeddingSearchHit toHit(StoredEmbeddingDocument document, List<Double> queryEmbedding) {
+        // The chunk_text — when present — is the actual slice of content that
+        // produced the stored vector, so excerpts should describe it rather
+        // than the raw document body the chunk was cut from.
+        String excerptSource = document.chunkText() != null && !document.chunkText().isBlank()
+                ? document.chunkText()
+                : document.body();
         WikiSearchDocument searchDocument = WikiSearchDocument.builder()
                 .id(document.id())
                 .path(document.path())
                 .parentPath(document.parentPath())
                 .title(document.title())
-                .body(document.body())
+                .body(excerptSource)
                 .kind(document.kind())
                 .build();
         return WikiEmbeddingSearchHit.builder()
@@ -303,7 +418,12 @@ public class SqliteWikiEmbeddingIndexAdapter implements WikiEmbeddingIndexPort {
     }
 
     private double cosineSimilarity(List<Double> left, List<Double> right) {
-        int size = Math.min(left.size(), right.size());
+        if (left.size() != right.size()) {
+            throw new IllegalStateException("Embedding dimension mismatch: stored=" + left.size()
+                    + " query=" + right.size()
+                    + " — the embedding model likely changed; rebuild the embedding index.");
+        }
+        int size = left.size();
         if (size == 0) {
             return 0.0d;
         }
@@ -337,6 +457,7 @@ public class SqliteWikiEmbeddingIndexAdapter implements WikiEmbeddingIndexPort {
             String parentPath,
             String title,
             String body,
+            String chunkText,
             WikiNodeKind kind,
             List<Double> vector) {
     }

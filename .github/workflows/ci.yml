@@ -53,6 +53,31 @@ jobs:
       - name: Run backend integration tests
         run: ./mvnw -Dtest='*IntegrationTest' test
 
+      - name: Check Codecov token availability
+        if: always()
+        id: codecov-token
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        run: |
+          if [[ -n "${CODECOV_TOKEN}" ]]; then
+            echo "available=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "available=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Upload coverage to Codecov
+        if: always() && steps.codecov-token.outputs.available == 'true'
+        uses: codecov/codecov-action@v6
+        with:
+          files: ./target/site/jacoco/jacoco.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+          handle_no_reports_found: true
+
+      - name: Skip Codecov upload
+        if: always() && steps.codecov-token.outputs.available != 'true'
+        run: echo "Skipping Codecov upload because CODECOV_TOKEN is unavailable for this event."
+
       - name: Run frontend tests
         working-directory: frontend
         run: npm run test
@@ -99,21 +124,21 @@ jobs:
         run: ./mvnw -Dskip.frontend=true formatter:validate
 
       - name: Run PMD
-        run: ./mvnw -Dskip.frontend=true pmd:check
+        run: ./mvnw -P strict -Dskip.frontend=true pmd:check
 
       - name: Run SpotBugs
-        run: ./mvnw -Dskip.frontend=true compile spotbugs:check
+        run: ./mvnw -P strict -Dskip.frontend=true compile spotbugs:check
 
       - name: Upload PMD report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pmd-report
           path: target/pmd.xml
 
       - name: Upload SpotBugs report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: spotbugs-report
           path: target/spotbugsXml.xml

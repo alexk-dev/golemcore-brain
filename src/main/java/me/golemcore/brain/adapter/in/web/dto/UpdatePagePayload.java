@@ -18,6 +18,7 @@
 
 package me.golemcore.brain.adapter.in.web.dto;
 
+import java.util.List;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
@@ -32,4 +33,8 @@ public class UpdatePagePayload {
     private String content = "";
 
     private String revision;
+
+    private List<String> tags;
+
+    private String summary;
 }

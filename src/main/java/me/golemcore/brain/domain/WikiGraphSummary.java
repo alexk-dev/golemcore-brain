@@ -16,13 +16,15 @@
  * Contact: alex@kuleshov.tech
  */
 
-package me.golemcore.brain.adapter.in.web.dto;
+package me.golemcore.brain.domain;
 
-import jakarta.validation.constraints.NotBlank;
-import lombok.Data;
+import java.util.List;
+import lombok.Builder;
+import lombok.Value;
 
-@Data
-public class SemanticSearchPayload {
-    @NotBlank
-    private String query;
+@Value
+@Builder
+public class WikiGraphSummary {
+    List<WikiGraphOrphan> orphans;
+    List<WikiLinkStatusItem> dangling;
 }
