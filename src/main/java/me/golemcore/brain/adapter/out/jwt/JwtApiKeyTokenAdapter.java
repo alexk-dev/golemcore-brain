@@ -66,6 +66,7 @@ public class JwtApiKeyTokenAdapter implements ApiKeyTokenPort {
             Claims claims = Jwts.parser()
                     .verifyWith(signingKey())
                     .requireIssuer(wikiProperties.getJwt().getIssuer())
+                    .clockSkewSeconds(60)
                     .build()
                     .parseSignedClaims(token)
                     .getPayload();
