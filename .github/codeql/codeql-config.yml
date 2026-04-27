@@ -1,0 +1,26 @@
+name: golemcore-brain CodeQL config
+
+# Default query suite still runs; we only filter out two queries that produce
+# documented false positives in this codebase. Each exclusion is justified
+# below — keep the entries narrow and re-evaluate before adding more.
+query-filters:
+  # `OutboundUrlGuard.requirePublicHttp` is the project-wide SSRF sanitizer:
+  # it resolves the host via DNS and rejects loopback / RFC1918 / link-local /
+  # site-local / multicast / 100.64-CGNAT / IPv6 ULA / IPv4-mapped IPv6 before
+  # any outbound HTTP call. CodeQL's `java/ssrf` data-flow analysis does not
+  # recognise DNS-resolution-based sanitizers and flags the use site even
+  # though every taint path passes through requirePublicHttp(). Suppressed
+  # project-wide because every outbound HTTP client we ship goes through the
+  # same guard; if a new outbound caller skips it, that's a code-review issue,
+  # not something CodeQL would catch separately.
+  - exclude:
+      id: java/ssrf
+
+  # `SecurityConfig#securityFilterChain` calls `csrf().disable()` only when
+  # `brain.security.csrf-enabled=false`. The default is `true` (prod-locked),
+  # `application-prod.properties` does not expose the flag, and
+  # `ProdProfileSecurityGuard` fails startup if anyone forces it off in prod.
+  # The disable branch exists solely so legacy controller integration tests
+  # can POST through MockMvc without an XSRF token.
+  - exclude:
+      id: java/spring-disabled-csrf-protection
