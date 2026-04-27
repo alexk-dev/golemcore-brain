@@ -20,7 +20,6 @@ package me.golemcore.brain.web;
 
 import jakarta.servlet.http.Cookie;
 import java.nio.file.Path;
-import me.golemcore.brain.web.JwtAuthenticationFilter;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;

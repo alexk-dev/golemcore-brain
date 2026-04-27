@@ -29,6 +29,8 @@ import lombok.Getter;
 @Getter
 public class LoginThrottledException extends RuntimeException {
 
+    private static final long serialVersionUID = 1L;
+
     private final Duration retryAfter;
 
     public LoginThrottledException(Duration retryAfter) {

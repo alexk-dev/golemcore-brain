@@ -43,7 +43,7 @@ public class UserManagementService {
     private final SessionRepository sessionRepository;
     private final AuditLogger auditLogger;
 
-    public java.util.List<PublicUserView> listUsers(Optional<String> sessionToken) {
+    public List<PublicUserView> listUsers(Optional<String> sessionToken) {
         return authService.listUsers(sessionToken);
     }
 

@@ -55,7 +55,7 @@ public final class OutboundUrlGuard {
             throw new IllegalArgumentException("Malformed URL: " + exception.getMessage());
         }
         String scheme = uri.getScheme();
-        if (scheme == null || !(scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https"))) {
+        if (scheme == null || !("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))) {
             throw new IllegalArgumentException("Only http/https URLs are allowed");
         }
         String host = uri.getHost();
