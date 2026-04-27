@@ -42,7 +42,8 @@ const schema = {
   tagNames: [...(defaultSchema.tagNames || []), 'audio', 'video'],
   attributes: {
     ...defaultSchema.attributes,
-    '*': [...(defaultSchema.attributes?.['*'] || []), 'data-line', 'style'],
+    // 'style' intentionally excluded — CSS injection vector for UI-redress and CSS-based exfil.
+    '*': [...(defaultSchema.attributes?.['*'] || []), 'data-line'],
     audio: [...(defaultSchema.attributes?.audio || []), 'controls', 'src'],
     video: [...(defaultSchema.attributes?.video || []), 'controls', 'src', 'preload'],
   },

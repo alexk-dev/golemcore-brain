@@ -58,6 +58,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -72,6 +73,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Space-scoped wiki API used by the web UI and external integrations to manage
@@ -345,10 +347,19 @@ public class WikiController {
         return wikiApplicationService.listAssets(path);
     }
 
+    // Must stay in sync with WikiApplicationService.maxAssetUploadSizeBytes
+    // (advertised to the UI).
+    private static final long MAX_ASSET_UPLOAD_BYTES = 25L * 1024L * 1024L;
+
     @PostMapping(value = "/pages/assets", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public WikiAsset uploadAsset(@PathVariable String slug, @RequestParam(name = "path") String path,
             @RequestPart("file") MultipartFile file, HttpServletRequest request) throws IOException {
         requireEdit(request);
+        if (file.getSize() > MAX_ASSET_UPLOAD_BYTES) {
+            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,
+                    "File exceeds the maximum upload size of " + MAX_ASSET_UPLOAD_BYTES + " bytes");
+        }
+        AssetMimeGuard.validate(file);
         return wikiApplicationService.uploadAsset(path, file.getOriginalFilename(), file.getContentType(),
                 file.getInputStream());
     }

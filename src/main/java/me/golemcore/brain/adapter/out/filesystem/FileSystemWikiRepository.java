@@ -1369,18 +1369,35 @@ public class FileSystemWikiRepository implements WikiRepository {
     }
 
     private Path resolveAssetPath(WikiNodeReference nodeReference, String assetName) {
-        Path directPageAsset = getAssetsDirectory(nodeReference).resolve(assetName);
+        Path directDirectory = getAssetsDirectory(nodeReference);
+        Path directPageAsset = directDirectory.resolve(assetName);
+        assertContainedIn(directDirectory, directPageAsset);
         if (Files.exists(directPageAsset)) {
             return directPageAsset;
         }
         if (nodeReference.getKind().isContainer()) {
             throw new WikiNotFoundException("Asset not found: " + assetName);
         }
-        Path sectionAsset = nodeReference.getParentDirectory().resolve(".section-assets").resolve(assetName);
+        Path sectionDirectory = nodeReference.getParentDirectory().resolve(".section-assets");
+        Path sectionAsset = sectionDirectory.resolve(assetName);
+        assertContainedIn(sectionDirectory, sectionAsset);
         if (Files.exists(sectionAsset)) {
             return sectionAsset;
         }
         throw new WikiNotFoundException("Asset not found: " + assetName);
+    }
+
+    /**
+     * Defence-in-depth post-check: even after sanitizeFileName() rejects '..' and
+     * separators, verify the resolved absolute path stays inside the expected asset
+     * directory before any file IO.
+     */
+    private static void assertContainedIn(Path container, Path resolved) {
+        Path normalizedContainer = container.toAbsolutePath().normalize();
+        Path normalizedResolved = resolved.toAbsolutePath().normalize();
+        if (!normalizedResolved.startsWith(normalizedContainer)) {
+            throw new IllegalArgumentException("Invalid asset path");
+        }
     }
 
     private Path getAssetsDirectory(WikiNodeReference nodeReference) {
