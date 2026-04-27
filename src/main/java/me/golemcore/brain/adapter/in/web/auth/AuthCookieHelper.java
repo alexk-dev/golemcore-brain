@@ -22,12 +22,25 @@ import me.golemcore.brain.application.service.auth.AuthService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Optional;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Component;
 
 @Component
 public class AuthCookieHelper {
+
+    /**
+     * Whether the session cookie carries the {@code Secure} attribute. Default true
+     * (prod). Must be set to false only when running locally over plaintext HTTP,
+     * otherwise the browser will silently drop the cookie and login will appear to
+     * succeed without sticking.
+     */
+    @Value("${brain.security.cookie-secure:true}")
+    private boolean cookieSecure;
 
     public Optional<String> readSessionToken(HttpServletRequest request) {
         if (request.getCookies() == null) {
@@ -40,18 +53,24 @@ public class AuthCookieHelper {
     }
 
     public void writeSessionToken(HttpServletResponse response, String token, long maxAgeSeconds) {
-        Cookie cookie = new Cookie(AuthService.SESSION_COOKIE_NAME, token);
-        cookie.setHttpOnly(true);
-        cookie.setPath("/");
-        cookie.setMaxAge((int) maxAgeSeconds);
-        response.addCookie(cookie);
+        ResponseCookie cookie = ResponseCookie.from(AuthService.SESSION_COOKIE_NAME, token)
+                .httpOnly(true)
+                .secure(cookieSecure)
+                .sameSite("Lax")
+                .path("/")
+                .maxAge(Duration.ofSeconds(maxAgeSeconds))
+                .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
     }
 
     public void clearSessionToken(HttpServletResponse response) {
-        Cookie cookie = new Cookie(AuthService.SESSION_COOKIE_NAME, "");
-        cookie.setHttpOnly(true);
-        cookie.setPath("/");
-        cookie.setMaxAge(0);
-        response.addCookie(cookie);
+        ResponseCookie cookie = ResponseCookie.from(AuthService.SESSION_COOKIE_NAME, "")
+                .httpOnly(true)
+                .secure(cookieSecure)
+                .sameSite("Lax")
+                .path("/")
+                .maxAge(Duration.ZERO)
+                .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
     }
 }
