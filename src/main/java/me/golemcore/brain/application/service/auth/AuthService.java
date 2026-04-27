@@ -70,13 +70,22 @@ public class AuthService {
         if (!passwordHasher.matches(password, user.getPasswordHash())) {
             throw new AuthUnauthorizedException("Invalid credentials");
         }
-        sessionRepository.deleteByUserId(user.getId());
-        UserSession session = createSession(user.getId());
+        WikiUser activeUser = upgradeHashIfNeeded(user, password);
+        sessionRepository.deleteByUserId(activeUser.getId());
+        UserSession session = createSession(activeUser.getId());
         sessionRepository.save(session);
         return AuthResponse.builder()
                 .message(session.getToken())
-                .user(toPublicView(user))
+                .user(toPublicView(activeUser))
                 .build();
+    }
+
+    private WikiUser upgradeHashIfNeeded(WikiUser user, String rawPassword) {
+        if (!passwordHasher.needsRehash(user.getPasswordHash())) {
+            return user;
+        }
+        WikiUser upgraded = user.toBuilder().passwordHash(passwordHasher.hash(rawPassword)).build();
+        return userRepository.save(upgraded);
     }
 
     public AuthResponse changePassword(Optional<String> sessionToken, String currentPassword, String newPassword) {

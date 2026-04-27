@@ -20,6 +20,7 @@ package me.golemcore.brain.application.service.auth;
 
 import me.golemcore.brain.adapter.out.filesystem.auth.FileSessionRepository;
 import me.golemcore.brain.adapter.out.filesystem.auth.FileUserRepository;
+import me.golemcore.brain.adapter.out.security.BcryptPasswordEncoderAdapter;
 import me.golemcore.brain.config.WikiProperties;
 import me.golemcore.brain.domain.auth.AuthConfigResponse;
 import me.golemcore.brain.domain.auth.AuthResponse;
@@ -29,6 +30,7 @@ import java.nio.file.Path;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -51,7 +53,9 @@ class AuthServiceTest {
         properties.setAdminEmail("admin@example.com");
         properties.setAdminPassword("admin");
 
-        PasswordHasher passwordHasher = new PasswordHasher();
+        // Cost-4 BCrypt keeps the test under a second; production uses cost 12.
+        PasswordHasher passwordHasher = new PasswordHasher(
+                new BcryptPasswordEncoderAdapter(new BCryptPasswordEncoder(4)));
         FileUserRepository userRepository = new FileUserRepository(properties);
         FileSessionRepository sessionRepository = new FileSessionRepository(properties);
         AuthService authService = new AuthService(properties, userRepository, sessionRepository, passwordHasher);
