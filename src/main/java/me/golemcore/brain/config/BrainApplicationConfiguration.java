@@ -33,6 +33,7 @@ import me.golemcore.brain.application.port.out.ModelRegistryDocumentPort;
 import me.golemcore.brain.application.port.out.ModelRegistryRemotePort;
 import me.golemcore.brain.application.port.out.SpaceRepository;
 import me.golemcore.brain.application.port.out.WikiAccessStatsPort;
+import me.golemcore.brain.application.port.out.auth.PasswordEncoderPort;
 import me.golemcore.brain.application.port.out.WikiEmbeddingIndexPort;
 import me.golemcore.brain.application.port.out.WikiFullTextIndexPort;
 import me.golemcore.brain.application.port.out.WikiDocumentCatalogPort;
@@ -41,8 +42,10 @@ import me.golemcore.brain.application.port.out.auth.SessionRepository;
 import me.golemcore.brain.application.port.out.auth.UserRepository;
 import me.golemcore.brain.application.service.WikiApplicationService;
 import me.golemcore.brain.application.service.apikey.ApiKeyService;
+import me.golemcore.brain.application.service.audit.AuditLogger;
 import me.golemcore.brain.application.service.chat.SpaceChatService;
 import me.golemcore.brain.application.service.auth.AuthService;
+import me.golemcore.brain.application.service.auth.LoginRateLimiter;
 import me.golemcore.brain.application.service.auth.PasswordHasher;
 import me.golemcore.brain.application.service.dynamicapi.DynamicSpaceApiService;
 import me.golemcore.brain.application.service.index.WikiIndexReconciliationScheduler;
@@ -77,8 +80,18 @@ public class BrainApplicationConfiguration {
     }
 
     @Bean
-    public PasswordHasher passwordHasher() {
-        return new PasswordHasher();
+    public PasswordHasher passwordHasher(PasswordEncoderPort passwordEncoderPort) {
+        return new PasswordHasher(passwordEncoderPort);
+    }
+
+    @Bean
+    public AuditLogger auditLogger() {
+        return new AuditLogger();
+    }
+
+    @Bean
+    public LoginRateLimiter loginRateLimiter(Clock clock) {
+        return new LoginRateLimiter(clock);
     }
 
     @Bean(initMethod = "initialize")
@@ -129,8 +142,9 @@ public class BrainApplicationConfiguration {
     public ApiKeyService apiKeyService(
             ApiKeyRepository apiKeyRepository,
             SpaceRepository spaceRepository,
-            ApiKeyTokenPort apiKeyTokenPort) {
-        return new ApiKeyService(apiKeyRepository, spaceRepository, apiKeyTokenPort);
+            ApiKeyTokenPort apiKeyTokenPort,
+            AuditLogger auditLogger) {
+        return new ApiKeyService(apiKeyRepository, spaceRepository, apiKeyTokenPort, auditLogger);
     }
 
     @Bean
@@ -200,7 +214,8 @@ public class BrainApplicationConfiguration {
             UserRepository userRepository,
             PasswordHasher passwordHasher,
             AuthService authService,
-            SessionRepository sessionRepository) {
-        return new UserManagementService(userRepository, passwordHasher, authService, sessionRepository);
+            SessionRepository sessionRepository,
+            AuditLogger auditLogger) {
+        return new UserManagementService(userRepository, passwordHasher, authService, sessionRepository, auditLogger);
     }
 }

@@ -474,7 +474,7 @@
   }
 
   .markdown-editor__preview-inner {
-    @apply p-4;
+    @apply prose prose-base prose-invert max-w-full p-4 text-foreground;
   }
 
   .markdown-toolbar {

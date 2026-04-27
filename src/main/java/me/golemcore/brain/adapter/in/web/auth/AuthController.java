@@ -22,7 +22,11 @@ import me.golemcore.brain.adapter.in.web.auth.dto.ChangePasswordRequest;
 import me.golemcore.brain.adapter.in.web.auth.dto.CreateUserRequest;
 import me.golemcore.brain.adapter.in.web.auth.dto.LoginRequest;
 import me.golemcore.brain.adapter.in.web.auth.dto.UpdateUserRequest;
+import me.golemcore.brain.application.service.audit.AuditLogger;
 import me.golemcore.brain.application.service.auth.AuthService;
+import me.golemcore.brain.application.service.auth.AuthUnauthorizedException;
+import me.golemcore.brain.application.service.auth.LoginRateLimiter;
+import me.golemcore.brain.application.service.auth.LoginThrottledException;
 import me.golemcore.brain.application.service.user.UserManagementService;
 import me.golemcore.brain.config.WikiProperties;
 import me.golemcore.brain.domain.auth.AuthConfigResponse;
@@ -33,6 +37,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -51,6 +56,16 @@ public class AuthController {
     private final AuthCookieHelper authCookieHelper;
     private final UserManagementService userManagementService;
     private final WikiProperties wikiProperties;
+    private final LoginRateLimiter loginRateLimiter;
+    private final AuditLogger auditLogger;
+
+    /**
+     * Whether to honour {@code X-Forwarded-For} when computing the rate-limit key.
+     * Must only be enabled when the deployment runs behind a trusted reverse proxy
+     * that overwrites the header.
+     */
+    @Value("${brain.security.trust-forwarded-for:false}")
+    private boolean trustForwardedFor;
 
     @GetMapping("/config")
     public AuthConfigResponse getConfig(HttpServletRequest request) {
@@ -58,13 +73,40 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public AuthResponse login(@Valid @RequestBody LoginRequest requestBody, HttpServletResponse response) {
-        AuthResponse authResponse = authService.login(requestBody.getIdentifier(), requestBody.getPassword());
-        authCookieHelper.writeSessionToken(response, authResponse.getMessage(), wikiProperties.getSessionTtlSeconds());
-        return AuthResponse.builder()
-                .message("Logged in")
-                .user(authResponse.getUser())
-                .build();
+    public AuthResponse login(@Valid @RequestBody LoginRequest requestBody, HttpServletRequest request,
+            HttpServletResponse response) {
+        String ip = clientIp(request);
+        String identifier = requestBody.getIdentifier();
+        try {
+            loginRateLimiter.requireNotBlocked(ip, identifier);
+        } catch (LoginThrottledException throttled) {
+            auditLogger.loginThrottled(ip, identifier);
+            throw throttled;
+        }
+        try {
+            AuthResponse authResponse = authService.login(identifier, requestBody.getPassword());
+            loginRateLimiter.recordSuccess(ip, identifier);
+            authCookieHelper.writeSessionToken(response, authResponse.getMessage(),
+                    wikiProperties.getSessionTtlSeconds());
+            return AuthResponse.builder()
+                    .message("Logged in")
+                    .user(authResponse.getUser())
+                    .build();
+        } catch (AuthUnauthorizedException exception) {
+            loginRateLimiter.recordFailure(ip, identifier);
+            throw exception;
+        }
+    }
+
+    private String clientIp(HttpServletRequest request) {
+        if (trustForwardedFor) {
+            String forwarded = request.getHeader("X-Forwarded-For");
+            if (forwarded != null && !forwarded.isBlank()) {
+                int comma = forwarded.indexOf(',');
+                return (comma < 0 ? forwarded : forwarded.substring(0, comma)).trim();
+            }
+        }
+        return request.getRemoteAddr();
     }
 
     @PostMapping("/logout")

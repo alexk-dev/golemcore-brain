@@ -36,6 +36,19 @@
         </Or>
     </Match>
 
+    <!-- Spring Security's SecurityFilterChain @Bean signature mandates `throws Exception`. -->
+    <Match>
+        <Bug pattern="THROWS_METHOD_THROWS_CLAUSE_BASIC_EXCEPTION" />
+        <Class name="me.golemcore.brain.config.SecurityConfig" />
+    </Match>
+
+    <!-- Header value is validated against [A-Za-z0-9._-]{0,64} before being echoed back; the
+         regex eliminates the CRLF / control-char injection vector this rule guards against. -->
+    <Match>
+        <Bug pattern="HRS_REQUEST_PARAMETER_TO_HTTP_HEADER" />
+        <Class name="me.golemcore.brain.web.RequestIdFilter" />
+    </Match>
+
     <!-- Scheduler dispatch must restore coalescing state before propagating executor rejection. -->
     <Match>
         <Bug pattern="THROWS_METHOD_THROWS_RUNTIMEEXCEPTION" />

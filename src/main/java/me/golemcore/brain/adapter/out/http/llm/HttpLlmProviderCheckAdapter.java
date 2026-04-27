@@ -20,6 +20,7 @@ package me.golemcore.brain.adapter.out.http.llm;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import me.golemcore.brain.adapter.out.http.OutboundUrlGuard;
 import me.golemcore.brain.application.port.out.LlmProviderCheckPort;
 import me.golemcore.brain.domain.Secret;
 import me.golemcore.brain.domain.llm.LlmApiType;
@@ -37,7 +38,6 @@ import java.time.Duration;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -47,13 +47,20 @@ public class HttpLlmProviderCheckAdapter implements LlmProviderCheckPort {
 
     private static final String USER_AGENT = "golemcore-brain-llm-settings";
     private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(30);
-    private static final Pattern HTTP_URI_PATTERN = Pattern.compile("(?i)^https?://[^\\s]+$");
 
+    // Redirects are intentionally disabled: the resolved peer is validated against
+    // the SSRF
+    // block-list before sending, but a redirect would point at an unvalidated host.
     private final HttpClient httpClient = HttpClient.newBuilder()
-            .followRedirects(HttpClient.Redirect.NORMAL)
+            .followRedirects(HttpClient.Redirect.NEVER)
             .connectTimeout(DEFAULT_TIMEOUT)
             .build();
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final OutboundUrlGuard outboundUrlGuard;
+
+    public HttpLlmProviderCheckAdapter(OutboundUrlGuard outboundUrlGuard) {
+        this.outboundUrlGuard = outboundUrlGuard;
+    }
 
     @Override
     public LlmProviderCheckResult check(String providerName, LlmProviderConfig providerConfig) {
@@ -73,10 +80,8 @@ public class HttpLlmProviderCheckAdapter implements LlmProviderCheckPort {
                 return new LlmProviderCheckResult(true, modelListingMessage(modelIds), 200, modelIds);
             }
 
-            if (!HTTP_URI_PATTERN.matcher(uri).matches()) {
-                throw new IllegalArgumentException("LLM endpoint must use HTTP or HTTPS");
-            }
-            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(java.net.URI.create(uri))
+            java.net.URI validatedUri = outboundUrlGuard.requirePublicHttp(uri);
+            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(validatedUri)
                     .GET()
                     .timeout(timeout)
                     .header("Accept", "application/json")
@@ -108,9 +113,7 @@ public class HttpLlmProviderCheckAdapter implements LlmProviderCheckPort {
 
     private List<String> listOpenAiModels(LlmProviderConfig providerConfig, String apiKey, Duration timeout) {
         String baseUrl = LlmEndpointResolver.canonicalBaseUrl(providerConfig.getBaseUrl(), "https://api.openai.com/v1");
-        if (!HTTP_URI_PATTERN.matcher(baseUrl).matches()) {
-            throw new IllegalArgumentException("LLM endpoint must use HTTP or HTTPS");
-        }
+        outboundUrlGuard.requirePublicHttp(baseUrl);
         return OpenAiModelCatalog.builder()
                 .apiKey(apiKey)
                 .baseUrl(baseUrl)

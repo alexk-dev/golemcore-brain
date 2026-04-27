@@ -113,12 +113,38 @@ export function assetUrl(suffix: string, spaceSlug = currentSpaceSlug): string {
   return spaceUrl(suffix, spaceSlug)
 }
 
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+
+function readCookie(name: string): string | null {
+  if (typeof document === 'undefined') {
+    return null
+  }
+  const prefix = name + '='
+  for (const part of document.cookie.split(';')) {
+    const trimmed = part.trim()
+    if (trimmed.startsWith(prefix)) {
+      return decodeURIComponent(trimmed.slice(prefix.length))
+    }
+  }
+  return null
+}
+
+function csrfHeader(method: string): Record<string, string> {
+  if (SAFE_METHODS.has(method.toUpperCase())) {
+    return {}
+  }
+  const token = readCookie('XSRF-TOKEN')
+  return token ? { 'X-XSRF-TOKEN': token } : {}
+}
+
 async function readJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
   const requestInput = typeof input === 'string' ? withAppBasePath(input) : input
+  const method = (init?.method ?? 'GET').toUpperCase()
   const response = await fetch(requestInput, {
     credentials: 'include',
     headers: {
       ...(init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+      ...csrfHeader(method),
       ...(init?.headers ?? {}),
     },
     ...init,

@@ -22,6 +22,7 @@ import me.golemcore.brain.application.exception.WikiNotFoundException;
 import me.golemcore.brain.application.port.out.ApiKeyRepository;
 import me.golemcore.brain.application.port.out.ApiKeyTokenPort;
 import me.golemcore.brain.application.port.out.SpaceRepository;
+import me.golemcore.brain.application.service.audit.AuditLogger;
 import me.golemcore.brain.application.service.auth.AuthAccessDeniedException;
 import me.golemcore.brain.domain.apikey.ApiKey;
 import me.golemcore.brain.domain.auth.AuthContext;
@@ -41,6 +42,7 @@ public class ApiKeyService {
     private final ApiKeyRepository apiKeyRepository;
     private final SpaceRepository spaceRepository;
     private final ApiKeyTokenPort apiKeyTokenPort;
+    private final AuditLogger auditLogger;
 
     public IssuedApiKey issueGlobal(AuthContext authContext, String name, Set<UserRole> roles, Instant expiresAt) {
         requireGlobalAdmin(authContext);
@@ -54,7 +56,17 @@ public class ApiKeyService {
         if (!authContext.canAccessSpace(space.getId(), UserRole.ADMIN)) {
             throw new AuthAccessDeniedException("Admin access to space '" + spaceSlug + "' required");
         }
-        return issue(authContext, name, space.getId(), normalizeRoles(roles), expiresAt);
+        Set<UserRole> normalized = normalizeRoles(roles);
+        // requestedRoles ⊆ requesterRoles: strictly verify that the caller can grant
+        // every role
+        // they're putting on the new API key.
+        for (UserRole requested : normalized) {
+            if (!authContext.canAccessSpace(space.getId(), requested)) {
+                throw new AuthAccessDeniedException(
+                        "Cannot issue key with role " + requested + " (insufficient permissions)");
+            }
+        }
+        return issue(authContext, name, space.getId(), normalized, expiresAt);
     }
 
     public List<ApiKey> listGlobal(AuthContext authContext) {
@@ -89,6 +101,7 @@ public class ApiKeyService {
                 .expiresAt(key.getExpiresAt())
                 .revoked(true)
                 .build());
+        auditLogger.apiKeyRevoked(authContext, key.getId());
     }
 
     public ApiKey findActive(String jti) {
@@ -119,6 +132,9 @@ public class ApiKeyService {
                 .build();
         apiKeyRepository.save(apiKey);
         String token = apiKeyTokenPort.issue(apiKey);
+        auditLogger.apiKeyIssued(authContext, apiKey.getId(),
+                spaceId == null ? "global" : spaceId,
+                roles.toString());
         return new IssuedApiKey(apiKey, token);
     }
 

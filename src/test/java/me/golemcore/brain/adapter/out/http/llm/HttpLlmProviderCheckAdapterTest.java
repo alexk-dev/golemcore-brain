@@ -20,6 +20,7 @@ package me.golemcore.brain.adapter.out.http.llm;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import me.golemcore.brain.adapter.out.http.OutboundUrlGuard;
 import me.golemcore.brain.domain.Secret;
 import me.golemcore.brain.domain.llm.LlmApiType;
 import me.golemcore.brain.domain.llm.LlmProviderCheckResult;
@@ -66,7 +67,7 @@ class HttpLlmProviderCheckAdapterTest {
         server.createContext("/v1/models", this::respondWithOpenAiModels);
         server.start();
         try {
-            HttpLlmProviderCheckAdapter adapter = new HttpLlmProviderCheckAdapter();
+            HttpLlmProviderCheckAdapter adapter = new HttpLlmProviderCheckAdapter(new OutboundUrlGuard(true));
 
             LlmProviderCheckResult result = adapter.check("openai", LlmProviderConfig.builder()
                     .apiKey(Secret.of("sk-test"))
