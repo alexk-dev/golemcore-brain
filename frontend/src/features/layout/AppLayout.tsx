@@ -129,11 +129,6 @@ export function AppLayout({
           </div>
           <div className="app-layout__editor-toolbar-container">
             <Toolbar />
-            {canCreate ? (
-              <Link to="/import" className="action-button-secondary hidden md:inline-flex">
-                Import
-              </Link>
-            ) : null}
             {currentUsername ? null : <SpaceSwitcher />}
             {currentUsername ? (
               <UserMenu

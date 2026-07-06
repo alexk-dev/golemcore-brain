@@ -17,10 +17,12 @@
  */
 
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from './App'
+import * as api from './lib/api'
 import { useEditorStore } from './stores/editor'
 import { useSpaceStore } from './stores/space'
 import { useTreeStore } from './stores/tree'
@@ -46,6 +48,15 @@ vi.mock('./lib/api', () => ({
     siteTitle: 'GolemCore Brain',
     rootPath: '',
     imageVersion: 'sha-1234567',
+  })),
+  login: vi.fn(async () => ({
+    message: 'Logged in',
+    user: {
+      id: '1',
+      username: 'admin',
+      email: 'admin@example.com',
+      role: 'ADMIN',
+    },
   })),
   getTree: vi.fn(async () => ({
     id: 'root',
@@ -113,6 +124,27 @@ vi.mock('./lib/api', () => ({
 
 describe('App', () => {
   beforeEach(() => {
+    vi.mocked(api.listSpaces).mockClear()
+    vi.mocked(api.listSpaces).mockResolvedValue([
+      { id: 's1', slug: 'default', name: 'Default', createdAt: '2026-01-01T00:00:00Z' },
+      { id: 's2', slug: 'docs', name: 'Docs', createdAt: '2026-01-01T00:00:00Z' },
+    ])
+    vi.mocked(api.getAuthConfig).mockClear()
+    vi.mocked(api.getAuthConfig).mockResolvedValue({
+      authDisabled: true,
+      publicAccess: true,
+      user: null,
+    })
+    vi.mocked(api.login).mockClear()
+    vi.mocked(api.login).mockResolvedValue({
+      message: 'Logged in',
+      user: {
+        id: '1',
+        username: 'admin',
+        email: 'admin@example.com',
+        role: 'ADMIN',
+      },
+    })
     useTreeStore.setState({
       tree: null,
       loading: false,
@@ -149,6 +181,7 @@ describe('App', () => {
       authDisabled: true,
       publicAccess: true,
       currentUser: null,
+      authResolved: false,
     })
   })
 
@@ -173,6 +206,37 @@ describe('App', () => {
 
     expect(await screen.findByRole('button', { name: 'Switch space, current space Default' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Account menu/ })).not.toBeInTheDocument()
+  })
+
+  it('loads spaces after login so the account menu can switch spaces immediately', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.getAuthConfig).mockResolvedValueOnce({
+      authDisabled: false,
+      publicAccess: false,
+      user: null,
+    })
+    vi.mocked(api.listSpaces).mockClear()
+
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    const signInButton = await screen.findByRole('button', { name: /Sign in/i })
+    expect(api.listSpaces).not.toHaveBeenCalled()
+
+    fireEvent.submit(signInButton)
+
+    await waitFor(() => {
+      expect(api.listSpaces).toHaveBeenCalledTimes(1)
+    })
+
+    await user.click(await screen.findByRole('button', { name: /Account menu for admin/i }))
+
+    const group = await screen.findByRole('group', { name: /Switch space/i })
+    expect(within(group).getByRole('menuitemradio', { name: 'Default' })).toBeInTheDocument()
+    expect(within(group).getByRole('menuitemradio', { name: 'Docs' })).toBeInTheDocument()
   })
 
   it('renders the shell and loads the root page without crashing', async () => {
@@ -222,6 +286,20 @@ describe('App', () => {
 
     const editButton = await screen.findByRole('button', { name: 'Edit page' })
     fireEvent.click(editButton)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Close editor' })).toBeInTheDocument()
+    })
+  })
+
+  it('opens the root page editor from the global edit action', async () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit page' }))
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Close editor' })).toBeInTheDocument()

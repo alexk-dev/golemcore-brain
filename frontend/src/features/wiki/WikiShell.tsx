@@ -17,7 +17,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { FileSearch, MessageCircle, Pencil, Search } from 'lucide-react'
+import { FileSearch, MessageCircle, Pencil, Search, Upload } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -77,6 +77,7 @@ export function WikiShell({ children }: WikiShellProps) {
   const authDisabled = useUiStore((state) => state.authDisabled)
   const currentUser = useUiStore((state) => state.currentUser)
   const publicAccess = useUiStore((state) => state.publicAccess)
+  const authResolved = useUiStore((state) => state.authResolved)
   const setAuthConfig = useUiStore((state) => state.setAuthConfig)
   const setCurrentUser = useUiStore((state) => state.setCurrentUser)
   const reloadSpaces = useSpaceStore((state) => state.reloadSpaces)
@@ -90,20 +91,30 @@ export function WikiShell({ children }: WikiShellProps) {
   }, [])
 
   useEffect(() => {
-    void reloadSpaces()
-      .then(() => reloadTree())
-      .catch((error: Error) => toast.error(error.message))
     void getConfig()
       .then((response) => setConfig(response))
       .catch((error: Error) => toast.error(error.message))
     void getAuthConfig()
       .then((response) => setAuthConfig(response))
       .catch((error: Error) => toast.error(error.message))
-  }, [reloadSpaces, reloadTree, setAuthConfig])
+  }, [setAuthConfig])
+
+  const canLoadSpaceData = authResolved && (authDisabled || publicAccess || currentUser !== null)
+  const currentUserId = currentUser?.id ?? null
 
   useEffect(() => {
+    if (!canLoadSpaceData) {
+      return
+    }
+    void reloadSpaces().catch((error: Error) => toast.error(error.message))
+  }, [canLoadSpaceData, currentUserId, reloadSpaces])
+
+  useEffect(() => {
+    if (!canLoadSpaceData) {
+      return
+    }
     void reloadTree().catch((error: Error) => toast.error(error.message))
-  }, [activeSpaceSlug, reloadTree])
+  }, [activeSpaceSlug, canLoadSpaceData, reloadTree])
 
   const rawRoutePath = useMemo(() => normalizeWikiPath(location.pathname), [location.pathname])
   const isEditorRoute = rawRoutePath === 'e' || rawRoutePath.startsWith('e/')
@@ -116,6 +127,7 @@ export function WikiShell({ children }: WikiShellProps) {
   const canManageUsers = authDisabled || currentUser?.role === 'ADMIN'
   const canAccessAccount = authDisabled || currentUser !== null
   const isAnonymousPublicReader = !authDisabled && publicAccess && currentUser === null
+  const canCreate = canEdit && !isAnonymousPublicReader
   const isUtilityRoute = ['login', 'account', 'users', 'import', 'spaces', 'api-keys', 'dynamic-apis', 'llm-settings', 'chat'].some((route) => currentPath === route || currentPath.startsWith(route + '/'))
   const editorHasUnsavedChanges =
     isEditorRoute &&
@@ -289,6 +301,15 @@ export function WikiShell({ children }: WikiShellProps) {
       onRun: () => navigate('/chat'),
     },
     {
+      id: 'import',
+      label: 'Import',
+      title: 'Import markdown',
+      icon: <Upload size={16} />,
+      hidden: !canCreate,
+      disabled: !canCreate,
+      onRun: () => navigate('/import'),
+    },
+    {
       id: 'toggle-sidebar',
       label: 'Toggle sidebar',
       title: 'Toggle sidebar',
@@ -297,7 +318,7 @@ export function WikiShell({ children }: WikiShellProps) {
       hidden: true,
       onRun: toggleSidebar,
     },
-  ], [canEditCurrentPage, currentPage?.path, currentPath, handleEdit, navigate, setQuickSwitcherOpen, setSearchOpen, toggleSidebar])
+  ], [canCreate, canEditCurrentPage, currentPage?.path, currentPath, handleEdit, navigate, setQuickSwitcherOpen, setSearchOpen, toggleSidebar])
 
   useToolbarActions(toolbarActions)
 
@@ -334,7 +355,7 @@ export function WikiShell({ children }: WikiShellProps) {
         currentUsername={currentUser?.username ?? null}
         canManageUsers={canManageUsers}
         canAccessAccount={canAccessAccount}
-        canCreate={canEdit && !isAnonymousPublicReader}
+        canCreate={canCreate}
         canEditCurrent={canEditCurrentPage}
         editorTitle={isEditorRoute ? editorTitle : null}
         editorPath={isEditorRoute ? editorPage?.path ?? currentPath : null}

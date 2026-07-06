@@ -16,9 +16,12 @@
  * Contact: alex@kuleshov.tech
  */
 
-import { useEffect } from 'react'
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import { MoreHorizontal } from 'lucide-react'
+import { useEffect, useState } from 'react'
 
 import { matchesToolbarHotkey, useToolbarStore } from './toolbarStore'
+import type { ToolbarAction } from './toolbarStore'
 
 function buttonClassName(variant: 'primary' | 'secondary' | 'danger' = 'secondary') {
   if (variant === 'primary') {
@@ -30,8 +33,32 @@ function buttonClassName(variant: 'primary' | 'secondary' | 'danger' = 'secondar
   return 'action-button-secondary'
 }
 
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(() => (
+    typeof window === 'undefined' ? false : window.matchMedia(query).matches
+  ))
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined
+    }
+    const mediaQuery = window.matchMedia(query)
+    const handleChange = () => setMatches(mediaQuery.matches)
+    handleChange()
+    mediaQuery.addEventListener('change', handleChange)
+    return () => mediaQuery.removeEventListener('change', handleChange)
+  }, [query])
+
+  return matches
+}
+
+function actionTitle(action: ToolbarAction) {
+  return action.title ?? action.label
+}
+
 export function Toolbar() {
   const actions = useToolbarStore((state) => state.actions)
+  const isDesktop = useMediaQuery('(min-width: 768px)')
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -49,10 +76,15 @@ export function Toolbar() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [actions])
 
+  const visibleActions = actions.filter((action) => !action.hidden)
+  const mobilePrimaryActions = visibleActions.filter((action) => action.variant === 'primary' || action.id === 'search')
+  const mobileOverflowActions = visibleActions.filter((action) => !mobilePrimaryActions.some((item) => item.id === action.id))
+  const renderedActions = isDesktop ? visibleActions : mobilePrimaryActions
+
   return (
     <>
-      {actions.filter((action) => !action.hidden).map((action) => {
-        const title = action.title ?? action.label
+      {renderedActions.map((action) => {
+        const title = actionTitle(action)
         return (
           <button
             key={action.id}
@@ -64,10 +96,42 @@ export function Toolbar() {
             aria-label={title}
           >
             {action.icon}
-            <span className="hidden md:inline">{action.label}</span>
+            <span className={isDesktop ? '' : 'sr-only'}>{action.label}</span>
           </button>
         )
       })}
+      {!isDesktop && mobileOverflowActions.length > 0 ? (
+        <DropdownMenu.Root modal={false}>
+          <DropdownMenu.Trigger asChild>
+            <button type="button" className="action-button-secondary" aria-label="More actions" title="More actions">
+              <MoreHorizontal size={16} aria-hidden="true" />
+            </button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content align="end" sideOffset={6} className="toolbar-overflow__content">
+              {mobileOverflowActions.map((action) => {
+                const title = actionTitle(action)
+                return (
+                  <DropdownMenu.Item
+                    key={action.id}
+                    className="toolbar-overflow__item"
+                    disabled={action.disabled}
+                    onSelect={(event) => {
+                      event.preventDefault()
+                      action.onRun()
+                    }}
+                  >
+                    {action.icon}
+                    <span>{action.label}</span>
+                    {action.hotkeyLabel ? <span className="toolbar-overflow__shortcut">{action.hotkeyLabel}</span> : null}
+                    <span className="sr-only">{title}</span>
+                  </DropdownMenu.Item>
+                )
+              })}
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
+      ) : null}
     </>
   )
 }
