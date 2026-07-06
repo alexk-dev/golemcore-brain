@@ -128,82 +128,97 @@ export function LinkInfo() {
     <div className="backlinks__pane">
       <div className="backlinks__content">
         <div className="backlinks__group">
-          <div className="backlinks__group-title">Backlinks</div>
-          {linkStatus.backlinks.length === 0 ? (
-            <p className="backlinks__empty">No pages reference this page.</p>
-          ) : (
-            <ul>
-              {linkStatus.backlinks.map((item) => (
-                <li key={`${item.fromPageId}-${item.toPath}`} className="backlinks__item">
-                  {item.fromPath ? (
-                    <RouterLink to={pathToRoute(item.fromPath)}>{item.fromTitle ?? item.fromPath}</RouterLink>
-                  ) : (
-                    <span>{item.fromTitle ?? 'Unknown page'}</span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
+          <div className="backlinks__group-title">
+            <span>Backlinks</span>
+            <span className="backlinks__count">{linkStatus.backlinks.length}</span>
+          </div>
+          <div className="backlinks__scroll custom-scrollbar">
+            {linkStatus.backlinks.length === 0 ? (
+              <p className="backlinks__empty">No pages reference this page.</p>
+            ) : (
+              <ul>
+                {linkStatus.backlinks.map((item) => (
+                  <li key={`${item.fromPageId}-${item.toPath}`} className="backlinks__item">
+                    {item.fromPath ? (
+                      <RouterLink to={pathToRoute(item.fromPath)}>{item.fromTitle ?? item.fromPath}</RouterLink>
+                    ) : (
+                      <span>{item.fromTitle ?? 'Unknown page'}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
         <div className="backlinks__group">
-          <div className="backlinks__group-title">Outgoing links</div>
-          {linkStatus.outgoings.length === 0 && linkStatus.brokenOutgoings.length === 0 ? (
-            <p className="backlinks__empty">No outgoing links on this page.</p>
-          ) : (
-            <ul>
-              {linkStatus.outgoings.map((item) => (
-                <li key={`${item.fromPageId}-${item.toPath}`} className="backlinks__item">
-                  <Link2 className="backlinks__icon" size={14} />
-                  {item.toPath ? (
-                    <RouterLink to={pathToRoute(item.toPath)}>{item.toTitle ?? item.toPath}</RouterLink>
-                  ) : (
-                    <span>{item.toTitle ?? 'Unknown page'}</span>
-                  )}
-                </li>
-              ))}
-              {linkStatus.brokenOutgoings.map((item) => (
-                <li key={`${item.fromPageId}-${item.toPath}`} className="backlinks__item backlinks__item--broken">
-                  <Link2Off className="backlinks__icon" size={14} />
-                  <span>{item.toTitle}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <div className="backlinks__group-title">
+            <span>Outgoing links</span>
+            <span className="backlinks__count">{linkStatus.outgoings.length + linkStatus.brokenOutgoings.length}</span>
+          </div>
+          <div className="backlinks__scroll custom-scrollbar">
+            {linkStatus.outgoings.length === 0 && linkStatus.brokenOutgoings.length === 0 ? (
+              <p className="backlinks__empty">No outgoing links on this page.</p>
+            ) : (
+              <ul>
+                {linkStatus.outgoings.map((item) => (
+                  <li key={`${item.fromPageId}-${item.toPath}`} className="backlinks__item">
+                    <Link2 className="backlinks__icon" size={14} />
+                    {item.toPath ? (
+                      <RouterLink to={pathToRoute(item.toPath)}>{item.toTitle ?? item.toPath}</RouterLink>
+                    ) : (
+                      <span>{item.toTitle ?? 'Unknown page'}</span>
+                    )}
+                  </li>
+                ))}
+                {linkStatus.brokenOutgoings.map((item) => (
+                  <li key={`${item.fromPageId}-${item.toPath}`} className="backlinks__item backlinks__item--broken">
+                    <Link2Off className="backlinks__icon" size={14} />
+                    <span>{item.toTitle}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
         <div className="backlinks__group">
-          <div className="backlinks__group-title">Version history</div>
-          {history.length === 0 ? (
-            <p className="backlinks__empty">No previous versions recorded.</p>
-          ) : (
-            <ul>
-              {history.map((entry) => (
-                <li key={entry.id} className="backlinks__item flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div>{entry.title}</div>
-                    <div className="text-xs text-muted">
-                      {formatTimestamp(entry.recordedAt)}
-                      {entry.author ? ` · ${entry.author}` : ''}
-                    </div>
-                    {entry.reason || entry.summary ? (
-                      <div className="text-xs text-muted">
-                        {[entry.reason, entry.summary].filter(Boolean).join(' · ')}
+          <div className="backlinks__group-title">
+            <span>Version history</span>
+            <span className="backlinks__count">{history.length}</span>
+          </div>
+          <div className="backlinks__scroll custom-scrollbar">
+            {history.length === 0 ? (
+              <p className="backlinks__empty">No previous versions recorded.</p>
+            ) : (
+              <ul>
+                {history.map((entry) => (
+                  <li key={entry.id} className="backlinks__item backlinks__history-item">
+                    <div className="backlinks__history-copy">
+                      <div className="backlinks__history-title">{entry.title}</div>
+                      <div className="backlinks__meta">
+                        {formatTimestamp(entry.recordedAt)}
+                        {entry.author ? ` · ${entry.author}` : ''}
                       </div>
-                    ) : null}
-                  </div>
-                  <div className="flex shrink-0 gap-2">
-                    <button type="button" className="action-button-secondary" onClick={() => void handlePreview(entry.id)}>
-                      Preview
-                    </button>
-                    {canRestore ? (
-                      <button type="button" className="action-button-secondary" onClick={() => setRestoreCandidate(entry.id)}>
-                        Restore
+                      {entry.reason || entry.summary ? (
+                        <div className="backlinks__history-summary">
+                          {[entry.reason, entry.summary].filter(Boolean).join(' · ')}
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="backlinks__actions">
+                      <button type="button" className="backlinks__action-button" onClick={() => void handlePreview(entry.id)}>
+                        Preview
                       </button>
-                    ) : null}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+                      {canRestore ? (
+                        <button type="button" className="backlinks__action-button" onClick={() => setRestoreCandidate(entry.id)}>
+                          Restore
+                        </button>
+                      ) : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       </div>
 

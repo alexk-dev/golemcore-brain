@@ -178,11 +178,11 @@
   }
 
   .app-layout__header {
-    @apply fixed z-30 h-16 w-full border-b border-surface-border bg-surface px-3 py-2 md:h-[68px] md:px-4;
+    @apply fixed z-30 h-14 w-full border-b border-surface-border bg-surface px-2 py-2 md:h-[68px] md:px-4;
   }
 
   .app-layout__header-inner {
-    @apply flex h-full items-center gap-3;
+    @apply flex h-full items-center gap-2 md:gap-3;
   }
 
   .app-layout__sidebar-toggle-container {
@@ -198,7 +198,7 @@
   }
 
   .app-layout__logo-n-title h2 {
-    @apply truncate text-base font-bold md:text-xl;
+    @apply truncate text-sm font-bold md:text-xl;
   }
 
   .app-layout__editor-title-bar-container {
@@ -209,12 +209,18 @@
     @apply ml-auto flex min-h-full items-center gap-1 md:gap-2;
   }
 
+  .app-layout__editor-toolbar-container > .action-button-primary,
+  .app-layout__editor-toolbar-container > .action-button-secondary,
+  .app-layout__editor-toolbar-container > .action-button-danger {
+    @apply h-10 min-w-10 rounded-xl px-2 py-2 md:h-auto md:min-w-0 md:px-3;
+  }
+
   .app-layout__header-spacer {
-    @apply h-16 w-full md:h-[68px];
+    @apply h-14 w-full md:h-[68px];
   }
 
   .app-layout__content-wrapper {
-    @apply relative flex h-[calc(100dvh-64px)] md:h-[calc(100dvh-68px)];
+    @apply relative flex h-[calc(100dvh-56px)] md:h-[calc(100dvh-68px)];
   }
 
   .app-layout__sidebar-container {
@@ -222,11 +228,11 @@
   }
 
   .app-layout__sidebar-container--overlay {
-    @apply fixed inset-y-0 left-0 top-16 z-40 h-[calc(100dvh-64px)] w-[85vw] max-w-xs shadow-2xl md:relative md:top-0 md:h-full md:w-80 md:max-w-none md:shadow-none;
+    @apply fixed inset-y-0 left-0 top-14 z-40 h-[calc(100dvh-56px)] w-[92vw] max-w-xs shadow-2xl md:relative md:top-0 md:h-full md:w-80 md:max-w-none md:shadow-none;
   }
 
   .app-layout__sidebar-backdrop {
-    @apply fixed inset-0 top-16 z-30 bg-black/50 md:hidden;
+    @apply fixed inset-0 top-14 z-30 bg-black/50 md:hidden;
   }
 
   .app-layout__main-content-area {
@@ -234,7 +240,7 @@
   }
 
   .user-menu__content {
-    @apply z-50 min-w-56 rounded-2xl border border-surface-border bg-surface p-2 shadow-2xl outline-none;
+    @apply z-50 max-h-[calc(100dvh-5rem)] min-w-56 overflow-auto rounded-2xl border border-surface-border bg-surface p-2 shadow-2xl outline-none;
   }
 
   .user-menu__header {
@@ -313,6 +319,18 @@
     @apply ml-auto inline-flex items-center justify-center text-accent;
   }
 
+  .toolbar-overflow__content {
+    @apply z-50 min-w-56 rounded-2xl border border-surface-border bg-surface p-2 shadow-2xl outline-none;
+  }
+
+  .toolbar-overflow__item {
+    @apply flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-foreground outline-none transition hover:bg-surface-alt focus:bg-surface-alt data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[highlighted]:bg-surface-alt;
+  }
+
+  .toolbar-overflow__shortcut {
+    @apply ml-auto font-mono text-[10px] text-muted;
+  }
+
   .app-layout__chromeless-main {
     @apply flex min-h-screen flex-col items-stretch overflow-auto;
   }
@@ -330,7 +348,7 @@
   }
 
   .page-viewer {
-    @apply mx-auto flex min-h-full w-full max-w-6xl flex-col px-4 pt-6 pb-4 md:px-8 md:pt-8;
+    @apply mx-auto flex min-h-full w-full max-w-6xl flex-col px-4 pt-4 pb-4 md:px-8 md:pt-8;
   }
 
   .page-viewer__title {
@@ -374,11 +392,11 @@
   }
 
   .page-editor {
-    @apply flex h-full w-full flex-col px-6 py-6;
+    @apply flex h-full w-full flex-col px-3 pt-4 pb-28 md:px-6 md:py-6;
   }
 
   .page-editor__toolbar {
-    @apply mb-4 flex items-center justify-between gap-4;
+    @apply mb-4 flex items-start justify-between gap-3 md:items-center md:gap-4;
   }
 
   .page-editor__error {
@@ -386,11 +404,11 @@
   }
 
   .page-editor__grid {
-    @apply grid flex-1 gap-6;
+    @apply grid min-h-0 flex-1 gap-6;
   }
 
   .page-editor__form {
-    @apply flex min-h-[620px] flex-col gap-4 rounded-[var(--radius)] border bg-surface p-5 shadow-[0_20px_60px_-32px_hsl(var(--shadow)/0.45)];
+    @apply flex min-h-[calc(100dvh-12rem)] flex-col gap-4 overflow-hidden rounded-xl border bg-surface p-0 shadow-[0_20px_60px_-32px_hsl(var(--shadow)/0.45)] md:min-h-[620px] md:rounded-[var(--radius)] md:p-5;
   }
 
   .page-editor__preview {
@@ -438,7 +456,7 @@
   }
 
   .markdown-editor__mobile-tabs {
-    @apply mb-2 hidden border-b border-surface-border text-sm max-md:flex;
+    @apply hidden border-b border-surface-border text-sm max-md:flex;
   }
 
   .markdown-editor__mobile-tab {
@@ -478,7 +496,7 @@
   }
 
   .markdown-toolbar {
-    @apply sticky top-0 z-10 flex min-h-12 flex-wrap items-center gap-1.5 border-b border-surface-border bg-surface-alt px-2 shadow-xs;
+    @apply sticky top-0 z-10 flex min-h-12 flex-nowrap items-center gap-1.5 overflow-x-auto border-b border-surface-border bg-surface-alt px-2 shadow-xs md:flex-wrap md:overflow-visible;
   }
 
   .markdown-toolbar__button {
@@ -502,7 +520,22 @@
   }
 
   .markdown-code-block {
-    @apply relative;
+    @apply relative my-6 rounded-lg bg-sidebar;
+  }
+
+  .markdown-code-block pre {
+    @apply m-0 max-w-none overflow-auto rounded-lg bg-transparent px-4 py-4 pr-12 text-sm leading-6 text-foreground;
+  }
+
+  .markdown-code-block pre code {
+    @apply block whitespace-pre bg-transparent p-0 font-mono font-normal text-inherit;
+    font-size: inherit;
+    line-height: inherit;
+  }
+
+  .markdown-code-block pre code::before,
+  .markdown-code-block pre code::after {
+    content: none !important;
   }
 
   .markdown-code-block__actions {
@@ -530,31 +563,43 @@
   }
 
   .backlinks__pane {
-    @apply mt-0 w-full border-t border-surface-border pt-2 pb-1 text-sm text-foreground;
+    @apply mt-0 w-full border-t border-surface-border pt-4 pb-2 text-sm text-foreground;
   }
 
   .backlinks__content {
-    @apply flex flex-col gap-2 sm:flex-row sm:gap-8;
+    @apply grid gap-4 lg:grid-cols-3;
   }
 
   .backlinks__content ul {
     @apply m-0 list-none p-0;
   }
 
+  .backlinks__item {
+    @apply min-w-0 py-1 text-xs text-muted;
+  }
+
   .backlinks__item a {
-    @apply px-0 py-0 text-xs text-muted no-underline hover:text-accent;
+    @apply px-0 py-0 text-muted no-underline hover:text-accent;
   }
 
   .backlinks__icon {
-    @apply mr-1 inline scale-75 opacity-40;
+    @apply mr-1 inline shrink-0 scale-75 opacity-40;
   }
 
   .backlinks__group {
-    @apply w-full sm:w-1/2;
+    @apply min-w-0;
   }
 
   .backlinks__group-title {
-    @apply mb-1 text-xs font-normal tracking-normal text-muted normal-case;
+    @apply mb-2 flex items-center justify-between gap-2 text-xs font-medium tracking-normal text-muted normal-case;
+  }
+
+  .backlinks__count {
+    @apply inline-flex min-w-5 items-center justify-center rounded-full border border-surface-border bg-surface px-1.5 py-0.5 font-mono text-[10px] leading-none text-muted;
+  }
+
+  .backlinks__scroll {
+    @apply max-h-36 overflow-auto pr-1 md:max-h-56;
   }
 
   .backlinks__empty {
@@ -563,5 +608,48 @@
 
   .backlinks__item--broken {
     @apply text-danger;
+  }
+
+  .backlinks__history-item {
+    @apply flex items-start justify-between gap-3 rounded-lg px-2 py-2 hover:bg-surface-alt/50;
+  }
+
+  .backlinks__history-copy {
+    @apply min-w-0;
+  }
+
+  .backlinks__history-title {
+    @apply truncate text-sm text-foreground;
+  }
+
+  .backlinks__meta {
+    @apply truncate text-xs text-muted;
+  }
+
+  .backlinks__history-summary {
+    @apply overflow-hidden text-xs text-muted;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .backlinks__actions {
+    @apply flex shrink-0 items-center gap-1;
+  }
+
+  .backlinks__action-button {
+    @apply rounded-md border border-surface-border bg-surface px-2 py-1 text-xs text-foreground hover:bg-surface-alt;
+  }
+
+  .page-editor__actions {
+    @apply fixed right-0 bottom-0 left-0 z-30 grid grid-cols-[1fr_1fr_1.35fr] gap-2 border-t border-surface-border bg-surface/95 p-3 shadow-2xl md:static md:z-auto md:flex md:items-center md:gap-2 md:border-0 md:bg-transparent md:p-0 md:shadow-none;
+  }
+
+  .page-editor__action {
+    @apply min-h-11 rounded-xl px-3 py-2 text-sm;
+  }
+
+  .page-editor__save-action {
+    @apply min-w-0;
   }
 }

@@ -52,6 +52,9 @@ function insertMarkdownAtCursor(view: EditorView | null, markdown: string, onCha
 
 function derivePagePathFromLocation(pathname: string) {
   const normalized = normalizeWikiPath(pathname)
+  if (normalized === 'e') {
+    return ''
+  }
   if (!normalized.startsWith('e/')) {
     return normalized
   }
@@ -351,24 +354,24 @@ export function PageEditor() {
             </button>
             <span className="editor-title-bar__slug">/{page.path}</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="page-editor__actions">
             <button
               type="button"
-              className="action-button-secondary"
+              className="page-editor__action action-button-secondary"
               onClick={() => setShowMetadataPanel((value) => !value)}
             >
               Edit metadata
             </button>
             <button
               type="button"
-              className="action-button-secondary"
+              className="page-editor__action action-button-secondary"
               onClick={() => void handleCloseEditor()}
             >
               Close editor
             </button>
             <button
               type="button"
-              className="action-button-primary disabled:cursor-not-allowed disabled:opacity-60"
+              className="page-editor__action page-editor__save-action action-button-primary disabled:cursor-not-allowed disabled:opacity-60"
               onClick={() => void handleSave()}
               disabled={!hasUnsavedChanges}
               title="Save page (Ctrl+S)"
