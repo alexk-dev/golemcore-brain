@@ -51,7 +51,7 @@ test('renders main wiki shell instead of a white screen', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'GolemCore Brain' })).toBeVisible()
   await expect(page.getByRole('banner').getByRole('button', { name: 'Search' })).toBeVisible()
   await expect(page.getByTestId('sidebar')).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Tree' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'Tree' })).toBeVisible()
 
   const bodyText = await page.locator('body').innerText()
   expect(bodyText.trim().length).toBeGreaterThan(20)

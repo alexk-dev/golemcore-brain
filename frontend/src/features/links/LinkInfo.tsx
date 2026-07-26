@@ -27,7 +27,7 @@ import { pathToRoute } from '../../lib/paths'
 import { useTreeStore } from '../../stores/tree'
 import { useUiStore } from '../../stores/ui'
 import { useViewerStore } from '../../stores/viewer'
-import type { WikiPageHistoryVersion } from '../../types'
+import type { WikiLinkStatusItem, WikiPageHistoryVersion } from '../../types'
 import { MarkdownPreview } from '../preview/MarkdownPreview'
 import { buildLineDiff } from './historyDiff'
 
@@ -36,6 +36,25 @@ function formatTimestamp(timestamp?: string) {
     return 'Unknown time'
   }
   return new Date(timestamp).toLocaleString()
+}
+
+/**
+ * Collapses link rows that point at the same page. A body may reference the same target several
+ * times, and every reference resolves to an identical row; listing it once keeps the pane readable
+ * and keeps React keys unique.
+ */
+function dedupeLinks(items: WikiLinkStatusItem[], keyOf: (item: WikiLinkStatusItem) => string) {
+  const seen = new Set<string>()
+  const unique: Array<{ key: string; item: WikiLinkStatusItem }> = []
+  for (const item of items) {
+    const key = keyOf(item)
+    if (seen.has(key)) {
+      continue
+    }
+    seen.add(key)
+    unique.push({ key, item })
+  }
+  return unique
 }
 
 export function LinkInfo() {
@@ -120,6 +139,19 @@ export function LinkInfo() {
     removed: diffLines.filter((line) => line.type === 'removed').length,
   }), [diffLines])
 
+  const backlinks = useMemo(
+    () => dedupeLinks(linkStatus?.backlinks ?? [], (item) => item.fromPath || item.fromPageId || item.fromTitle || ''),
+    [linkStatus],
+  )
+  const outgoings = useMemo(
+    () => dedupeLinks(linkStatus?.outgoings ?? [], (item) => item.toPath || item.toPageId || item.toTitle || ''),
+    [linkStatus],
+  )
+  const brokenOutgoings = useMemo(
+    () => dedupeLinks(linkStatus?.brokenOutgoings ?? [], (item) => item.toPath || item.toTitle || ''),
+    [linkStatus],
+  )
+
   if (!linkStatus) {
     return null
   }
@@ -130,15 +162,15 @@ export function LinkInfo() {
         <div className="backlinks__group">
           <div className="backlinks__group-title">
             <span>Backlinks</span>
-            <span className="backlinks__count">{linkStatus.backlinks.length}</span>
+            <span className="backlinks__count">{backlinks.length}</span>
           </div>
           <div className="backlinks__scroll custom-scrollbar">
-            {linkStatus.backlinks.length === 0 ? (
+            {backlinks.length === 0 ? (
               <p className="backlinks__empty">No pages reference this page.</p>
             ) : (
               <ul>
-                {linkStatus.backlinks.map((item) => (
-                  <li key={`${item.fromPageId}-${item.toPath}`} className="backlinks__item">
+                {backlinks.map(({ key, item }) => (
+                  <li key={key} className="backlinks__item">
                     {item.fromPath ? (
                       <RouterLink to={pathToRoute(item.fromPath)}>{item.fromTitle ?? item.fromPath}</RouterLink>
                     ) : (
@@ -153,15 +185,15 @@ export function LinkInfo() {
         <div className="backlinks__group">
           <div className="backlinks__group-title">
             <span>Outgoing links</span>
-            <span className="backlinks__count">{linkStatus.outgoings.length + linkStatus.brokenOutgoings.length}</span>
+            <span className="backlinks__count">{outgoings.length + brokenOutgoings.length}</span>
           </div>
           <div className="backlinks__scroll custom-scrollbar">
-            {linkStatus.outgoings.length === 0 && linkStatus.brokenOutgoings.length === 0 ? (
+            {outgoings.length === 0 && brokenOutgoings.length === 0 ? (
               <p className="backlinks__empty">No outgoing links on this page.</p>
             ) : (
               <ul>
-                {linkStatus.outgoings.map((item) => (
-                  <li key={`${item.fromPageId}-${item.toPath}`} className="backlinks__item">
+                {outgoings.map(({ key, item }) => (
+                  <li key={`out-${key}`} className="backlinks__item">
                     <Link2 className="backlinks__icon" size={14} />
                     {item.toPath ? (
                       <RouterLink to={pathToRoute(item.toPath)}>{item.toTitle ?? item.toPath}</RouterLink>
@@ -170,8 +202,8 @@ export function LinkInfo() {
                     )}
                   </li>
                 ))}
-                {linkStatus.brokenOutgoings.map((item) => (
-                  <li key={`${item.fromPageId}-${item.toPath}`} className="backlinks__item backlinks__item--broken">
+                {brokenOutgoings.map(({ key, item }) => (
+                  <li key={`broken-${key}`} className="backlinks__item backlinks__item--broken">
                     <Link2Off className="backlinks__icon" size={14} />
                     <span>{item.toTitle}</span>
                   </li>

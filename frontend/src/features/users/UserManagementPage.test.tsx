@@ -45,7 +45,6 @@ vi.mock('sonner', () => ({
 describe('UserManagementPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.stubGlobal('confirm', vi.fn(() => true))
     useUiStore.setState({
       currentUser: {
         id: 'admin-1',
@@ -110,7 +109,9 @@ describe('UserManagementPage', () => {
 
     expect(await screen.findByText('updated@example.com · VIEWER')).toBeInTheDocument()
 
+    // Deletion is confirmed through the in-app dialog rather than a native window.confirm.
     fireEvent.click(screen.getByRole('button', { name: 'Delete editor' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete user' }))
 
     await waitFor(() => {
       expect(deleteUserAccountMock).toHaveBeenCalledWith('editor-1')

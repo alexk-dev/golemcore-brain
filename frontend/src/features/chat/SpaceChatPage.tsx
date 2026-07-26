@@ -105,7 +105,12 @@ export function SpaceChatPage() {
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col gap-4">
-          <div className="custom-scrollbar flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto rounded-2xl border border-surface-border bg-surface-alt/40 p-4">
+          <div
+            className="custom-scrollbar flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto rounded-2xl border border-surface-border bg-surface-alt/40 p-4"
+            role="log"
+            aria-live="polite"
+            aria-label="Conversation"
+          >
             {messages.length === 0 ? (
               <div className="m-auto max-w-xl text-center">
                 <div className="text-lg font-semibold">Ask a question about this space</div>
@@ -167,9 +172,19 @@ export function SpaceChatPage() {
                 className="field-input min-h-24 resize-y"
                 value={draft}
                 placeholder="Ask a question about this space…"
+                aria-describedby="chat-send-hint"
                 onChange={(event) => setDraft(event.target.value)}
+                // Enter sends, Shift+Enter adds a newline — the convention every chat UI uses.
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter' || event.shiftKey || !canSend) {
+                    return
+                  }
+                  event.preventDefault()
+                  event.currentTarget.form?.requestSubmit()
+                }}
               />
             </label>
+            <p className="sr-only" id="chat-send-hint">Press Enter to send, Shift and Enter for a new line.</p>
             <div className="flex items-end">
               <button type="submit" className="action-button-primary w-full md:w-auto" disabled={!canSend}>
                 {isSending ? 'Sending…' : 'Send'}

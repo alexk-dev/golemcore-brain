@@ -21,6 +21,16 @@ import { fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+/**
+ * Tree row actions live behind a single overflow menu, so every action test has to open that
+ * menu first. Radix opens the trigger from a keyboard event, which keeps the helper independent
+ * of jsdom's pointer-event gaps.
+ */
+async function openNodeMenu(sidebar: HTMLElement, title: string) {
+  fireEvent.keyDown(within(sidebar).getByRole('button', { name: `Actions for ${title}` }), { key: 'Enter' })
+  return screen.findByRole('menu')
+}
+
 import App from '../../App'
 import { useEditorStore } from '../../stores/editor'
 import { useTreeStore } from '../../stores/tree'
@@ -319,7 +329,8 @@ describe('Sidebar tree interaction parity', () => {
       expect(within(sidebar).getByText('Roadmap')).toBeInTheDocument()
     })
 
-    fireEvent.click(within(sidebar).getByRole('button', { name: 'Edit Roadmap' }))
+    const menu = await openNodeMenu(sidebar, 'Roadmap')
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Edit Roadmap' }))
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Close editor' })).toBeInTheDocument()
@@ -341,14 +352,16 @@ describe('Sidebar tree interaction parity', () => {
       expect(within(sidebar).getByText('Roadmap')).toBeInTheDocument()
     })
 
-    fireEvent.click(within(sidebar).getByRole('button', { name: 'Move Roadmap' }))
+    const roadmapMenu = await openNodeMenu(sidebar, 'Roadmap')
+    fireEvent.click(within(roadmapMenu).getByRole('menuitem', { name: 'Move Roadmap' }))
 
     expect(await screen.findByText('Move page')).toBeInTheDocument()
     expect(screen.getByText('Current path: /product/roadmap')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
-    fireEvent.click(within(sidebar).getByRole('button', { name: 'Sort Product' }))
+    const productMenu = await openNodeMenu(sidebar, 'Product')
+    fireEvent.click(within(productMenu).getByRole('menuitem', { name: 'Sort Product' }))
 
     expect(await screen.findByText('Sort child pages')).toBeInTheDocument()
     expect(screen.getByText('Section: /product')).toBeInTheDocument()
@@ -379,6 +392,54 @@ describe('Sidebar tree interaction parity', () => {
     expect(screen.getByText('Section: /')).toBeInTheDocument()
   })
 
+  it('shows exactly one search surface when the sidebar search tab is selected', async () => {
+    render(
+      <MemoryRouter initialEntries={['/guides']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    const sidebar = await screen.findByTestId('sidebar')
+    await waitFor(() => {
+      expect(within(sidebar).getByText('Setup')).toBeInTheDocument()
+    })
+
+    fireEvent.click(within(sidebar).getByRole('tab', { name: 'Search' }))
+
+    // The tab swaps the sidebar panel in place; it must not also raise the modal search dialog.
+    await waitFor(() => {
+      expect(screen.getAllByPlaceholderText('Search documentation, runbooks, and notes')).toHaveLength(1)
+    })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('keeps row actions behind a single overflow trigger and closes the menu on Escape', async () => {
+    render(
+      <MemoryRouter initialEntries={['/guides']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    const sidebar = await screen.findByTestId('sidebar')
+    await waitFor(() => {
+      expect(within(sidebar).getByText('Setup')).toBeInTheDocument()
+    })
+
+    // The row itself offers navigation plus one overflow trigger, so nothing destructive sits
+    // next to the title where it can be hit by accident.
+    expect(within(sidebar).queryByRole('button', { name: 'Delete Setup' })).not.toBeInTheDocument()
+    expect(within(sidebar).queryByRole('button', { name: 'Edit Setup' })).not.toBeInTheDocument()
+    expect(within(sidebar).getByRole('button', { name: 'Actions for Setup' })).toBeInTheDocument()
+
+    const menu = await openNodeMenu(sidebar, 'Setup')
+    expect(within(menu).getByRole('menuitem', { name: 'Delete Setup' })).toBeInTheDocument()
+
+    fireEvent.keyDown(menu, { key: 'Escape' })
+    await waitFor(() => {
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    })
+  })
+
   it('converts a tree page to a section from node actions', async () => {
     render(
       <MemoryRouter initialEntries={['/guides']}>
@@ -393,7 +454,8 @@ describe('Sidebar tree interaction parity', () => {
       expect(within(sidebar).getByText('Roadmap')).toBeInTheDocument()
     })
 
-    fireEvent.click(within(sidebar).getByRole('button', { name: 'Convert Roadmap to section' }))
+    const menu = await openNodeMenu(sidebar, 'Roadmap')
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Convert Roadmap to section' }))
 
     await waitFor(() => {
       expect(convertPageMock).toHaveBeenCalledWith('product/roadmap', { targetKind: 'SECTION' })

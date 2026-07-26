@@ -190,4 +190,85 @@ describe('LinkInfo', () => {
     expect(screen.getByRole('link', { name: 'Runbook' })).toHaveAttribute('href', '/brain/guides/runbook')
     expect(screen.getByRole('link', { name: 'Checklist' })).toHaveAttribute('href', '/brain/shared/checklist')
   })
+
+  it('lists a repeatedly referenced page only once', () => {
+    useViewerStore.setState({
+      linkStatus: {
+        backlinks: [
+          {
+            fromPageId: 'guides/runbook',
+            fromPath: 'guides/runbook',
+            fromTitle: 'Runbook',
+            toPageId: 'guides/setup',
+            toPath: 'guides/setup',
+            toTitle: 'Setup',
+            broken: false,
+          },
+          {
+            fromPageId: 'guides/runbook',
+            fromPath: 'guides/runbook',
+            fromTitle: 'Runbook',
+            toPageId: 'guides/setup',
+            toPath: 'guides/setup',
+            toTitle: 'Setup',
+            broken: false,
+          },
+        ],
+        brokenIncoming: [],
+        outgoings: [
+          {
+            fromPageId: 'guides/setup',
+            fromPath: 'guides/setup',
+            fromTitle: 'Setup',
+            toPageId: 'shared/checklist',
+            toPath: 'shared/checklist',
+            toTitle: 'Checklist',
+            broken: false,
+          },
+          {
+            fromPageId: 'guides/setup',
+            fromPath: 'guides/setup',
+            fromTitle: 'Setup',
+            toPageId: 'shared/checklist',
+            toPath: 'shared/checklist',
+            toTitle: 'Checklist',
+            broken: false,
+          },
+        ],
+        brokenOutgoings: [
+          {
+            fromPageId: 'guides/setup',
+            fromPath: 'guides/setup',
+            fromTitle: 'Setup',
+            toPageId: null,
+            toPath: 'shared/missing',
+            toTitle: 'Missing',
+            broken: true,
+          },
+          {
+            fromPageId: 'guides/setup',
+            fromPath: 'guides/setup',
+            fromTitle: 'Setup',
+            toPageId: null,
+            toPath: 'shared/missing',
+            toTitle: 'Missing',
+            broken: true,
+          },
+        ],
+      },
+      history: [],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/guides/setup']}>
+        <LinkInfo />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getAllByRole('link', { name: 'Runbook' })).toHaveLength(1)
+    expect(screen.getAllByRole('link', { name: 'Checklist' })).toHaveLength(1)
+    expect(screen.getAllByText('Missing')).toHaveLength(1)
+    expect(screen.getByText('Backlinks').parentElement).toHaveTextContent('1')
+    expect(screen.getByText('Outgoing links').parentElement).toHaveTextContent('2')
+  })
 })

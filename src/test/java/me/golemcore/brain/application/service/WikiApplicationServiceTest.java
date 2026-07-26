@@ -378,6 +378,37 @@ class WikiApplicationServiceTest {
         assertThrows(IllegalArgumentException.class, () -> service.getPage("../etc/passwd"));
     }
 
+    @Test
+    void shouldReportRepeatedLinksToTheSameTargetOnlyOnce() {
+        WikiApplicationService service = createService();
+
+        service.createPage(WikiApplicationService.CreatePageCommand.builder()
+                .parentPath("")
+                .title("Checklist")
+                .slug("checklist")
+                .content("Release checklist")
+                .kind(WikiNodeKind.PAGE)
+                .build());
+        service.createPage(WikiApplicationService.CreatePageCommand.builder()
+                .parentPath("")
+                .title("Guide")
+                .slug("guide")
+                .content("Start with the [Checklist](checklist), and revisit the [checklist](checklist) at the end. "
+                        + "Also see [Missing](missing) and [missing again](missing).")
+                .kind(WikiNodeKind.PAGE)
+                .build());
+
+        WikiLinkStatus guideStatus = service.getLinkStatus("guide");
+        assertEquals(1, guideStatus.getOutgoings().size());
+        assertEquals("checklist", guideStatus.getOutgoings().getFirst().getToPath());
+        assertEquals(1, guideStatus.getBrokenOutgoings().size());
+        assertEquals("missing", guideStatus.getBrokenOutgoings().getFirst().getToPath());
+
+        WikiLinkStatus checklistStatus = service.getLinkStatus("checklist");
+        assertEquals(1, checklistStatus.getBacklinks().size());
+        assertEquals("guide", checklistStatus.getBacklinks().getFirst().getFromPath());
+    }
+
     private WikiApplicationService createService() {
         WikiProperties properties = new WikiProperties();
         properties.setStorageRoot(tempDir.resolve("wiki"));

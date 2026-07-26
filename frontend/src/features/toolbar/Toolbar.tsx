@@ -18,8 +18,9 @@
 
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { MoreHorizontal } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 
+import { useMediaQuery } from '../../lib/useMediaQuery'
 import { matchesToolbarHotkey, useToolbarStore } from './toolbarStore'
 import type { ToolbarAction } from './toolbarStore'
 
@@ -31,25 +32,6 @@ function buttonClassName(variant: 'primary' | 'secondary' | 'danger' = 'secondar
     return 'action-button-danger'
   }
   return 'action-button-secondary'
-}
-
-function useMediaQuery(query: string) {
-  const [matches, setMatches] = useState(() => (
-    typeof window === 'undefined' ? false : window.matchMedia(query).matches
-  ))
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return undefined
-    }
-    const mediaQuery = window.matchMedia(query)
-    const handleChange = () => setMatches(mediaQuery.matches)
-    handleChange()
-    mediaQuery.addEventListener('change', handleChange)
-    return () => mediaQuery.removeEventListener('change', handleChange)
-  }, [query])
-
-  return matches
 }
 
 function actionTitle(action: ToolbarAction) {

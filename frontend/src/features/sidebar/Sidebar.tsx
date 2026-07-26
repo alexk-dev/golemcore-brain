@@ -40,7 +40,6 @@ interface SidebarProps {
   onConvert: (path: string, targetKind: Exclude<WikiNodeKind, 'ROOT'>) => void
   onExpandAll: () => void
   onCollapseAll: () => void
-  onOpenSearch: () => void
   imageVersion?: string | null
 }
 
@@ -61,7 +60,6 @@ export function Sidebar({
   onConvert,
   onExpandAll,
   onCollapseAll,
-  onOpenSearch,
   imageVersion,
 }: SidebarProps) {
   const [activeTab, setActiveTab] = useState<'tree' | 'search'>('tree')
@@ -70,25 +68,41 @@ export function Sidebar({
     <aside className="sidebar" data-testid="sidebar" id="sidebar">
       <div className="sidebar__inner">
         <div className="sidebar__tabs">
-          <div className="sidebar__tabs-list">
+          {/*
+            The search tab swaps the sidebar panel in place. It must not also raise the modal
+            search dialog, which would stack a second copy of the same search UI on top.
+          */}
+          <div className="sidebar__tabs-list" role="tablist" aria-label="Sidebar panels">
             <button
+              type="button"
+              role="tab"
+              id="sidebar-tab-tree"
+              aria-selected={activeTab === 'tree'}
+              aria-controls="sidebar-panel"
               className={`sidebar__tab-button ${activeTab === 'tree' ? 'sidebar__tab-button--active' : 'sidebar__tab-button--inactive'}`}
               onClick={() => setActiveTab('tree')}
             >
-              <FolderTree size={16} /> Tree
+              <FolderTree size={16} aria-hidden="true" /> Tree
             </button>
             <button
+              type="button"
+              role="tab"
+              id="sidebar-tab-search"
+              aria-selected={activeTab === 'search'}
+              aria-controls="sidebar-panel"
               className={`sidebar__tab-button ${activeTab === 'search' ? 'sidebar__tab-button--active' : 'sidebar__tab-button--inactive'}`}
-              onClick={() => {
-                setActiveTab('search')
-                onOpenSearch()
-              }}
+              onClick={() => setActiveTab('search')}
             >
-              <SearchIcon size={16} /> Search
+              <SearchIcon size={16} aria-hidden="true" /> Search
             </button>
           </div>
         </div>
-        <div className="sidebar__content custom-scrollbar overflow-y-auto px-2 py-3">
+        <div
+          className="sidebar__content custom-scrollbar overflow-y-auto px-2 py-3"
+          role="tabpanel"
+          id="sidebar-panel"
+          aria-labelledby={activeTab === 'tree' ? 'sidebar-tab-tree' : 'sidebar-tab-search'}
+        >
           {activeTab === 'tree' ? (
             <div className="tree-view">
               <div className="tree-view__toolbar">

@@ -103,8 +103,12 @@
     @apply flex flex-col gap-2;
   }
 
+  /*
+   * iOS Safari zooms the viewport whenever a focused control renders below 16px, so form fields
+   * stay at the 16px base size on phones and only tighten to 14px from md upwards.
+   */
   .field-input {
-    @apply rounded-xl border bg-background px-3 py-2 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/15;
+    @apply rounded-xl border bg-background px-3 py-2 text-base outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/15 md:text-sm;
   }
 
   .custom-scrollbar {
@@ -347,6 +351,64 @@
     @apply w-full;
   }
 
+  .tree-node__row {
+    @apply flex min-h-11 items-center gap-1.5 rounded-xl pr-1.5 text-left text-sm transition md:min-h-9;
+  }
+
+  .tree-node__leading {
+    @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sidebar-foreground/60 md:h-6 md:w-6;
+  }
+
+  .tree-node__leading--interactive {
+    @apply text-sidebar-foreground/70 transition hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none;
+  }
+
+  .tree-node__label {
+    @apply flex min-w-0 flex-1 items-center gap-2 self-stretch rounded-lg py-2 text-left focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none;
+  }
+
+  .tree-node__actions-trigger {
+    @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sidebar-foreground/60 transition hover:bg-white/10 hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none data-[state=open]:bg-white/10 data-[state=open]:text-sidebar-foreground md:h-7 md:w-7;
+  }
+
+  /*
+   * On pointer devices the overflow trigger stays invisible until the row is hovered or focused,
+   * but it always occupies its slot so revealing it never reflows or re-truncates the title.
+   * Touch devices keep it permanently visible because they have no hover state.
+   */
+  @media (min-width: 768px) and (hover: hover) {
+    .tree-node__actions-trigger {
+      opacity: 0;
+    }
+
+    .tree-node__row:hover .tree-node__actions-trigger,
+    .tree-node__row:focus-within .tree-node__actions-trigger,
+    .tree-node__actions-trigger:focus-visible,
+    .tree-node__actions-trigger[data-state='open'] {
+      opacity: 1;
+    }
+  }
+
+  .tree-node__menu {
+    @apply z-50 max-h-[calc(100dvh-6rem)] min-w-52 max-w-[calc(100vw-1rem)] overflow-auto rounded-2xl border border-surface-border bg-surface p-2 shadow-2xl outline-none;
+  }
+
+  .tree-node__menu-label {
+    @apply truncate px-3 py-1 text-xs font-semibold text-muted;
+  }
+
+  .tree-node__menu-separator {
+    @apply my-1 h-px bg-surface-border;
+  }
+
+  .tree-node__menu-item {
+    @apply flex min-h-11 cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-foreground outline-none transition hover:bg-surface-alt focus:bg-surface-alt data-[highlighted]:bg-surface-alt md:min-h-9;
+  }
+
+  .tree-node__menu-item--danger {
+    @apply text-danger hover:bg-danger/10 focus:bg-danger/10 data-[highlighted]:bg-danger/10;
+  }
+
   .page-viewer {
     @apply mx-auto flex min-h-full w-full max-w-6xl flex-col px-4 pt-4 pb-4 md:px-8 md:pt-8;
   }
@@ -499,8 +561,19 @@
     @apply sticky top-0 z-10 flex min-h-12 flex-nowrap items-center gap-1.5 overflow-x-auto border-b border-surface-border bg-surface-alt px-2 shadow-xs md:flex-wrap md:overflow-visible;
   }
 
+  /*
+   * The mobile strip scrolls horizontally and 44px targets push the trailing controls off screen,
+   * so the right edge fades to advertise that there is more to reach.
+   */
+  @media (max-width: 767px) {
+    .markdown-toolbar {
+      -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2rem), transparent 100%);
+      mask-image: linear-gradient(to right, #000 calc(100% - 2rem), transparent 100%);
+    }
+  }
+
   .markdown-toolbar__button {
-    @apply rounded-lg p-2 text-foreground hover:bg-surface;
+    @apply inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg p-2 text-foreground hover:bg-surface md:min-h-0 md:min-w-0;
   }
 
   .markdown-toolbar__button--desktop-only {
@@ -511,12 +584,24 @@
     @apply mx-1 h-5 w-px self-center bg-surface-border/60;
   }
 
+  /* Pairs with the desktop-only buttons so hiding a group does not leave stacked dividers. */
+  .markdown-toolbar__separator--desktop-only {
+    @apply max-md:hidden;
+  }
+
   .markdown-toolbar__icon {
     @apply h-4 w-4;
   }
 
   .markdown-code-editor {
     @apply h-full w-full;
+    --markdown-editor-font-size: 16px;
+  }
+
+  @media (min-width: 768px) {
+    .markdown-code-editor {
+      --markdown-editor-font-size: 13px;
+    }
   }
 
   .markdown-code-block {
@@ -550,6 +635,14 @@
     @apply rounded bg-surface-alt px-1.5 py-0.5;
   }
 
+  .markdown-table-scroll {
+    @apply my-6 max-w-full overflow-x-auto;
+  }
+
+  .markdown-table-scroll > table {
+    @apply my-0;
+  }
+
   .mermaid-block {
     @apply my-4 overflow-auto rounded-2xl border border-surface-border bg-surface p-4;
   }
@@ -574,12 +667,26 @@
     @apply m-0 list-none p-0;
   }
 
+  /*
+   * These rows are the navigation affordance of the links pane, so on touch they get a full
+   * 44px row and body-sized text. Desktop keeps the original compact density.
+   */
   .backlinks__item {
-    @apply min-w-0 py-1 text-xs text-muted;
+    @apply flex min-h-11 min-w-0 items-center gap-1 text-sm text-muted md:min-h-0 md:py-1 md:text-xs;
+  }
+
+  /*
+   * Applies to the bare span variants too (broken targets and unknown-page fallbacks), which
+   * would otherwise keep their min-content minimum size and push a long path out of the group.
+   * py-3 makes the row's own height 44px so the tappable area matches the reserved min-h-11.
+   */
+  .backlinks__item a,
+  .backlinks__item > span {
+    @apply block min-w-0 flex-1 truncate py-3 md:py-0;
   }
 
   .backlinks__item a {
-    @apply px-0 py-0 text-muted no-underline hover:text-accent;
+    @apply text-muted no-underline hover:text-accent;
   }
 
   .backlinks__icon {
@@ -598,8 +705,12 @@
     @apply inline-flex min-w-5 items-center justify-center rounded-full border border-surface-border bg-surface px-1.5 py-0.5 font-mono text-[10px] leading-none text-muted;
   }
 
+  /*
+   * Touch layouts let the page own the scroll. Three stacked 144px scroll windows sat inside the
+   * document scroll and swallowed swipes, so the inner scroller only kicks in from md upwards.
+   */
   .backlinks__scroll {
-    @apply max-h-36 overflow-auto pr-1 md:max-h-56;
+    @apply pr-1 md:max-h-56 md:overflow-auto;
   }
 
   .backlinks__empty {
@@ -634,11 +745,11 @@
   }
 
   .backlinks__actions {
-    @apply flex shrink-0 items-center gap-1;
+    @apply flex shrink-0 items-center gap-2;
   }
 
   .backlinks__action-button {
-    @apply rounded-md border border-surface-border bg-surface px-2 py-1 text-xs text-foreground hover:bg-surface-alt;
+    @apply inline-flex min-h-11 items-center justify-center rounded-md border border-surface-border bg-surface px-3 py-1 text-xs text-foreground hover:bg-surface-alt md:min-h-9;
   }
 
   .page-editor__actions {
@@ -646,7 +757,7 @@
   }
 
   .page-editor__action {
-    @apply min-h-11 rounded-xl px-3 py-2 text-sm;
+    @apply min-h-11 rounded-xl px-3 py-2 text-sm whitespace-nowrap;
   }
 
   .page-editor__save-action {

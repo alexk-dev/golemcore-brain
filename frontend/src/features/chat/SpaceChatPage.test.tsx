@@ -134,6 +134,26 @@ describe('SpaceChatPage', () => {
     })
   })
 
+  it('sends on Enter and keeps Shift+Enter for a new line', async () => {
+    render(
+      <MemoryRouter>
+        <SpaceChatPage />
+      </MemoryRouter>,
+    )
+
+    await screen.findByLabelText('Chat model')
+    const question = screen.getByLabelText('Question')
+
+    fireEvent.change(question, { target: { value: 'Line one' } })
+    fireEvent.keyDown(question, { key: 'Enter', shiftKey: true })
+    expect(chatWithSpaceMock).not.toHaveBeenCalled()
+
+    fireEvent.keyDown(question, { key: 'Enter' })
+    await waitFor(() => {
+      expect(chatWithSpaceMock).toHaveBeenCalledWith('Line one', [], 'chat-model', null, 1)
+    })
+  })
+
   it('lets users choose among enabled chat models', async () => {
     render(
       <MemoryRouter>

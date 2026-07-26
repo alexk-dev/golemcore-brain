@@ -47,7 +47,6 @@ interface AppLayoutProps {
   onConvert: (path: string, targetKind: Exclude<WikiNodeKind, 'ROOT'>) => void
   onExpandAll: () => void
   onCollapseAll: () => void
-  onOpenSearch: () => void
   currentUsername?: string | null
   canManageUsers: boolean
   canAccessAccount: boolean
@@ -80,7 +79,6 @@ export function AppLayout({
   onConvert,
   onExpandAll,
   onCollapseAll,
-  onOpenSearch,
   currentUsername,
   canManageUsers,
   canAccessAccount,
@@ -111,6 +109,8 @@ export function AppLayout({
               className="app-layout__sidebar-toggle-button"
               onClick={onToggleSidebar}
               aria-label="Toggle Sidebar"
+              aria-expanded={sidebarVisible}
+              aria-controls="sidebar-container"
             >
               <Menu size={18} />
             </button>
@@ -173,7 +173,6 @@ export function AppLayout({
                 onConvert={onConvert}
                 onExpandAll={onExpandAll}
                 onCollapseAll={onCollapseAll}
-                onOpenSearch={onOpenSearch}
                 imageVersion={displayImageVersion}
               />
             </div>
