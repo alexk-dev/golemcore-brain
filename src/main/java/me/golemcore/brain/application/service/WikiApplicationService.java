@@ -1167,11 +1167,18 @@ public class WikiApplicationService {
         return SpaceContextHolder.require();
     }
 
+    /**
+     * Resolves every wiki link in the given markdown body, collapsing repeated
+     * references to the same target into a single entry. Callers report links as a
+     * set of related pages, so a body that links the same page several times must
+     * not produce duplicate rows.
+     */
     private List<ResolvedLink> extractResolvedLinks(String currentPath, String markdown) {
         List<ResolvedLink> links = new ArrayList<>();
         if (markdown == null || markdown.isEmpty()) {
             return links;
         }
+        Set<String> seenTargetPaths = new LinkedHashSet<>();
         String scanned = stripFencedCodeBlocks(markdown);
         java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\\[[^\\]]+\\]\\(([^)]+)\\)")
                 .matcher(scanned);
@@ -1182,7 +1189,11 @@ public class WikiApplicationService {
                     || href.startsWith("/api/assets") || href.startsWith("/api/spaces/")) {
                 continue;
             }
-            links.add(ResolvedLink.builder().targetPath(resolveWikiLinkPath(currentPath, href)).build());
+            String targetPath = resolveWikiLinkPath(currentPath, href);
+            if (!seenTargetPaths.add(targetPath)) {
+                continue;
+            }
+            links.add(ResolvedLink.builder().targetPath(targetPath).build());
         }
         return links;
     }

@@ -16,7 +16,7 @@
  * Contact: alex@kuleshov.tech
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FileSearch, MessageCircle, Pencil, Search, Upload } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -28,6 +28,7 @@ import { SearchDialog } from '../../components/SearchDialog'
 import { SortChildrenDialog } from '../../components/SortChildrenDialog'
 import { convertPage, copyPage, createPage, deletePage, getAuthConfig, getConfig, logout, movePage, sortSection } from '../../lib/api'
 import { editorPathToRoute, normalizeWikiPath, parentPath, pathToRoute } from '../../lib/paths'
+import { useMediaQuery } from '../../lib/useMediaQuery'
 import { useEditorStore } from '../../stores/editor'
 import { useSpaceStore } from '../../stores/space'
 import { useTreeStore } from '../../stores/tree'
@@ -157,6 +158,18 @@ export function WikiShell({ children }: WikiShellProps) {
   )
 
   const setSidebarVisible = useUiStore((state) => state.setSidebarVisible)
+  const isDesktopViewport = useMediaQuery('(min-width: 768px)')
+  const previousIsDesktopViewport = useRef(isDesktopViewport)
+
+  // The store seeds sidebarVisible once at module load, so rotating a tablet used to leave it
+  // stale. Only breakpoint crossings reset it — a manual toggle within one breakpoint sticks.
+  useEffect(() => {
+    if (previousIsDesktopViewport.current === isDesktopViewport) {
+      return
+    }
+    previousIsDesktopViewport.current = isDesktopViewport
+    setSidebarVisible(isDesktopViewport)
+  }, [isDesktopViewport, setSidebarVisible])
 
   const maybeCollapseOnMobile = useCallback(() => {
     if (typeof window !== 'undefined' && window.innerWidth > 0 && window.innerWidth < 768) {
@@ -351,7 +364,6 @@ export function WikiShell({ children }: WikiShellProps) {
         onConvert={(path, targetKind) => void handleConvert(path, targetKind)}
         onExpandAll={expandAll}
         onCollapseAll={collapseAll}
-        onOpenSearch={() => setSearchOpen(true)}
         currentUsername={currentUser?.username ?? null}
         canManageUsers={canManageUsers}
         canAccessAccount={canAccessAccount}

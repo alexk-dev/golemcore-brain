@@ -88,6 +88,15 @@ export function MarkdownPreview({ content, path, darkMode, assetVersion }: Markd
       video: (props: React.VideoHTMLAttributes<HTMLVideoElement>) => (
         <video {...props} src={normalizeAssetMediaSrc(props.src, assetVersion)} />
       ),
+      // A wide GFM table would otherwise widen the article and scroll the whole page sideways,
+      // so each table gets its own horizontal scroll container.
+      table: (
+        props: ClassAttributes<HTMLTableElement> & HTMLAttributes<HTMLTableElement>,
+      ) => (
+        <div className="markdown-table-scroll custom-scrollbar">
+          <table {...props} />
+        </div>
+      ),
       pre: (
         props: ClassAttributes<HTMLPreElement> &
           HTMLAttributes<HTMLPreElement> & { children?: ReactNode },

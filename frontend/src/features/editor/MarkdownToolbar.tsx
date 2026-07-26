@@ -117,7 +117,7 @@ export function MarkdownToolbar({
       <button type="button" className="markdown-toolbar__button" onClick={() => editorViewRef.current && redo(editorViewRef.current)} title="Redo" aria-label="Redo">
         <Redo className="markdown-toolbar__icon" />
       </button>
-      <div className="markdown-toolbar__separator" />
+      <div className="markdown-toolbar__separator markdown-toolbar__separator--desktop-only" />
       <button type="button" className="markdown-toolbar__button markdown-toolbar__button--desktop-only" onClick={onTogglePreview} title={previewVisible ? 'Hide preview' : 'Show preview'} aria-label={previewVisible ? 'Hide preview' : 'Show preview'}>
         {previewVisible ? <EyeOff className="markdown-toolbar__icon" /> : <Eye className="markdown-toolbar__icon" />}
       </button>

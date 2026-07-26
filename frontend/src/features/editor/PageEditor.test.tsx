@@ -157,7 +157,7 @@ describe('PageEditor', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit metadata' }))
-    expect(screen.getByText('Metadata')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Metadata' })).toBeInTheDocument()
     expect(screen.getByText('Unsaved changes')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
 

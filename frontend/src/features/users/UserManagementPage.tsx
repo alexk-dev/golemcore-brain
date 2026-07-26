@@ -20,6 +20,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { toast } from 'sonner'
 
+import { ModalCard } from '../../components/ModalCard'
 import { createUser, deleteUserAccount, listUsers, updateUser } from '../../lib/api'
 import { useUiStore } from '../../stores/ui'
 import type { PublicUserView, UserRole } from '../../types'
@@ -43,6 +44,7 @@ export function UserManagementPage() {
   const [users, setUsers] = useState<PublicUserView[]>([])
   const [createForm, setCreateForm] = useState<UserFormState>(EMPTY_FORM_STATE)
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
+  const [deleteCandidate, setDeleteCandidate] = useState<PublicUserView | null>(null)
   const [editForm, setEditForm] = useState<UserFormState>(EMPTY_FORM_STATE)
 
   const isAdmin = currentUser?.role === 'ADMIN'
@@ -105,11 +107,9 @@ export function UserManagementPage() {
     }
   }
 
+  // Confirmed through ModalCard rather than window.confirm, so this destructive action matches
+  // every other one in the app and stays styled, focus-trapped and readable on a phone.
   const handleDelete = async (user: PublicUserView) => {
-    const confirmed = window.confirm(`Delete user ${user.username}?`)
-    if (!confirmed) {
-      return
-    }
     try {
       await deleteUserAccount(user.id)
       toast.success('User deleted')
@@ -250,7 +250,7 @@ export function UserManagementPage() {
                   <button type="button" className="action-button-secondary" onClick={() => handleEditStart(user)}>
                     Edit {user.username}
                   </button>
-                  <button type="button" className="action-button-secondary" onClick={() => void handleDelete(user)}>
+                  <button type="button" className="action-button-secondary" onClick={() => setDeleteCandidate(user)}>
                     Delete {user.username}
                   </button>
                 </div>
@@ -259,6 +259,41 @@ export function UserManagementPage() {
           ))}
         </div>
       </div>
+
+      <ModalCard
+        open={deleteCandidate !== null}
+        title="Delete user"
+        description={deleteCandidate ? `Permanently delete ${deleteCandidate.username}.` : undefined}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteCandidate(null)
+          }
+        }}
+        footer={(
+          <>
+            <button type="button" className="action-button-secondary" onClick={() => setDeleteCandidate(null)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="action-button-danger"
+              onClick={async () => {
+                if (!deleteCandidate) {
+                  return
+                }
+                await handleDelete(deleteCandidate)
+                setDeleteCandidate(null)
+              }}
+            >
+              Delete user
+            </button>
+          </>
+        )}
+      >
+        <p className="text-sm text-muted">
+          This removes the account and its sign-in access. It cannot be undone.
+        </p>
+      </ModalCard>
     </div>
   )
 }

@@ -193,7 +193,9 @@ export function MarkdownCodeEditor({
           '&': {
             height: '100%',
             backgroundColor: 'hsl(var(--surface-alt))',
-            fontSize: '13px',
+            // Driven by .markdown-code-editor so the size stays responsive; phones need 16px to
+            // stop iOS Safari zooming the viewport the moment the editor takes focus.
+            fontSize: 'var(--markdown-editor-font-size, 13px)',
             color: 'hsl(var(--foreground))',
           },
           '.cm-editor': { height: '100%' },
@@ -211,8 +213,14 @@ export function MarkdownCodeEditor({
     viewRef.current = view
     editorViewRef.current = view
 
+    // Autofocus only where a hardware pointer is present. On touch it pops the on-screen keyboard
+    // over the fixed save bar before the author has even read the page.
+    const prefersAutoFocus =
+      typeof window === 'undefined' || window.matchMedia('(pointer: fine)').matches
     const focusFrame = requestAnimationFrame(() => {
-      view.focus()
+      if (prefersAutoFocus) {
+        view.focus()
+      }
     })
 
     return () => {

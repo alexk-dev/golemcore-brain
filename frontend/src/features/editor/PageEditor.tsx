@@ -25,6 +25,7 @@ import { toast } from 'sonner'
 import { uploadAsset } from '../../lib/api'
 import { editorPathToRoute, normalizeWikiPath, pathToRoute } from '../../lib/paths'
 import { InsertWikiLinkDialog } from '../../components/InsertWikiLinkDialog'
+import { ModalCard } from '../../components/ModalCard'
 import { AssetManagerDialog } from '../assets/AssetManagerDialog'
 import { buildDefaultMarkdownForAsset } from '../assets/assetMarkdown'
 import { MarkdownPreview } from '../preview/MarkdownPreview'
@@ -177,6 +178,11 @@ export function PageEditor() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // A blocking prompt owns the keyboard; re-firing save/close from behind it would act on
+      // state the author is still being asked about.
+      if (showUnsavedDialog || showConflictDialog) {
+        return
+      }
       const modifier = event.metaKey || event.ctrlKey
       if (modifier && event.key.toLowerCase() === 's') {
         event.preventDefault()
@@ -354,20 +360,30 @@ export function PageEditor() {
             </button>
             <span className="editor-title-bar__slug">/{page.path}</span>
           </div>
+          {/*
+            The fixed mobile bar has roughly 100px per column, which is not enough for the full
+            labels. Each button keeps its full accessible name and shows a short label on phones
+            so nothing wraps onto a second line.
+          */}
           <div className="page-editor__actions">
             <button
               type="button"
               className="page-editor__action action-button-secondary"
               onClick={() => setShowMetadataPanel((value) => !value)}
+              aria-label="Edit metadata"
+              aria-expanded={showMetadataPanel}
             >
-              Edit metadata
+              <span className="md:hidden" aria-hidden="true">Metadata</span>
+              <span className="max-md:hidden" aria-hidden="true">Edit metadata</span>
             </button>
             <button
               type="button"
               className="page-editor__action action-button-secondary"
               onClick={() => void handleCloseEditor()}
+              aria-label="Close editor"
             >
-              Close editor
+              <span className="md:hidden" aria-hidden="true">Close</span>
+              <span className="max-md:hidden" aria-hidden="true">Close editor</span>
             </button>
             <button
               type="button"
@@ -375,8 +391,10 @@ export function PageEditor() {
               onClick={() => void handleSave()}
               disabled={!hasUnsavedChanges}
               title="Save page (Ctrl+S)"
+              aria-label={hasUnsavedChanges ? 'Save changes' : 'Saved'}
             >
-              {hasUnsavedChanges ? 'Save changes' : 'Saved'}
+              <span className="md:hidden" aria-hidden="true">{hasUnsavedChanges ? 'Save' : 'Saved'}</span>
+              <span className="max-md:hidden" aria-hidden="true">{hasUnsavedChanges ? 'Save changes' : 'Saved'}</span>
             </button>
           </div>
         </div>
@@ -492,60 +510,78 @@ export function PageEditor() {
         onSelect={handleInsertWikiLink}
       />
 
-      {showUnsavedDialog ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="surface-card max-w-md p-6">
-            <h2 className="mb-2 text-xl font-semibold">Unsaved changes</h2>
-            <p className="mb-4 text-sm text-muted">
-              You have unsaved changes. Do you want to discard them and continue?
-            </p>
-            <div className="flex justify-end gap-3">
-              <button type="button" className="action-button-secondary" onClick={handleCancelNavigation}>
-                Stay here
-              </button>
-              <button type="button" className="action-button-danger" onClick={() => void handleConfirmNavigation()}>
-                Discard changes
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {/*
+        Both prompts guard destructive outcomes, so they run through ModalCard (Radix Dialog) to
+        get a focus trap, Escape-to-dismiss and dialog semantics instead of a bare overlay div.
+      */}
+      <ModalCard
+        open={showUnsavedDialog}
+        title="Unsaved changes"
+        description="You have unsaved changes. Do you want to discard them and continue?"
+        onOpenChange={(open) => {
+          if (!open) {
+            handleCancelNavigation()
+          }
+        }}
+        footer={(
+          <>
+            <button type="button" className="action-button-secondary" onClick={handleCancelNavigation}>
+              Stay here
+            </button>
+            <button type="button" className="action-button-danger" onClick={() => void handleConfirmNavigation()}>
+              Discard changes
+            </button>
+          </>
+        )}
+      >
+        <p className="text-sm text-muted">
+          Discarding leaves the last saved version of this page untouched.
+        </p>
+      </ModalCard>
 
-      {showConflictDialog && conflict ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="surface-card max-h-[90vh] w-full max-w-5xl overflow-auto p-6">
-            <h2 className="mb-2 text-xl font-semibold">Page changed in another session</h2>
-            <p className="mb-4 text-sm text-muted">
-              The latest saved version was updated at {formatTimestamp(conflict.updatedAt)}. Reload it to discard your draft, or rebase your draft onto the latest revision for a manual merge.
-            </p>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-2xl border border-surface-border bg-surface-alt/60 p-4">
-                <div className="mb-2 text-sm font-semibold">Your draft</div>
-                <div className="mb-2 text-xs text-muted">/{(page.parentPath ? `${page.parentPath}/` : '') + slug}</div>
-                <div className="mb-2 text-sm font-medium">{title}</div>
-                <pre className="max-h-80 overflow-auto whitespace-pre-wrap text-xs text-muted">{content || '(empty)'}</pre>
-              </div>
-              <div className="rounded-2xl border border-surface-border bg-surface-alt/60 p-4">
-                <div className="mb-2 text-sm font-semibold">Latest saved version</div>
-                <div className="mb-2 text-xs text-muted">/{conflict.path}</div>
-                <div className="mb-2 text-sm font-medium">{conflict.title}</div>
-                <pre className="max-h-80 overflow-auto whitespace-pre-wrap text-xs text-muted">{conflict.content || '(empty)'}</pre>
-              </div>
+      <ModalCard
+        open={showConflictDialog && conflict !== null}
+        wide
+        title="Page changed in another session"
+        description={conflict
+          ? `The latest saved version was updated at ${formatTimestamp(conflict.updatedAt)}. Reload it to discard your draft, or rebase your draft onto the latest revision for a manual merge.`
+          : undefined}
+        onOpenChange={(open) => {
+          if (!open) {
+            setShowConflictDialog(false)
+          }
+        }}
+        footer={(
+          <>
+            <button type="button" className="action-button-secondary" onClick={() => setShowConflictDialog(false)}>
+              Stay on draft
+            </button>
+            <button type="button" className="action-button-secondary" onClick={handleMergeWithLatest}>
+              Merge with latest
+            </button>
+            <button type="button" className="action-button-danger" onClick={handleReloadLatest}>
+              Reload latest
+            </button>
+          </>
+        )}
+      >
+        {conflict ? (
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-2xl border border-surface-border bg-surface-alt/60 p-4">
+              <div className="mb-2 text-sm font-semibold">Your draft</div>
+              <div className="mb-2 text-xs text-muted">/{(page.parentPath ? `${page.parentPath}/` : '') + slug}</div>
+              <div className="mb-2 text-sm font-medium">{title}</div>
+              <pre className="max-h-80 overflow-auto whitespace-pre-wrap text-xs text-muted">{content || '(empty)'}</pre>
             </div>
-            <div className="mt-6 flex flex-wrap justify-end gap-3">
-              <button type="button" className="action-button-secondary" onClick={() => setShowConflictDialog(false)}>
-                Stay on draft
-              </button>
-              <button type="button" className="action-button-secondary" onClick={handleMergeWithLatest}>
-                Merge with latest
-              </button>
-              <button type="button" className="action-button-danger" onClick={handleReloadLatest}>
-                Reload latest
-              </button>
+            <div className="rounded-2xl border border-surface-border bg-surface-alt/60 p-4">
+              <div className="mb-2 text-sm font-semibold">Latest saved version</div>
+              <div className="mb-2 text-xs text-muted">/{conflict.path}</div>
+              <div className="mb-2 text-sm font-medium">{conflict.title}</div>
+              <pre className="max-h-80 overflow-auto whitespace-pre-wrap text-xs text-muted">{conflict.content || '(empty)'}</pre>
             </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
+      </ModalCard>
     </>
   )
 }
